@@ -13,9 +13,9 @@ JGraft is constructed of basic JSON-compatible data types:
 `null`, booleans, numbers, JSON-compatible strings, arrays, and objects.
 Implementations may include other native host-language data types if the
 application doesn't need to interoperate with different host languages.
-(implementations allowing other host language types are responsible for
+(Implementations allowing other host language types are responsible for
 defining equality, ordering, cloning, and serialization behavior for them,
-which is outside the scope of portable JGraft)
+which is outside the scope of portable JGraft.)
 While performing edits, JGraft additionally defines types for
 [dates and date-times](#dates), though these export back to JSON-compatible or
 application-configured data types before committing the edit.
@@ -37,8 +37,8 @@ indicates the operation and remaining elements become an argument list for it.
 The operation (first element) may be specified using either a name or numeric
 ID; the ID is useful for compact encoding in production, and the name is
 useful for development and debugging.
-In [contexts](#contexts) allowing a mixture of data and expressions, array
-literal values get "escaped" by wrapping them with another array.
+In [contexts](#argument-contexts) allowing a mixture of data and expressions,
+array literal values get "escaped" by wrapping them with another array.
 In other words, in the JSON representation of JGraft in a context that allows
 data and expressions, an array containing exactly one element which is also an
 array means a literal array having the elements of the inner array.
@@ -53,8 +53,9 @@ structure in its JSON-compatible form and interpret it on the fly.
 They should make it clear to the developer whether the data structure the
 application code interacts with is using objects and literal arrays, or the
 direct "arrays-are-special" representation of JGraft.
-The remainder of this specification uses the JSON form of actions and
-expressions, since the object model of a host language is left unspecified.
+Since the object model of a host language is left unspecified, the remainder of
+this specification uses the JSON representation of actions and expressions,
+using JavaScript-like notation for readability.
 
 ### Argument Contexts
 
@@ -67,9 +68,9 @@ complex meaning to simpler JSON structures.
 This constructs a new value or tree of values from a specification which is
 a mixture of structure and expressions.
 
-  * Non-object/non-arrays are literal values to appear in the constructed
+  * Non-objects/non-arrays are literal values to appear in the constructed
     result.
-  * Objects in the specification construct an object of the same properties
+  * Objects in the specification construct an object with the same properties
     where each property value is evaluated recursively.
   * Escaped arrays (an array within an array of one element) likewise
     construct an array where each element of the specification is recursively
@@ -80,7 +81,7 @@ a mixture of structure and expressions.
 Reference expressions used in value context may only refer to paths which
 exist.  Missing path properties count as an `INVALID_TARGET` error.
 
-The constructed value is logically a new tree, however implementations may
+The constructed value is logically a new tree; however, implementations may
 re-use existing tree fragments so long as they can ensure that the result is
 not used in a way that could degrade the target data tree to a graph.
 
@@ -89,13 +90,13 @@ not used in a way that could degrade the target data tree to a graph.
 This determines whether the current node has a shape compatible with the
 specification structure.
 
-  * Non-object/non-arrays describe literal values to be compared for equality
+  * Non-objects/non-arrays describe literal values to be compared for equality
     with the target.
   * Objects and escaped arrays are considered structure to be matched.
   * Other arrays represent expressions, which are handled specially depending
     on their type.  Match expressions become part of the matching algorithm,
     while functions evaluate to a plain value and then use the value as
-    structure to match against.  Reference expresisons are also treated as
+    structure to match against.  Reference expressions are also treated as
     returning values, except for `EXPR` which substitutes some other
     expression in its place, to be composed at runtime.
 
@@ -107,9 +108,9 @@ Regular expressions are implemented using mostly the same specification
 structure as general matching, but operating on a virtual array of characters.
 
   * One-character strings describe characters
-  * Strings with more than one character implicitly become [`SEQ`](#ex-seq)
+  * Strings of other lengths implicitly become [`SEQ`](#ex-seq)
     expressions, matching a sequence of characters
-  * Non-negative integers describe unicode codepoints
+  * Non-negative integers describe Unicode codepoints
   * Arrays represent expressions; match expressions become part of the matching
     algorithm, subexpressions (via [`EXPR`](#ex-expr) ) that resolve to match
     expressions get re-interpreted according to these rules, and all other
@@ -125,7 +126,7 @@ detail.
 Paths are used to refer to data within one of the [namespaces](#namespaces),
 and may be used for reading or writing.
 
-  * Non-object/non-arrays are interpreted as a single argument to a
+  * Non-objects/non-arrays are interpreted as a single argument to a
     [`NODE` expression](#ex-node), though some actions can override the
     implied namespace.
   * Arrays represent expressions, with the root expression restricted to
@@ -170,7 +171,7 @@ considered immutable values, but expose virtual properties which may be
 referenced in [paths](#paths).  `date` lacks a time component, and has virtual
 properties of "year", "month" and "day", according to the rules of the
 Gregorian calendar and represented in their natural 1-based format.
-`datetime` additionaly has "hour", "minute" and "second" virtual properties,
+`datetime` additionally has "hour", "minute" and "second" virtual properties,
 where `second` may be fractional to any numeric precision allowed by JSON and
 may also be a leap-second value (0 <= second < 61).  Implementations don't
 need to check whether a leap second was historically valid; just preserve the
@@ -178,13 +179,13 @@ field and compare it last during less-than tests.  Implementations may need to
 hold the `second` value in an extra data field if the host date objects
 don't support leap seconds or arbitrary precision.  JGraft instances should
 generally avoid *creating* datetimes with leap seconds, as they can't be
-exported in some host language encironments.
+exported in some host language environments.
 `timestamp` additionally has a `tz_offset` virtual property, which is a number
 of minutes offset from UTC.  `timestamp` references a specific point in time,
 and can be compared with timestamps from differing timezone offsets.
 
 Since each of these is a different type, the usual rules apply when testing
-them: dissimilar types cannot "match" in a match expression, and the `LESS`,
+them: dissimilar types cannot "match" in a match expression, and the `LESS`
 and `LESSEQ` expressions will fail with an `INVALID_TARGET` error.
 You can use the `CASTDATE` function to cast values to the same precision for
 comparison.
@@ -199,7 +200,7 @@ Actions and expressions can make references to data in six namespaces:
   * Constants          - a read-only tree of values declared in the
                          [`JGRAFT` action](#act-jgraft) and referenced by the
                          [`CONST` expression](#ex-const).
-  * Common Expressions - a read-only collection of parsed/validated expresson
+  * Common Expressions - a read-only collection of parsed/validated expression
                          trees declared in the [`JGRAFT` action](#act-jgraft)
                          and referenced by the [`EXPR` expression](#ex-expr).
   * Stash              - a read/write tree of temporaries shared between
@@ -223,7 +224,7 @@ read-only environment while evaluating expressions, which are not permitted to
 have side effects) implementations are permitted to share subtrees within and
 across namespaces, making the namespaces technically acyclic graphs.
 The expression language has no means to observe that two read-only objects or
-arrays are the same entity, however, so authors of JGraft can still consider
+arrays are the same entity, so authors of JGraft can still consider
 the namespaces to always be trees.  Application code interacting with the
 JGraft state may be able to tell the difference, though.
 
@@ -266,9 +267,9 @@ like a filesystem's `..` convention.  A path element *may* be a value-context
 expression which gets evaluated to determine the path.  If it evaluates to an
 array, the elements of the array will be spliced into the path at the location
 of the expression.  After a single level of array expansion, the values must
-conform to the same rules as literal path elements.  A unspecified or illegal
+conform to the same rules as literal path elements.  An unspecified or illegal
 type of value found in a path counts as an `INVALID_OPERAND` and should always
-be upgraded to `INVALID_GRAFT` if it was specified as literal values.
+be upgraded to `INVALID_GRAFT` if it was specified as a literal value.
 
 ## Action Overview
 
@@ -305,7 +306,7 @@ Name                    | ID | Description
 [SPLICE](#act-splice)   |  7 | Perform standard splice() on an array
 
 The `RAISE` action can be used to provide improved diagnostics to a user
-applying a JGraft, or within `IF` to detect un-handled inputs that should be
+applying a JGraft, or within `IF` to detect unhandled inputs that should be
 rejected.
 
 The `ATSPLIT` action is a tool for tokenizing strings in order to make changes
@@ -420,10 +421,10 @@ match needs to occur, and successor states being all the ways that the match
 can resolve successfully from that starting position.
 For every match expression where sequence context behavior is not specified,
 the successor state produced in sequence context is the position following the
-current element.  i.e. match expressions consume one element by default.
+current element; i.e. match expressions consume one element by default.
 Some expressions are simply described as "zero width assertions", which means
 they consume no elements and the successor position is identical to the initial
-position, unless the assertion fails making the successor the empty set.
+position, unless the assertion fails, making the successor the empty set.
 
 Implementations are likely to need to iterate the successor states as they look
 for an overall match for the array specification, but no specific order is
@@ -483,8 +484,8 @@ captures from deeper arrays or strings.  Consider this example:
     ]]
 
 The substructure that captures "from_a" could match at *any* element of the
-current array except the last, and the substructre that captures "from_b"
-could match any elemnent except the first.  The current array has exactly one
+current array except the last, and the substructure that captures "from_b"
+could match any element except the first.  The current array has exactly one
 sequence with no length preference.  The "longest" preference in the
 inner array has already been resolved at that level before becoming a
 successful substructure match in the context of the current array, so those
@@ -503,9 +504,9 @@ Sequence context affects the behavior of several other match expressions:
   * [`REP`](#ex-rep) expressions are permitted.
 
 A `SEQMIN` / `SEQMAX` expression may only be used at the root of a match
-specification being applied to an array's elements, and a `SEQ` expresison may
+specification being applied to an array's elements, and a `SEQ` expression may
 only initiate sequence context there (though `SEQ` may be used in any existing
-sequence context as a general way to specify a sequential matches).
+sequence context as a general way to specify sequential matches).
 The restrictions on entering sequence context ensure that `NONE`, `ANY`, and
 `ALL` don't gain surprising semantics without directly requesting them, and the
 specific restriction on `SEQMIN` and `SEQMAX` ensures that named sequences are
@@ -601,13 +602,13 @@ When matching against a virtual character array,
 
 In some cases, only a boolean result is required, and the match ends as soon
 as the expression is satisfied.  Other cases require finding the longest
-match, and run through every possibility of the match expression to see which
-is the longest, though may end early if the whole string is consumed.  If an
-expression is constructed from only "textbook regular" match expressions, an
-implementation can compile the expression into a DFA, or possibly a
-host-language regular expression for improved performance.
+match, requiring a search over every possibility of the match expression to
+see which is the longest, though it may end early if the whole string is
+consumed.  If an expression is constructed from only "textbook regular" match
+expressions, an implementation can compile the expression into a DFA, or
+possibly a host-language regular expression for improved performance.
 Elaborate non-regular match expressions may be used in regex context, but can
-cause a great deal of iteration and quickly run into resource limits.
+cause a great deal of iteration and may quickly run into resource limits.
 
 ### Expression Summary
 
@@ -679,8 +680,8 @@ To quickly understand how the types interact, consider these examples:
     // node.a === false || node.a === true || node.a.c === 2
 
 In this case, the outer match expression passes `node.a` as the current node,
-and a `IS` context.  The `ANY` expression tests whether `node.a` matches
-against any of of the values.  When it tests the third value, it performs an
+and an `IS` context.  The `ANY` expression tests whether `node.a` matches
+against any of the values.  When it tests the third value, it performs an
 `IS` operation rather than the default of `HAS`.  The boolean result of `ANY`
 is consumed as the result for whether property 'a' matched.
 
@@ -689,7 +690,7 @@ is consumed as the result for whether property 'a' matched.
     // !deep_equals(node.a, {b:1})
 
 In this case, the outer `IS` match expression passes `node.a` as the current
-node to the `NONE` expresison with `IS` context.  The `NONE` expression tests
+node to the `NONE` expression with `IS` context.  The `NONE` expression tests
 whether `node.a` is not exactly identical to `{b:1}`.
 
     [IS, [NODE,"a"], [NODE,"b"] ]
@@ -740,7 +741,7 @@ by exactly zero should always fail with `INVALID_TARGET` rather than returning
 an infinity value.
 
 Some environments also return a "not a number" value for nonsensical
-operations.  These values should always be converted to a `INVALID_TARGET`
+operations.  These values should always be converted to an `INVALID_TARGET`
 error.
 
 ## Errors
@@ -766,8 +767,8 @@ Applying a JGraft to a target data structure may fail with:
 Ideally (when supported by the implementation and within resource limits),
 a logically valid JGraft should either succeed or generate `NO_MATCH` and a
 logically invalid JGraft should result in `INVALID_GRAFT`.
-When expressions were used for arguments and evaluate to values that violate
-the spec this is less clear, and the errors `INVALID_TARGET` and
+When expressions are used for arguments and evaluate to values that violate
+the spec, this is less clear, and the errors `INVALID_TARGET` and
 `INVALID_OPERAND` are used to discern between errors that could be the result
 of the input data (or data used by the generator) vs. more fundamental bugs in
 the generation of the expressions.
@@ -810,14 +811,14 @@ produce expressions that always resolve to these error states and it would be a
 burden on the generators to eliminate those from generated expressions.
 Implementations must trap `INVALID_TARGET` or `INVALID_OPERAND` errors in
 match expressions and convert them to simple failed-to-match conditions, unless
-static analysis can prove that `INVALID_OEPRAND` is actually `INVALID_GRAFT`
+static analysis can prove that `INVALID_OPERAND` is actually `INVALID_GRAFT`,
 in which case it may be upgraded.  Additionally, for expressions `ANY` and
 `NONE`, these errors get trapped for each individual argument and converted to
 false subexpressions rather than causing the outer expression to fail.
-If implementation can proves that a match expression always generates an
-`INVALID_TARGET` error it may emit warnings about this, but must not upgrade
+If an implementation can prove that a match expression always generates an
+`INVALID_TARGET` error, it may emit warnings about this, but must not upgrade
 them to `INVALID_GRAFT`.
-Static analysis of match expressions should be more narrow than static analysis
+Static analysis of match expressions should be narrower than static analysis
 of actions; to upgrade `INVALID_OPERAND` to `INVALID_GRAFT` it must establish
 that the parameter is intrinsically invalid without relying on constraints
 established by surrounding match assertions or preceding actions.  Analysis may
@@ -831,7 +832,7 @@ into a fatal error.  For example:
     ]
 
 The first condition establishes that the second condition will trigger an
-`INVALID_OPERAND`, but in isolation the second expresison's correctness still
+`INVALID_OPERAND`, but in isolation the second expression's correctness still
 depends on input data, so in a match context this is not considered an invalid
 graft, just one that never matches.  A more intelligent generator could
 eliminate this subexpression, but is not required to, regardless of the
@@ -857,8 +858,8 @@ Implementations may encounter a nonfatal error that aborts a match before
 finding a different fatal error that also exists, such as when iterating object
 properties in an implementation-defined order where the expression for one
 property hits a resource limit and the expression for another property is
-logically invallid and the expression for a third property simply doesn't
-match.  While determinidtic errors would be nice, allowing this nondeterminism
+logically invalid and the expression for a third property simply doesn't
+match.  While deterministic errors would be nice, allowing this nondeterminism
 also allows light-weight implementations to perform lazy validation of the
 graft structure.  The degree of validation effort an implementation uses could
 even be configurable.
@@ -934,7 +935,7 @@ The algorithm when beginning a `JGRAFT` action is roughly:
   - Verify the version `v` is supported.
   - If the metadata contains a `const` property,
     - Set the `const` namespace to a shallow clone of any inherited `const`
-      namespace, or empy object at the root.
+      namespace, or an empty object at the root.
     - For each (`name`,`val_expr`) pair of elements in the `const` array,
       - `name` must be a single property string, or integer (which gets
         coerced to a string)
@@ -945,7 +946,7 @@ The algorithm when beginning a `JGRAFT` action is roughly:
         expressions still refer to the parent scope's stash, if one exists.
   - If the metadata contains an `expr` property,
     - Set the `expr` namespace to a shallow clone of the parent `expr`
-      namespace, or empty object at the root.
+      namespace, or an empty object at the root.
     - For each (`name`,`val_expr`) pair of elements in the `expr` array,
       - `name` must be a single property string, or integer (which gets
         coerced to a string)
@@ -953,7 +954,7 @@ The algorithm when beginning a `JGRAFT` action is roughly:
       - Set property `expr[name]` to the value-construction structure *without*
         evaluating any of it.  In other words, it captures no context and paths
         like `NODE` or `TEMP` will be interpreted in the context of the `EXPR`
-        expresison that invokes it.
+        expression that invokes it.
   - Set the `stash` namespace to a new empty object.
 
 ### <span id="act-raise">RAISE</span>
@@ -1015,7 +1016,7 @@ the usual error escalation rules).
 
 Navigate into a tokenized view of a node, then execute actions.
 
-This is a combination of the `AT` action and `SPLIT` + `JOIN` expresisons.
+This is a combination of the `AT` action and `SPLIT` + `JOIN` expressions.
 For a target node at `path`, it changes the current node to the array returned
 by the [`SPLIT` function](#ex-split) called on the target node,
 then executes actions on that array.  After all subactions complete, the value
@@ -1077,7 +1078,7 @@ for that location.
 
 The captured sequences of the match expression (even if the empty set) become
 the [capture namespace](#namespaces) for the subactions.
-Captures from a parent action's match are no longer visisble, but could be
+Captures from a parent action's match are no longer visible, but could be
 copied to the `STASH` namespace in an action before this if you need to access
 them in the inner scope.
 
@@ -1104,7 +1105,7 @@ at a parent action will still be applied to both attempts.
 
 For a successful condition, the captured sequences of the match expression
 (even if the empty set) become the [capture namespace](#namespaces) for the
-condition's action.  The "else" action still sees the inhereted capture
+condition's action.  The "else" action still sees the inherited capture
 namespace.
 
 ### <span id="act-copy">COPY</span>
@@ -1169,11 +1170,11 @@ For each pair of (`src_path`,`dst_path`) processed in sequence:
 
 It is permitted to delete a source property and then immediately auto-vivify
 through that same property to create the destination.  If `src_path` and
-`dst_path` are the same, the pair are essentially a no-op.
+`dst_path` are the same, the pair is essentially a no-op.
 `src_path` and `dst_path` are both [path context](#path-context) with the
 exception that a literal `null` may be used as `src_path` to write a literal
 `null` value to `dst_path` (which lets you preserve the existence of a
-property that would otherwise get deleted without needing a followup `COPY`
+property that would otherwise get deleted without needing a follow-up `COPY`
 action to fix it) or as `dst_path` as a way of requesting deletion of the
 property without preserving the value anywhere.  `MOVE` may use the current
 node itself as a source (implying deletion) so long as something is written to
@@ -1257,7 +1258,7 @@ counts as an insertion for these purposes, and receives normal adjacent element
 metadata.  The process of applying adjacent element metadata is postponed until
 the `MOVE` action finishes and the final order of elements is known.
 Note that if you move a value to the top of the TEMP namespace or other object
-property it will lose the array element metadata, where moving to an
+property, it will lose the array element metadata, whereas moving to an
 auto-vivified array within the TEMP namespace will not.
 
 At the end of the `MOVE` action, every array instance where an insertion or
@@ -1308,7 +1309,7 @@ Examples:
                                      // delete node.x.x;
             'x',[TEMP,0,'x'],        // tmp['0'].x= node.x;
                                      // delete node.x;
-            [TEMP,0],'x']]           // node.x= tmp['0'];
+            [TEMP,0],'x']            // node.x= tmp['0'];
                                      // delete tmp['0'];
 
 ### <span id="act-splice">SPLICE</span>
@@ -1319,7 +1320,7 @@ Replace a span of an array, just like the splice function found in most
 programming languages.  The `array_elem_path` must resolve to an element of
 an array (or to the `LENGTH` insertion point of an array) or the graft
 fails with `INVALID_TARGET`.  `count` (value context) must evaluate to an
-integer, and is the number of elements to repalce.  Negative numbers are
+integer, and is the number of elements to replace.  Negative numbers are
 aliases for the count that would end just before element `length-N`, and
 `null` is an alias for `length-offset`.  The resulting count must be within
 `[0..length-offset]` or it likewise fails with `INVALID_TARGET`.
@@ -1382,7 +1383,7 @@ the form:
       path:  // array of path elements from root of match to target
       ofs:   // starting offset
       len:   // number of elements matched
-      lim:   // pos + len
+      lim:   // ofs + len
     }
 
 These may be used as the argument for [`SLICE`](#ex-slice).  For example, to
@@ -1425,7 +1426,7 @@ stash namespace itself as an object, but the root may not be overwritten.
 Reference data from the [const namespace](#namespaces).
 
 The arguments form a [path](#paths).  The path may be empty to reference the
-stash namespace itself as an object.  This reference expression cannot be used
+const namespace itself as an object.  This reference expression cannot be used
 as the target of a write operation.
 
 #### <span id="ex-node">NODE</span>
@@ -1457,7 +1458,7 @@ The `match_spec` argument is declared using [match context](#match-context)
 and the `value_expr` is declared using [value context](#value-context).
 In the 1-argument form, the value being compared is the current node.
 
-The `HAS` expresison is the default for match context; a `[HAS,...]`
+The `HAS` expression is the default for match context; a `[HAS,...]`
 expression at the root of a match structure is redundant unless used in
 the 2-argument form to establish an alternate current node.
 
@@ -1466,7 +1467,7 @@ in the subexpression; this means that if `match_spec` is a reference or
 function expression (evaluated to produce the match structure) `NODE`
 references still refer to the old tree, but if `match_spec` is a structure or
 match expression, `NODE` references refer to the new tree.  Further, if
-`match_spec` is an `EXPR` expresison which resolves to a non-match expression,
+`match_spec` is an `EXPR` expression which resolves to a non-match expression,
 `NODE` expressions within the replacement still refer to the old tree until
 it returns something that causes matching to begin again.
 
@@ -1575,7 +1576,7 @@ expression semantics.  It requires at least one argument.
 In element context `ALL` is fairly straightforward, but the behavior in
 [sequence context](#sequence-matching) is a bit more involved.
 Each argument is treated as a constraint that must be satisfiable from the
-starting position.  The `ALL` expression generates one succesor state for each
+starting position.  The `ALL` expression generates one successor state for each
 position among the states returned by any argument which also contains at least
 enough elements to satisfy all of the other arguments.  Conceptually, matching
 gets to continue from any of those successor state positions so long as all
@@ -1762,7 +1763,7 @@ structural level.  Within the same match state, a `SEQMIN` or `SEQMAX`
 occurring beneath these expressions behaves as an ordinary `SEQ`.
 
 The `capture_name` is defined as an expression to deal with cases where a
-common subexpression (called with `EXPR`) wants to performs a capture, but
+common subexpression (called with `EXPR`) wants to perform a capture, but
 might need to be applied multiple times to the same tree.  Using the `WITH`
 expression to set a prefix in the TEMP namespace, the common subexpression can
 then generate different capture names at each call site.  The `capture_name`
@@ -1778,7 +1779,7 @@ They do *not* mean that the capture group will always maximize or minimize the
 elements matched during the algorithm, only that if multiple outcomes for
 matching an array are possible, the selection of the match should prefer longer
 matches or shorter matches for those sequences, giving precedence to the
-sequences in order they occur.  If the captures of the match are unobservable,
+sequences in the order they occur.  If the captures of the match are unobservable,
 the implementation may skip resolving the preferred match.
 
 Examples:
@@ -1824,7 +1825,7 @@ Match repetitions of an expression against a series of array elements.
 `min` and `max` are [value context](#value-context) expressions which must
 evaluate to integers.  The value of `min` must be non-negative.  The value of
 `max` may be -1 as an alias for infinity, or 0 as an alias for "same as min".
-Otherwise, `max` must have a value greater or equal than `min`.
+Otherwise, `max` must have a value greater than or equal to `min`.
 `match_expr` is a [match context](#match-context) expression.
 When the `match_expr` argument is omitted, it defaults to `[EXISTS]` which
 basically just consumes elements.  When the `max` argument is omitted, it
@@ -1877,12 +1878,12 @@ based on the array cursor.
       "a","z",             // a range of characters to be added
       "a",null,            // open-ended range
       "a","",              // not a range, just the character 'a'
-      48,57,               // unicode codepoint range
+      48,57,               // Unicode codepoint range
       [EXPR,name]          // reference a common CHARS expression
 
 Match when the current node is a character in the defined set.
 
-Outside of regex context, this means both integers representing unicode
+Outside of regex context, this means both integers representing Unicode
 codepoints and one-character strings. ("one character" according to the
 implementation's construction of codepoint arrays from a JSON string)
 
@@ -1895,8 +1896,8 @@ A string of more than one character is considered a list of characters to
 include.  The list may be empty.  A single character begins an inclusive range
 of characters if the following element is also one character.  Ranges must be
 specified in ascending codepoint order.  `null` may be used as an alias for
-the maximum Unicode character.  An integer is treated as a unicode codepoint
-value (and must fall within the valid unicode range).  Since integers and
+the maximum Unicode character.  An integer is treated as a Unicode codepoint
+value (and must fall within the valid Unicode range).  Since integers and
 `null` represent single characters, they also begin or end ranges when
 possible.
 
@@ -2034,7 +2035,7 @@ another array or object.
     [SLICE, value_expr, ofs]
     [SLICE, value_expr, ofs, len]
     [SLICE, config_obj]
-    // Where config_obj is of the form:
+    // Where config_obj must evaluate to an object of the form:
     // { ofs: N, len: N, lim: N, path: P }
     // like the objects of the capture namespace
 
@@ -2047,13 +2048,13 @@ The `ofs` argument must evaluate to an integer, and may be negative to count
 backwards from the `LENGTH` of the target value.  The `len` argument must
 also evaluate to an integer, and may also be negative to count backward from
 the `LENGTH` of the value in which case it represents a limiting offset.
-If `ofs` or `len` are not integers the expression fails with `INVALID_OPERAND`.
+If `ofs` or `len` are not integers, the expression fails with `INVALID_OPERAND`.
 
-In the third form, a `config_obj` may be used to pass values for the starting
-offset, count of elements, limiting offset, and an optional `path` under the
-current node.  The `path` is a plain array, not an expression, becoming the
-implied expression `[NODE, path]`.  Lacking `path`, the `SLICE` applies to the
-current node itself.
+In the third form, a `config_obj` (object value, after any expression
+evaluation) may be used to pass values for the starting offset, count of
+elements, limiting offset, and an optional `path` under the current node.
+The `path` is an array value, becoming the implied expression `[NODE, path]`.
+Lacking `path`, the `SLICE` applies to the current node itself.
 The positional properties of the object may not be negative, and if all three
 are given, they must agree such that `ofs + len == lim` or it results in
 `INVALID_OPERAND`.  When one property is absent, it is derived from the other
@@ -2155,7 +2156,7 @@ for the selected elements gets copied to the new array.
 
 Transform each element of an array to produce a new array.
 
-The `transform_expr` is specified in value context, however it is not evaluated
+The `transform_expr` is specified in value context; however, it is not evaluated
 immediately.  In the one-argument form, the input comes from the current node,
 which must be an array.  Otherwise the `array_expr` (also value context) is
 evaluated and likewise must return an array to be used as the input.
@@ -2214,7 +2215,7 @@ defined here since the specification is shared with `JOIN`.
 
 The split operation iterates through the characters of the string looking for
 [the longest match](#regex-context) of the separator pattern.  If you specify
-an `element` regex, a test for separator will only match when the element
+an `element` regex, a test for a separator will only match when the element
 characters (from the end of the previous separator until the current match
 position) also match the `element` pattern.   The `element` pattern is
 implicitly anchored to the start and end of the element characters.
@@ -2251,10 +2252,11 @@ the actual separator is part of the data.
 
 `ltrim` and `rtrim` are used to hide unimportant characters from the resulting
 array element strings, such as leading/trailing whitespace (like `diff -b`)
-and you can (exclusive to the others) specify `trim` to set them both to the
-same value.  `ltrim` is implicitly anchored to the start of the element string,
-and `rtrim` is implicitly anchored to the end, allowing a common value for
-`trim`.  The longest match of `ltrim` gets removed first, followed by removing
+and you can (mutually exclusive with the others) specify `trim` to set them
+both to the same value.
+`ltrim` is implicitly anchored to the start of the element string, and `rtrim`
+is implicitly anchored to the end, allowing a common value for `trim`.
+The longest match of `ltrim` gets removed first, followed by removing
 the longest match of `rtrim` from the remainder, to resolve cases where the
 trimming could overlap.
 If you want to permanently remove the trimmed characters, use `discard: true`.
@@ -2269,15 +2271,15 @@ in parallel as described below.
 ##### Split Metadata
 
 "SPLIT metadata" carries the hidden separators and end-trimmings from `SPLIT`.
-It associates *to the array* as a parallel array of per-element data, rather
+It is associated *with the array* as a parallel array of per-element data, rather
 than being bound to the values themselves.  The separator is paired to the
 element it *followed* and the final element will not logically have one since
 a string ending with a separator receives a final element of the empty string,
 though for the purposes of this algorithm it receives a copy of the separator
-of the preceeding element.
-Only one instance of `SPLIT` metadata may be associated to any one array.
+of the preceding element.
+Only one instance of `SPLIT` metadata may be associated with any one array.
 It also contains an `origin` tag; in any case where values are transferred
-between element references the `SPLIT` metadata will only carry over when both
+between element references, the `SPLIT` metadata will only carry over when both
 arrays have metadata of the same `origin`.
 
 Actions and expressions that operate on an array need to do a bit of extra work
@@ -2299,12 +2301,12 @@ metadata more specifically, but in general:
     same `origin`, the element receives "adjacent element metadata" described
     below.
   * If an array with `SPLIT` metadata is receiving a new value for an existing
-    element in an "overwrite" manner, the existing separator and trimming is
+    element in an "overwrite" manner, the existing separator and trimming are
     unchanged, regardless of the source.
   * If an array without `SPLIT` metadata is receiving an element from an
     array with `SPLIT` metadata in an "insert" manner, the destination array
     is upgraded to have `SPLIT` metadata (of the same `origin`) to preserve the
-    metata for that element.
+    metadata for that element.
   * Construction of new arrays and appending elements to arrays count as an
     "insert" operation.
 
@@ -2312,11 +2314,11 @@ metadata more specifically, but in general:
 exist for any element, separators must exist for all elements, and likewise for
 trimmings.  To resolve this for elements added to the array, the element
 receives "adjacent element metadata".  For separators, new elements receive the
-separator of the preceeding element, or at the start of the array, the
+separator of the preceding element, or at the start of the array, the
 following element.  (arrays of no elements drop the `SPLIT` metadata)
 If trimmings are present, the new element receives the left-trimming of the
 previous line, or an empty string if there is no previous line.
-Right-trimmiing for new elements is always the empty string.
+Right-trimming for new elements is always the empty string.
 These rules are all designed around the concept of preserving indent and
 comments in text while allowing changes to the strings within, and extending
 indent to subsequent lines without replicating comments.
@@ -2379,13 +2381,13 @@ when iterating over properties.
 Construct an object from properties.
 
 All arguments are specified in value context.
-In the first form, a list of pairs of `name_expr` and `val_expr` each become a
+In the first form, pairs of `name_expr` and `val_expr` each become a
 property of the created object.  At least one pair must be given in this form.
 In the second form, recognized by two array arguments, the names are provided
 in one array and the values are provided in a second array.  The arrays must be
 the same length, but also may be empty.
 In the third form, recognized by one array argument, the array holds one
-element for each property which is a two element array of `[name,val]`.
+element for each property which is a two-element array of `[name,val]`.
 This array may also be empty to construct an empty object.
 
 In all cases, the names must evaluate to strings, and it is an error for any
@@ -2408,17 +2410,18 @@ value is the `FAIL` expression, which fails with error `INVALID_TARGET`.
 Conditions are tested in argument order, and only the selected value-context
 expression gets evaluated.
 
-Because [match context](#contexts) lets a plain value describe a `HAS` match
-against the current node, this can be an efficient way to choose an expression
-based on its value.  If the value you want to compare is not the current node,
-you can temporarily set it up as the current node with [`LOCAL`](#ex-local).
+Because [match context](#argument-contexts) lets a plain value describe a `HAS`
+match against the current node, this can be an efficient way to choose an
+expression based on its value.  If the value you want to compare is not the
+current node, you can temporarily set it up as the current node with
+ [`LOCAL`](#ex-local).
 
-#### <span id="ex-case">FAIL</span>
+#### <span id="ex-fail">FAIL</span>
 
     [FAIL]
 
 Generate an `INVALID_TARGET` error.  This is useful for rejecting unexpected
-scenarios in expresisons.  Note that this does not immediately end the graft
+scenarios in expressions.  Note that this does not immediately end the graft
 operation if used in match context.
 
 #### <span id="ex-castbool">CASTBOOL</span>
@@ -2434,9 +2437,12 @@ and "false" may be cast to booleans, and every other value generates
 
 If you want something closer to the "everything is true unless it is false-ish"
 seen in many programming languages, consider adding your preferred list of
-false values to the `ANY` expression:
+false values to a `NONE` expression, optionally wrapped with an `EXISTS` test:
 
-    [CASE, [EXISTS], [NOT, [ANY, false, 0, "", null]]]
+    // return true/false for current node, fail on undefined
+    [CASE, [EXISTS], [NONE, false, 0, "", null]]
+    // return true/false for an arbitrary value expression
+    [IS, value_expr, [NONE, false, 0, "", null]]
 
 #### <span id="ex-castnum">CASTNUM</span>
 
@@ -2446,8 +2452,8 @@ false values to the `ANY` expression:
 Cast a value to a number.
 
 Numeric values always pass through.  Any string which parses as a valid number
-according to JSON syntax also become a number, but non-numeric characters like
-whitespace are not permitted.  (use `SPLIT`'s `trim` feature for that)
+according to JSON syntax also becomes a number, but non-numeric characters like
+whitespace are not permitted.
 Extensions to the data model permitted by the implementation may also support
 numification, as decided by the implementation.
 Numbers outside the range supported by an implementation generate
@@ -2461,9 +2467,9 @@ Numbers outside the range supported by an implementation generate
 Cast a value to a string.
 
 String values always pass through.  Booleans stringify to "true" and "false".
-Numbers with no fractional part stringify to decimal digits with possible
+Numbers with no fractional part stringify to decimal digits with a possible
 leading minus sign.  Other numbers stringify to the same string that the host
-JSON encoder would produce, which is not consistent across all implementations
+JSON encoder would produce, which is not consistent across all implementations,
 and the exact character representation should not be relied on.
 Dates stringify in ISO8601 format.  Datetimes stringify as
 "yyyy-mm-dd hh:nn:ss" with the possibility of more digits in the year and
@@ -2496,10 +2502,10 @@ formats:
     yyyy-mm-ddThh:nn:ss+hhnn        // timestamp
 
 where the hyphens and colons are optional when the standard number of digits
-are present, the 'T' separator may also be a space, `ss` can be written
+is present, the 'T' separator may also be a space, `ss` can be written
 `ss.sss` or `ss,sss` to an arbitrary precision (silently truncated to the
 precision supported by the implementation), and the timezone '+' may be a '-'
-or unicode minus sign for any nonzero timezone (as perscribed by ISO-8601).
+or Unicode minus sign for any nonzero timezone (as prescribed by ISO-8601).
 The year field should also be permitted to have more than 4 digits if hyphens
 are used.
 
@@ -2527,7 +2533,7 @@ applying defaults.
 All date formats should be validated against the Gregorian calendar for years
 1583 and onward (the cutoff defined in ISO 8601) and invalid days rejected with
 `INVALID_TARGET`.  Hours and minutes should be validated against the standard
-range, but seconds should permit leap second (60 and fractions above that)
+range, but seconds should permit a leap second (60 and fractions above that)
 without historic validation.
 
 If host language date objects are permitted in the data, they should also be
@@ -2550,8 +2556,8 @@ Both arguments must evaluate to the same type, or this generates
 
 On booleans, `false` compares less than `true`.
 
-On numbers, this performs a numeric comparison according to the host language,
-however comparisons using host extensions of NaN should generate
+On numbers, this performs a numeric comparison according to the host language;
+however, comparisons using host extensions of NaN should generate
 `INVALID_TARGET`.
 
 On strings, this performs a character-by-character comparison on the codepoint
@@ -2566,10 +2572,10 @@ difference is found at an earlier element.  If it makes it to the end of one
 array before the other, that array is considered the lesser of the two.
 
 On dates and datetimes, the fields are compared most-significant to
-least-significant as if they were an array of those values.  On timestamps the
+least-significant as if they were an array of those values.  On timestamps, the
 timezone offset is applied first before comparing logical instants.  Note that
 timezone offsets have a minute resolution, so applying the offset and comparing
-fields can be done independent of whether leap seconds exist.
+fields can be done independently of whether leap seconds exist.
 
 All other types (e.g. objects) generate `INVALID_TARGET`.  If it does not
 fail, the result is always a boolean.
@@ -2593,7 +2599,7 @@ Add zero or more numbers.
 Arguments are described in value context.  All `value_expr` arguments must
 evaluate to numbers, unless provided as a single argument that evaluates to an
 array of numbers.  The list may be empty, resulting in the value `0`.
-Any other type of arguments fail with `INVALID_TARGET`.
+Any other type of argument fails with `INVALID_TARGET`.
 The result is the host language's addition of those numbers combined in element
 order, within the rules described in the [math section](#math).
 
@@ -2618,7 +2624,7 @@ Multiply zero or more numbers.
 Arguments are described in value context.  All `value_expr` arguments must
 evaluate to numbers, unless provided as a single argument that evaluates to an
 array of numbers.  The list may be empty, resulting in the value `1`.
-Any other type of arguments fail with `INVALID_TARGET`.
+Any other type of argument fails with `INVALID_TARGET`.
 The result is the host language's multiplication of those numbers combined in
 element order, within the rules described in the [math section](#math).
 
@@ -2663,10 +2669,10 @@ metadata:
   * They may have delayed insertions or deletions pending for a
     [`MOVE` action](#act-move), though this can perhaps be kept locally to the
     action's own execution state.
-  * They may be a virtual array of characters used during a regular expression,
+  * They may be a virtual array of characters used during a regular expression
     (or even during SPLIT) where implementations likely want to keep the data
     in string form and make elements available on demand.  This can be avoided
-    if an implementation actually does expand the string into a true array
+    if an implementation actually does expand the string into a true array,
     which is a valid strategy for more minimalist implementations.
 
 There are multiple ways that implementations can deal with these requirements:
@@ -2688,7 +2694,7 @@ The simplest approach for `MOVE` is to just complete all the pending insertions
 and deletions as if the move action was composed of only the successful pairs,
 which doesn't require any additional code.  An equally valid approach would be
 to set queued array element deletions to `null` and forget about queued
-insertions, providing a more clear state to the error handler about how things
+insertions, providing a clearer state to the error handler about how things
 looked when it failed.
 
 Implementations may also choose to guarantee that all actions are atomic with
