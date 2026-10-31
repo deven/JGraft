@@ -479,7 +479,7 @@
         {
           "name": "Use numeric SPLICE and NODE identifiers",
           "input": {"list":[1,2]},
-          "jgraft": ["JGRAFT",{"v":1},[5,[0,"list",1],1,9]],
+          "jgraft": ["JGRAFT",{"v":1},[7,[0,"list",1],1,9]],
           "output": {"list":[1,9]}
         },
         {
@@ -899,128 +899,128 @@
         {
           "name": "Deleting elements also deletes their SPLIT metadata",
           "input": " a , b , c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["SPLICE",1,1]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",1,1]]],
           "output": " a , c "
         },
         {
           "name": "Splice replacement receives adjacent trimming rather than overwritten trimming",
           "desc": "Replacement is removal followed by insertion. The new value inherits preceding left trimming and has no right trimming.",
           "input": " a , b , c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["SPLICE",1,1,"x"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",1,1,"x"]]],
           "output": " a , x, c "
         },
         {
           "name": "Inserting at the start receives no left or right trimming",
           "input": " a , b ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["SPLICE",0,0,"x"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",0,0,"x"]]],
           "output": "x, a , b "
         },
         {
           "name": "Multiple new elements inherit left trimming without right trimming",
           "input": " a , b ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["SPLICE",1,0,"x","y"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",1,0,"x","y"]]],
           "output": " a , x, y, b "
         },
         {
           "name": "Appending uses adjacent SPLIT trimming",
           "input": " a , b ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["SPLICE",false,0,"x"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",false,0,"x"]]],
           "output": " a , b , x"
         },
         {
           "name": "Direct replacement reference carries same-origin trimming",
           "input": " a , b ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["SPLICE",1,0,["NODE",0]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",1,0,["NODE",0]]]],
           "output": " a , a , b "
         },
         {
           "name": "Derived string replacement receives adjacent trimming",
           "desc": "A function derived from a reference does not preserve source element metadata.",
           "input": " a , b ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["SPLICE",1,0,["CONCAT",["NODE",0],"x"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",1,0,["CONCAT",["NODE",0],"x"]]]],
           "output": " a , ax, b "
         },
         {
           "name": "Replacing the entire array drops old trimming metadata",
           "input": " a , b ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["SPLICE",0,null,"x"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",0,null,"x"]]],
           "output": "x"
         },
         {
           "name": "Deleting every split element produces an empty string",
           "input": " a , b ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["SPLICE",0,null]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",0,null]]],
           "output": ""
         },
         {
           "name": "Deleting a value preserves the surviving variable separators",
           "input": "a;b,c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",",",";"],"default":","},["SPLICE",1,1]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",",",";"],"default":","},["SPLICE",1,1]]],
           "output": "a;c"
         },
         {
           "name": "Inserted values inherit the preceding separator",
           "input": "a;b,c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",",",";"],"default":","},["SPLICE",1,0,"x"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",",",";"],"default":","},["SPLICE",1,0,"x"]]],
           "output": "a;x;b,c"
         },
         {
           "name": "Inserted first value inherits the following separator",
           "input": "a;b,c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",",",";"],"default":","},["SPLICE",0,0,"x"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",",",";"],"default":","},["SPLICE",0,0,"x"]]],
           "output": "x;a;b,c"
         },
         {
           "name": "Direct reference carries its own variable separator",
           "input": "a;b,c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",",",";"],"default":","},["SPLICE",1,0,["NODE",1]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",",",";"],"default":","},["SPLICE",1,0,["NODE",1]]]],
           "output": "a;b,b,c"
         },
         {
           "name": "Replacing all values uses the default separator",
           "input": "a;b,c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",",",";"],"default":","},["SPLICE",0,null,"x","y"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",",",";"],"default":","},["SPLICE",0,null,"x","y"]]],
           "output": "x,y"
         },
         {
           "name": "Restore a removed trailing empty element",
           "input": "a\nb\n",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT","\n",["SPLICE",-1,1],["SPLICE",false,0,""]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"\n",["SPLICE",-1,1],["SPLICE",false,0,""]]],
           "output": "a\nb\n"
         },
         {
           "name": "Split array cannot rejoin a non-string replacement",
           "desc": "SPLICE accepts any JSON replacement, but the enclosing SPLIT requires strings when rejoining. Static analysis may prove the inserted number makes this graft fail on every input.",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["SPLICE",0,1,7]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["SPLICE",0,1,7]]],
           "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         },
         {
           "name": "Replacing every element with references preserves their metadata",
           "desc": "Replacement values and their source metadata are captured before the original elements are removed.",
           "input": " a , b ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["SPLICE",0,null,["NODE",1],["NODE",0]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",0,null,["NODE",1],["NODE",0]]]],
           "output": " b , a "
         },
         {
           "name": "Splice can introduce metadata into a fresh array",
           "desc": "A target array without metadata adopts metadata from directly referenced split elements.",
           "input": {"source":" a ,b","result":[]},
-          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE"],["COPY",[[]],["STASH",0]],["AT","source",["SPLIT",{"sep":",","trim":" "},["SPLICE",["STASH",0,0],0,["NODE",0],["NODE",1]]]],["COPY",["JOIN",{"sep":",","trim":" "},["STASH",0]],"result"]]],
+          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE"],["COPY",[[]],["STASH",0]],["AT","source",["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",["STASH",0,0],0,["NODE",0],["NODE",1]]]],["COPY",["JOIN",{"sep":",","trim":" "},["STASH",0]],"result"]]],
           "output": {"source":" a ,b","result":" a ,b"}
         },
         {
           "name": "Metadata introduced into a populated array also covers existing elements",
           "desc": "Existing elements receive adjacent metadata when referenced replacements introduce a metadata origin.",
           "input": {"source":" a ","result":null},
-          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE"],["COPY",[["old"]],["STASH",0]],["AT","source",["SPLIT",{"sep":",","trim":" "},["SPLICE",["STASH",0,false],0,["NODE",0]]]],["COPY",["JOIN",{"sep":",","trim":" "},["STASH",0]],"result"]]],
+          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE"],["COPY",[["old"]],["STASH",0]],["AT","source",["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",["STASH",0,false],0,["NODE",0]]]],["COPY",["JOIN",{"sep":",","trim":" "},["STASH",0]],"result"]]],
           "output": {"source":" a ","result":"old, a "}
         },
         {
           "name": "Different SPLIT origin uses adjacent destination metadata",
           "desc": "A reference from another split does not carry its right trimming into the target array.",
           "input": " a , b ",
-          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE"],["COPY",["SPLIT",{"sep":",","trim":" "}," x "],["STASH",0]],["SPLIT",{"sep":",","trim":" "},["SPLICE",1,0,["STASH",0,0]]]]],
+          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE"],["COPY",["SPLIT",{"sep":",","trim":" "}," x "],["STASH",0]],["ATSPLIT",["NODE"],{"sep":",","trim":" "},["SPLICE",1,0,["STASH",0,0]]]]],
           "output": " a , x, b "
         }
       ]

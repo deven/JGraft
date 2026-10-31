@@ -1781,13 +1781,13 @@
         {
           "name": "Sliced variable separators and trimming are preserved",
           "input": " a ; b , c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",",",";"],"default":",","trim":" "},["COPY",["SLICE",["NODE"],1,2],["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",",",";"],"default":",","trim":" "},["COPY",["SLICE",["NODE"],1,2],["NODE"]]]],
           "output": " b , c "
         },
         {
           "name": "Singleton slice retains its own trimming",
           "input": " a , b , c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["COPY",["SLICE",["NODE"],1,1],["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["COPY",["SLICE",["NODE"],1,1],["NODE"]]]],
           "output": " b "
         },
         {
@@ -1801,6 +1801,30 @@
           "input": [0,1],
           "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,null,["NODE",["SLICE",["NODE"],0,1]]]],
           "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+        }
+      ]
+    },
+    {
+      "name": "Evaluated configuration objects",
+      "desc": "The one-argument configuration form receives an evaluated object value. Its path is an array value rather than a second expression to execute.",
+      "tests": [
+        {
+          "name": "Object read from input",
+          "input": {"data":[10,20,30],"cfg":{"path":["data"],"ofs":1,"len":1}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SLICE",["NODE","cfg"]],["NODE"]]],
+          "output": [20]
+        },
+        {
+          "name": "Object read from constants",
+          "input": {"data":[10,20,30]},
+          "jgraft": ["JGRAFT",{"v":1,"const":["cfg",{"path":[["data"]],"ofs":1,"len":1}]},["COPY",["SLICE",["CONST","cfg"]],["NODE"]]],
+          "output": [20]
+        },
+        {
+          "name": "Constructed configuration object",
+          "input": {"data":[10,20,30]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SLICE",["MKOBJ","path",[["data"]],"ofs",1,"len",1]],["NODE"]]],
+          "output": [20]
         }
       ]
     }

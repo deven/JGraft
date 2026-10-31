@@ -484,7 +484,7 @@
         {
           "name": "SPLIT subactions share stash",
           "input": {"text":"a,b"},
-          "jgraft": ["JGRAFT",{"v":1},["AT","text",["SPLIT",",",["COPY",["NODE",0],["STASH","first"]],["COPY",["NODE",-1],["STASH","last"]]]],["COPY",["STASH"],"parts"]],
+          "jgraft": ["JGRAFT",{"v":1},["AT","text",["ATSPLIT",["NODE"],",",["COPY",["NODE",0],["STASH","first"]],["COPY",["NODE",-1],["STASH","last"]]]],["COPY",["STASH"],"parts"]],
           "output": {"text":"a,b","parts":{"first":"a","last":"b"}}
         },
         {

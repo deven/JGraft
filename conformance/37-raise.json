@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "name": "LOG",
-  "desc": "Covers the LOG action: info/warn continuation, fail termination with NO_MATCH, literal named/numeric levels and numeric action ID, value-context messages/data and scope, printable Unicode and forbidden codepoints, argument evaluation failures, lazy action branches, and syntax. Portable fixtures assert output/errors and the complete ordered logs, including optional data snapshots and fatal entries. Delivery, collection layout, and diagnostic paths remain implementation-specific. Invalid literal messages fail with INVALID_GRAFT. Invalid message expression results fail with INVALID_TARGET, with the usual static-upgrade rules. Invalid literal levels and arities are INVALID_GRAFT.",
+  "name": "RAISE",
+  "desc": "Covers the RAISE action: info/warn continuation, fail termination with NO_MATCH, literal named/numeric levels and numeric action ID, value-context messages/data and scope, printable Unicode and forbidden codepoints, argument evaluation failures, lazy action branches, and syntax. Portable fixtures assert output/errors and the complete ordered logs, including optional data snapshots and fatal entries. Delivery, collection layout, and diagnostic paths remain implementation-specific. Invalid literal messages fail with INVALID_GRAFT. Invalid message expression results fail with INVALID_TARGET, with the usual static-upgrade rules. Invalid literal levels and arities are INVALID_GRAFT.",
   "tests": [
     {
       "name": "Levels and execution",
@@ -10,133 +10,133 @@
         {
           "name": "\"info\" preserves data",
           "input": {"a":[1,2]},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","message"]],
           "output": {"a":[1,2]},
           "logs": [{"level":0,"message":"message"}]
         },
         {
           "name": "\"info\" continues",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","message"],["COPY",1,"after"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","message"],["COPY",1,"after"]],
           "output": {"after":1},
           "logs": [{"level":0,"message":"message"}]
         },
         {
           "name": "\"info\" numeric action",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},[10,"info","message"]],
+          "jgraft": ["JGRAFT",{"v":1},[0,"info","message"]],
           "output": null,
           "logs": [{"level":0,"message":"message"}]
         },
         {
           "name": "\"warn\" preserves data",
           "input": {"a":[1,2]},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","message"]],
           "output": {"a":[1,2]},
           "logs": [{"level":1,"message":"message"}]
         },
         {
           "name": "\"warn\" continues",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","message"],["COPY",1,"after"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","message"],["COPY",1,"after"]],
           "output": {"after":1},
           "logs": [{"level":1,"message":"message"}]
         },
         {
           "name": "\"warn\" numeric action",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},[10,"warn","message"]],
+          "jgraft": ["JGRAFT",{"v":1},[0,"warn","message"]],
           "output": null,
           "logs": [{"level":1,"message":"message"}]
         },
         {
           "name": "0 preserves data",
           "input": {"a":[1,2]},
-          "jgraft": ["JGRAFT",{"v":1},["LOG",0,"message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",0,"message"]],
           "output": {"a":[1,2]},
           "logs": [{"level":0,"message":"message"}]
         },
         {
           "name": "0 continues",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG",0,"message"],["COPY",1,"after"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",0,"message"],["COPY",1,"after"]],
           "output": {"after":1},
           "logs": [{"level":0,"message":"message"}]
         },
         {
           "name": "0 numeric action",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},[10,0,"message"]],
+          "jgraft": ["JGRAFT",{"v":1},[0,0,"message"]],
           "output": null,
           "logs": [{"level":0,"message":"message"}]
         },
         {
           "name": "1 preserves data",
           "input": {"a":[1,2]},
-          "jgraft": ["JGRAFT",{"v":1},["LOG",1,"message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",1,"message"]],
           "output": {"a":[1,2]},
           "logs": [{"level":1,"message":"message"}]
         },
         {
           "name": "1 continues",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG",1,"message"],["COPY",1,"after"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",1,"message"],["COPY",1,"after"]],
           "output": {"after":1},
           "logs": [{"level":1,"message":"message"}]
         },
         {
           "name": "1 numeric action",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},[10,1,"message"]],
+          "jgraft": ["JGRAFT",{"v":1},[0,1,"message"]],
           "output": null,
           "logs": [{"level":1,"message":"message"}]
         },
         {
           "name": "\"fail\" rejects",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail","reason"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail","reason"]],
           "errors": {"NO_MATCH":true},
           "logs": [{"level":2,"message":"reason"}]
         },
         {
           "name": "\"fail\" stops following actions",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["COPY",1,"before"],["LOG","fail","reason"],["COPY",["NODE","missing"],"after"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",1,"before"],["RAISE","fail","reason"],["COPY",["NODE","missing"],"after"]],
           "errors": {"NO_MATCH":true},
           "logs": [{"level":2,"message":"reason"}]
         },
         {
           "name": "\"fail\" numeric action",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},[10,"fail","reason",null]],
+          "jgraft": ["JGRAFT",{"v":1},[0,"fail","reason",null]],
           "errors": {"NO_MATCH":true},
           "logs": [{"level":2,"message":"reason","data":null}]
         },
         {
           "name": "2 rejects",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG",2,"reason"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",2,"reason"]],
           "errors": {"NO_MATCH":true},
           "logs": [{"level":2,"message":"reason"}]
         },
         {
           "name": "2 stops following actions",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["COPY",1,"before"],["LOG",2,"reason"],["COPY",["NODE","missing"],"after"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",1,"before"],["RAISE",2,"reason"],["COPY",["NODE","missing"],"after"]],
           "errors": {"NO_MATCH":true},
           "logs": [{"level":2,"message":"reason"}]
         },
         {
           "name": "2 numeric action",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},[10,2,"reason",null]],
+          "jgraft": ["JGRAFT",{"v":1},[0,2,"reason",null]],
           "errors": {"NO_MATCH":true},
           "logs": [{"level":2,"message":"reason","data":null}]
         },
         {
           "name": "Several messages in order",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","first"],["LOG","warn","second",{"a":1}],["LOG",0,"third"],["COPY",true,"done"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","first"],["RAISE","warn","second",{"a":1}],["RAISE",0,"third"],["COPY",true,"done"]],
           "output": {"done":true},
           "logs": [{"level":0,"message":"first"},{"level":1,"message":"second","data":{"a":1}},{"level":0,"message":"third"}]
         }
@@ -149,133 +149,133 @@
         {
           "name": "Empty",
           "input": "",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "output": "",
           "logs": [{"level":0,"message":""}]
         },
         {
           "name": "ASCII",
           "input": "A printable message!",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "output": "A printable message!",
           "logs": [{"level":0,"message":"A printable message!"}]
         },
         {
           "name": "Whitespace space",
           "input": " ",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "output": " ",
           "logs": [{"level":0,"message":" "}]
         },
         {
           "name": "Quotes and backslashes",
           "input": "\"quoted\" \\ path",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "output": "\"quoted\" \\ path",
           "logs": [{"level":0,"message":"\"quoted\" \\ path"}]
         },
         {
           "name": "Accents",
           "input": "é é",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "output": "é é",
           "logs": [{"level":0,"message":"é é"}]
         },
         {
           "name": "BMP boundaries",
           "input": " ~ ퟿﷏ﷰ�",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "output": " ~ ퟿﷏ﷰ�",
           "logs": [{"level":0,"message":" ~ ퟿﷏ﷰ�"}]
         },
         {
           "name": "Astral",
           "input": "🙂 𐀀",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "output": "🙂 𐀀",
           "logs": [{"level":0,"message":"🙂 𐀀"}]
         },
         {
           "name": "Astral near noncharacter",
           "input": "🿽􏿽",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "output": "🿽􏿽",
           "logs": [{"level":0,"message":"🿽􏿽"}]
         },
         {
           "name": "Line separators",
           "input": "  ",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "output": "  ",
           "logs": [{"level":0,"message":"  "}]
         },
         {
           "name": "Null data",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","data",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","data",["NODE"]]],
           "output": null,
           "logs": [{"level":1,"message":"data","data":null}]
         },
         {
           "name": "False data",
           "input": false,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","data",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","data",["NODE"]]],
           "output": false,
           "logs": [{"level":1,"message":"data","data":false}]
         },
         {
           "name": "True data",
           "input": true,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","data",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","data",["NODE"]]],
           "output": true,
           "logs": [{"level":1,"message":"data","data":true}]
         },
         {
           "name": "Number data",
           "input": 1.25,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","data",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","data",["NODE"]]],
           "output": 1.25,
           "logs": [{"level":1,"message":"data","data":1.25}]
         },
         {
           "name": "Empty string data",
           "input": "",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","data",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","data",["NODE"]]],
           "output": "",
           "logs": [{"level":1,"message":"data","data":""}]
         },
         {
           "name": "Array data",
           "input": [1,["FAIL"]],
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","data",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","data",["NODE"]]],
           "output": [1,["FAIL"]],
           "logs": [{"level":1,"message":"data","data":[1,["FAIL"]]}]
         },
         {
           "name": "Object data",
           "input": {"a":["NODE"]},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","data",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","data",["NODE"]]],
           "output": {"a":["NODE"]},
           "logs": [{"level":1,"message":"data","data":{"a":["NODE"]}}]
         },
         {
           "name": "Control string data",
           "input": "\u0000\n",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","data",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","data",["NODE"]]],
           "output": "\u0000\n",
           "logs": [{"level":1,"message":"data","data":"\u0000\n"}]
         },
         {
           "name": "Noncharacters data",
           "input": "\uffff\udbff\udfff",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","data",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","data",["NODE"]]],
           "output": "\uffff\udbff\udfff",
           "logs": [{"level":1,"message":"data","data":"\uffff\udbff\udfff"}]
         },
         {
           "name": "Lone surrogate data",
           "input": "\ud800",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","data",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","data",["NODE"]]],
           "output": "\ud800",
           "needLoneSurrogate": true,
           "logs": [{"level":1,"message":"data","data":"\ud800"}]
@@ -283,56 +283,56 @@
         {
           "name": "Computed message",
           "input": 42,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["CONCAT","Value: ",["CASTSTR"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["CONCAT","Value: ",["CASTSTR"]]]],
           "output": 42,
           "logs": [{"level":0,"message":"Value: 42"}]
         },
         {
           "name": "CONST message and EXPR data",
           "input": {"a":1},
-          "jgraft": ["JGRAFT",{"v":1,"const":["m","constant"],"expr":["value",["NODE"]]},["LOG","info",["CONST","m"],["EXPR","value"]]],
+          "jgraft": ["JGRAFT",{"v":1,"const":["m","constant"],"expr":["value",["NODE"]]},["RAISE","info",["CONST","m"],["EXPR","value"]]],
           "output": {"a":1},
           "logs": [{"level":0,"message":"constant","data":{"a":1}}]
         },
         {
           "name": "STASH data",
           "input": {"a":1},
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE"],["STASH","saved"]],["LOG","info","saved",["STASH","saved"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE"],["STASH","saved"]],["RAISE","info","saved",["STASH","saved"]]],
           "output": {"a":1},
           "logs": [{"level":0,"message":"saved","data":{"a":1}}]
         },
         {
           "name": "AT location",
           "input": {"a":{"message":"nested","data":[1]}},
-          "jgraft": ["JGRAFT",{"v":1},["AT","a",["LOG","warn",["NODE","message"],["NODE","data"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["AT","a",["RAISE","warn",["NODE","message"],["NODE","data"]]]],
           "output": {"a":{"message":"nested","data":[1]}},
           "logs": [{"level":1,"message":"nested","data":[1]}]
         },
         {
           "name": "MATCH captures",
           "input": [1,2],
-          "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["SEQMAX","span",["REP",0,-1,["EXISTS"]]]]],["LOG","info","captured",["CAP"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["SEQMAX","span",["REP",0,-1,["EXISTS"]]]]],["RAISE","info","captured",["CAP"]]]],
           "output": [1,2],
           "logs": [{"level":0,"message":"captured","data":{"span":{"path":[],"ofs":0,"len":2,"lim":2}}}]
         },
         {
           "name": "Nested JGRAFT namespaces",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["JGRAFT",{"const":["m","inner"]},["LOG","info",["CONST","m"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["JGRAFT",{"const":["m","inner"]},["RAISE","info",["CONST","m"]]]],
           "output": {},
           "logs": [{"level":0,"message":"inner"}]
         },
         {
           "name": "TEMP is action-local",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["COPY","previous",["TEMP","m"]],["IF",["IS",["LOCAL","m","lexical",["TEMP","m"]],"lexical"],["LOG","info","selected"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY","previous",["TEMP","m"]],["IF",["IS",["LOCAL","m","lexical",["TEMP","m"]],"lexical"],["RAISE","info","selected"]]],
           "output": {},
           "logs": [{"level":0,"message":"selected"}]
         },
         {
           "name": "Arbitrary property data",
           "input": {"__proto__":{"a":1}},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","data",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","data",["NODE"]]],
           "output": {"__proto__":{"a":1}},
           "needProto": true,
           "logs": [{"level":0,"message":"data","data":{"__proto__":{"a":1}}}]
@@ -346,224 +346,224 @@
         {
           "name": "Null / info",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "Null / fail",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "False / info",
           "input": false,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "False / fail",
           "input": false,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "True / info",
           "input": true,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "True / fail",
           "input": true,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "Zero / info",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "Zero / fail",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "Number / info",
           "input": 1,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "Number / fail",
           "input": 1,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "Array / info",
           "input": [],
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "Array / fail",
           "input": [],
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "Object / info",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "Object / fail",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "info missing message",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE","missing"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE","missing"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "info FAIL message",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["FAIL"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["FAIL"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "info missing data",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","message",["NODE","missing"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","message",["NODE","missing"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "info FAIL data",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","message",["FAIL"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","message",["FAIL"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "info unknown message expression",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["unknown"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["unknown"]]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "info unknown data expression",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","message",["unknown"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","message",["unknown"]]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "warn missing message",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn",["NODE","missing"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",["NODE","missing"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "warn FAIL message",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn",["FAIL"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",["FAIL"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "warn missing data",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","message",["NODE","missing"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","message",["NODE","missing"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "warn FAIL data",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","message",["FAIL"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","message",["FAIL"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "warn unknown message expression",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn",["unknown"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",["unknown"]]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "warn unknown data expression",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","message",["unknown"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","message",["unknown"]]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "fail missing message",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail",["NODE","missing"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["NODE","missing"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "fail FAIL message",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail",["FAIL"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["FAIL"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "fail missing data",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail","message",["NODE","missing"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail","message",["NODE","missing"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "fail FAIL data",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail","message",["FAIL"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail","message",["FAIL"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "fail unknown message expression",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail",["unknown"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["unknown"]]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "fail unknown data expression",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail","message",["unknown"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail","message",["unknown"]]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         }
@@ -576,924 +576,924 @@
         {
           "name": "U+0",
           "input": "prefix\u0000suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+1",
           "input": "prefix\u0001suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+2",
           "input": "prefix\u0002suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+3",
           "input": "prefix\u0003suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+4",
           "input": "prefix\u0004suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+5",
           "input": "prefix\u0005suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+6",
           "input": "prefix\u0006suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+7",
           "input": "prefix\u0007suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+8",
           "input": "prefix\bsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+9",
           "input": "prefix\tsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+A",
           "input": "prefix\nsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+B",
           "input": "prefix\u000bsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+C",
           "input": "prefix\fsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+D",
           "input": "prefix\rsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+E",
           "input": "prefix\u000esuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+F",
           "input": "prefix\u000fsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+10",
           "input": "prefix\u0010suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+11",
           "input": "prefix\u0011suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+12",
           "input": "prefix\u0012suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+13",
           "input": "prefix\u0013suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+14",
           "input": "prefix\u0014suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+15",
           "input": "prefix\u0015suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+16",
           "input": "prefix\u0016suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+17",
           "input": "prefix\u0017suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+18",
           "input": "prefix\u0018suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+19",
           "input": "prefix\u0019suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+1A",
           "input": "prefix\u001asuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+1B",
           "input": "prefix\u001bsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+1C",
           "input": "prefix\u001csuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+1D",
           "input": "prefix\u001dsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+1E",
           "input": "prefix\u001esuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+1F",
           "input": "prefix\u001fsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+7F",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+80",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+81",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+82",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+83",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+84",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+85",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+86",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+87",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+88",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+89",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+8A",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+8B",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+8C",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+8D",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+8E",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+8F",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+90",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+91",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+92",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+93",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+94",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+95",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+96",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+97",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+98",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+99",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+9A",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+9B",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+9C",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+9D",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+9E",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+9F",
           "input": "prefixsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDD0",
           "input": "prefix\ufdd0suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDD1",
           "input": "prefix\ufdd1suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDD2",
           "input": "prefix\ufdd2suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDD3",
           "input": "prefix\ufdd3suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDD4",
           "input": "prefix\ufdd4suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDD5",
           "input": "prefix\ufdd5suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDD6",
           "input": "prefix\ufdd6suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDD7",
           "input": "prefix\ufdd7suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDD8",
           "input": "prefix\ufdd8suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDD9",
           "input": "prefix\ufdd9suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDDA",
           "input": "prefix\ufddasuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDDB",
           "input": "prefix\ufddbsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDDC",
           "input": "prefix\ufddcsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDDD",
           "input": "prefix\ufdddsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDDE",
           "input": "prefix\ufddesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDDF",
           "input": "prefix\ufddfsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDE0",
           "input": "prefix\ufde0suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDE1",
           "input": "prefix\ufde1suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDE2",
           "input": "prefix\ufde2suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDE3",
           "input": "prefix\ufde3suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDE4",
           "input": "prefix\ufde4suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDE5",
           "input": "prefix\ufde5suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDE6",
           "input": "prefix\ufde6suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDE7",
           "input": "prefix\ufde7suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDE8",
           "input": "prefix\ufde8suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDE9",
           "input": "prefix\ufde9suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDEA",
           "input": "prefix\ufdeasuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDEB",
           "input": "prefix\ufdebsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDEC",
           "input": "prefix\ufdecsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDED",
           "input": "prefix\ufdedsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDEE",
           "input": "prefix\ufdeesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FDEF",
           "input": "prefix\ufdefsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FFFE",
           "input": "prefix\ufffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FFFF",
           "input": "prefix\uffffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+1FFFE",
           "input": "prefix\ud83f\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+1FFFF",
           "input": "prefix\ud83f\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+2FFFE",
           "input": "prefix\ud87f\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+2FFFF",
           "input": "prefix\ud87f\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+3FFFE",
           "input": "prefix\ud8bf\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+3FFFF",
           "input": "prefix\ud8bf\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+4FFFE",
           "input": "prefix\ud8ff\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+4FFFF",
           "input": "prefix\ud8ff\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+5FFFE",
           "input": "prefix\ud93f\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+5FFFF",
           "input": "prefix\ud93f\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+6FFFE",
           "input": "prefix\ud97f\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+6FFFF",
           "input": "prefix\ud97f\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+7FFFE",
           "input": "prefix\ud9bf\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+7FFFF",
           "input": "prefix\ud9bf\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+8FFFE",
           "input": "prefix\ud9ff\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+8FFFF",
           "input": "prefix\ud9ff\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+9FFFE",
           "input": "prefix\uda3f\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+9FFFF",
           "input": "prefix\uda3f\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+AFFFE",
           "input": "prefix\uda7f\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+AFFFF",
           "input": "prefix\uda7f\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+BFFFE",
           "input": "prefix\udabf\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+BFFFF",
           "input": "prefix\udabf\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+CFFFE",
           "input": "prefix\udaff\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+CFFFF",
           "input": "prefix\udaff\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+DFFFE",
           "input": "prefix\udb3f\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+DFFFF",
           "input": "prefix\udb3f\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+EFFFE",
           "input": "prefix\udb7f\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+EFFFF",
           "input": "prefix\udb7f\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FFFFE",
           "input": "prefix\udbbf\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+FFFFF",
           "input": "prefix\udbbf\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+10FFFE",
           "input": "prefix\udbff\udffesuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+10FFFF",
           "input": "prefix\udbff\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "U+D800",
           "input": "prefix\ud800suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "needLoneSurrogate": true,
           "logs": []
@@ -1501,7 +1501,7 @@
         {
           "name": "U+DBFF",
           "input": "prefix\udbffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "needLoneSurrogate": true,
           "logs": []
@@ -1509,7 +1509,7 @@
         {
           "name": "U+DC00",
           "input": "prefix\udc00suffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "needLoneSurrogate": true,
           "logs": []
@@ -1517,7 +1517,7 @@
         {
           "name": "U+DFFF",
           "input": "prefix\udfffsuffix",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "needLoneSurrogate": true,
           "logs": []
@@ -1525,21 +1525,21 @@
         {
           "name": "Invalid message at fail level",
           "input": "x\n",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","fail",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "Forbidden first codepoint",
           "input": "\u0000text",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         },
         {
           "name": "Forbidden last codepoint",
           "input": "text",
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn",["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",["NODE"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": []
         }
@@ -1552,70 +1552,70 @@
         {
           "name": "Null",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",null]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",null]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "False",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",false]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",false]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Number",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",1]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",1]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Object",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",{}]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",{}]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "C0",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","bad\n"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","bad\n"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "DEL",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","bad"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","bad"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "C1",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","bad"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","bad"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "BMP noncharacter",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","bad\uffff"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","bad\uffff"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Astral noncharacter",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","bad\ud83f\udfff"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","bad\ud83f\udfff"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Lone surrogate",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","bad\ud800"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","bad\ud800"]],
           "errors": {"INVALID_GRAFT":true},
           "needLoneSurrogate": true,
           "logs": []
@@ -1623,14 +1623,14 @@
         {
           "name": "Computed forbidden text",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["CONCAT","bad","\n"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["CONCAT","bad","\n"]]],
           "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Computed non-string",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info",["CASTNUM","1"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["CASTNUM","1"]]],
           "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true},
           "logs": []
         }
@@ -1638,124 +1638,124 @@
     },
     {
       "name": "Branches and argument validation",
-      "desc": "Only selected IF actions execute LOG. Level is a literal and is not evaluated, even when an expression would produce a valid level. Structurally malformed skipped actions may be diagnosed by static validation.",
+      "desc": "Only selected IF actions execute RAISE. Level is a literal and is not evaluated, even when an expression would produce a valid level. Structurally malformed skipped actions may be diagnosed by static validation.",
       "tests": [
         {
           "name": "Unselected fail",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["IF",false,["LOG","fail","unused"],["COPY",true,"ok"]]],
+          "jgraft": ["JGRAFT",{"v":1},["IF",false,["RAISE","fail","unused"],["COPY",true,"ok"]]],
           "output": {"ok":true},
           "logs": []
         },
         {
           "name": "Selected info",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["IF",{},["LOG","info","selected"]]],
+          "jgraft": ["JGRAFT",{"v":1},["IF",{},["RAISE","info","selected"]]],
           "output": {},
           "logs": [{"level":0,"message":"selected"}]
         },
         {
           "name": "Selected fail",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["IF",{},["LOG","fail","selected"]]],
+          "jgraft": ["JGRAFT",{"v":1},["IF",{},["RAISE","fail","selected"]]],
           "errors": {"NO_MATCH":true},
           "logs": [{"level":2,"message":"selected"}]
         },
         {
           "name": "Unselected invalid message value",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["IF",false,["LOG","info",["FAIL"]],["LOG","warn","selected"]]],
+          "jgraft": ["JGRAFT",{"v":1},["IF",false,["RAISE","info",["FAIL"]],["RAISE","warn","selected"]]],
           "output": {},
           "logs": [{"level":1,"message":"selected"}]
         },
         {
           "name": "Unknown string level",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","error","message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","error","message"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Case variant level",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","INFO","message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","INFO","message"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Negative level",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG",-1,"message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",-1,"message"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Unknown ID level",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG",3,"message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",3,"message"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Fraction level",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG",0.5,"message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",0.5,"message"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Null level",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG",null,"message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",null,"message"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Boolean level",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG",true,"message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",true,"message"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Object level",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG",{},"message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",{},"message"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Expression level",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG",["NODE"],"message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",["NODE"],"message"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Constant expression level",
           "input": 0,
-          "jgraft": ["JGRAFT",{"v":1},["LOG",["CASTNUM","0"],"message"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",["CASTNUM","0"],"message"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "No arguments",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Only level",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info"]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         },
         {
           "name": "Extra argument",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","m",null,null]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","m",null,null]],
           "errors": {"INVALID_GRAFT":true},
           "logs": []
         }
@@ -1768,44 +1768,64 @@
         {
           "name": "Snapshots before and after edits",
           "input": {"x":[1]},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","before",["NODE"]],["COPY",2,["NODE","x",0]],["LOG","warn","after",["NODE"]],["COPY",3,["NODE","x",0]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before",["NODE"]],["COPY",2,["NODE","x",0]],["RAISE","warn","after",["NODE"]],["COPY",3,["NODE","x",0]]],
           "output": {"x":[3]},
           "logs": [{"level":0,"message":"before","data":{"x":[1]}},{"level":1,"message":"after","data":{"x":[2]}}]
         },
         {
           "name": "A prior record survives data failure",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","first"],["LOG","warn","second",["NODE","missing"]]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","first"],["RAISE","warn","second",["NODE","missing"]]],
           "errors": {"INVALID_TARGET":true},
           "logs": [{"level":0,"message":"first"}]
         },
         {
           "name": "Fatal data reflects preceding changes",
           "input": {"x":1},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","before",["NODE"]],["COPY",2,"x"],["LOG","fail","stop",["NODE"]],["LOG","info","unreachable"]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before",["NODE"]],["COPY",2,"x"],["RAISE","fail","stop",["NODE"]],["RAISE","info","unreachable"]],
           "errors": {"NO_MATCH":true},
           "logs": [{"level":0,"message":"before","data":{"x":1}},{"level":2,"message":"stop","data":{"x":2}}]
         },
         {
           "name": "Omitted versus null data",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["LOG","info","absent"],["LOG","info","present",null]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","absent"],["RAISE","info","present",null]],
           "output": null,
           "logs": [{"level":0,"message":"absent"},{"level":0,"message":"present","data":null}]
         },
         {
           "name": "Only selected branches emit",
           "input": 1,
-          "jgraft": ["JGRAFT",{"v":1},["IF",0,["LOG","warn","wrong"],["LOG","info","selected"]],["LOG","warn","last"]],
+          "jgraft": ["JGRAFT",{"v":1},["IF",0,["RAISE","warn","wrong"],["RAISE","info","selected"]],["RAISE","warn","last"]],
           "output": 1,
           "logs": [{"level":0,"message":"selected"},{"level":1,"message":"last"}]
         },
         {
           "name": "Ordinary later failure retains records",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["LOG","warn","earlier"],["MATCH",{"missing":1}]],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","earlier"],["MATCH",{"missing":1}]],
           "errors": {"NO_MATCH":true},
           "logs": [{"level":1,"message":"earlier"}]
+        }
+      ]
+    },
+    {
+      "name": "Renamed action and ID",
+      "desc": "RAISE uses action ID zero. LOG is not retained as a standard alias, and the former numeric ID ten is unassigned.",
+      "tests": [
+        {
+          "name": "Old LOG name is rejected",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["LOG","info","message"]],
+          "logs": [],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Old numeric ID is rejected",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},[10,"info","message"]],
+          "logs": [],
+          "errors": {"INVALID_GRAFT":true}
         }
       ]
     }

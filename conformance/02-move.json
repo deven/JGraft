@@ -573,7 +573,7 @@
         {
           "name": "Use numeric MOVE and NODE identifiers",
           "input": {"a":1},
-          "jgraft": ["JGRAFT",{"v":1},[4,[0,"a"],[0,"b"]]],
+          "jgraft": ["JGRAFT",{"v":1},[6,[0,"a"],[0,"b"]]],
           "output": {"b":1}
         }
       ]
@@ -1160,39 +1160,39 @@
           "name": "Half-index insertion carries SPLIT trimming metadata",
           "desc": "Moving the first element to an insertion point preserves its original left and right trimming.",
           "input": " a ,b, c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["MOVE",0,1.5]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["MOVE",0,1.5]]],
           "output": "b, a , c "
         },
         {
           "name": "Overwriting an element preserves destination SPLIT metadata",
           "desc": "The moved value adopts the existing destination trimming instead of carrying its source trimming.",
           "input": " a ,b, c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["MOVE",0,1]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["MOVE",0,1]]],
           "output": "a, c "
         },
         {
           "name": "Appending carries SPLIT trimming metadata",
           "input": " a ,b, c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["MOVE",0,false]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["MOVE",0,false]]],
           "output": "b, c , a "
         },
         {
           "name": "TEMP object property drops element SPLIT metadata",
           "desc": "The inserted value receives adjacent metadata, which is applied after the final element order is known.",
           "input": " a ,b, c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["MOVE",0,["TEMP","saved"],["TEMP","saved"],1.5]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["MOVE",0,["TEMP","saved"],["TEMP","saved"],1.5]]],
           "output": "b,a, c "
         },
         {
           "name": "Auto-vivified TEMP array preserves element SPLIT metadata",
           "input": " a ,b, c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["MOVE",0,["TEMP","saved",0],["TEMP","saved",0],1.5]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["MOVE",0,["TEMP","saved",0],["TEMP","saved",0],1.5]]],
           "output": "b, a , c "
         },
         {
           "name": "Restoring a deleted position restores SPLIT element metadata",
           "input": " a ,b, c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["MOVE",0,["TEMP","saved",0],["TEMP","saved",0],0]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["MOVE",0,["TEMP","saved",0],["TEMP","saved",0],0]]],
           "output": " a ,b, c "
         },
         {
@@ -1227,21 +1227,21 @@
           "name": "Half-index insertion carries variable separator metadata",
           "desc": "The semicolon follows the moved a while the comma follows b.",
           "input": "a;b,c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",",",";"],"default":","},["MOVE",0,1.5]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",",",";"],"default":","},["MOVE",0,1.5]]],
           "output": "b,a;c"
         },
         {
           "name": "Overwrite retains destination separator metadata",
           "desc": "Overwriting b preserves its comma separator instead of moving the source semicolon.",
           "input": "a;b,c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",",",";"],"default":","},["MOVE",0,1]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",",",";"],"default":","},["MOVE",0,1]]],
           "output": "a,c"
         },
         {
           "name": "Different SPLIT origins do not transfer element metadata",
           "desc": "The source metadata belongs to a different split, so the inserted x receives adjacent destination metadata.",
           "input": {"a":" x ","b":"b, c "},
-          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE"],["AT","a",["SPLIT",{"sep":",","trim":" "},["MOVE",0,["STASH","saved",0]]]],["AT","b",["SPLIT",{"sep":",","trim":" "},["MOVE",["STASH","saved",0],0.5]]]]],
+          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE"],["AT","a",["ATSPLIT",["NODE"],{"sep":",","trim":" "},["MOVE",0,["STASH","saved",0]]]],["AT","b",["ATSPLIT",["NODE"],{"sep":",","trim":" "},["MOVE",["STASH","saved",0],0.5]]]]],
           "output": {"a":"","b":"b,x, c "}
         }
       ]

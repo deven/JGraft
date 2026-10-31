@@ -156,7 +156,7 @@
         {
           "name": "Numeric action ID selects IF",
           "input": 1,
-          "jgraft": ["JGRAFT",{"v":1},[2,1,["COPY",2,["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},[4,1,["COPY",2,["NODE"]]]],
           "output": 2
         },
         {

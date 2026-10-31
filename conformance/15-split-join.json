@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "SPLIT and JOIN",
-  "desc": "SPLIT expression, JOIN expression, and SPLIT action: literal and longest-match regex separators, zero-width progress, retained separators, element constraints, Unicode boundaries, trimming order, scoped operands, nested edits, and separator/trimming metadata across reassembly. Supporting actions expose intermediate arrays and metadata without prescribing an implementation, traversal order, or resource-counter totals. Static diagnoses are allowed where the specification permits them.",
+  "desc": "SPLIT expression, JOIN expression, and ATSPLIT action: literal and longest-match regex separators, zero-width progress, retained separators, element constraints, Unicode boundaries, trimming order, scoped operands, nested edits, and separator/trimming metadata across reassembly. Supporting actions expose intermediate arrays and metadata without prescribing an implementation, traversal order, or resource-counter totals. Static diagnoses are allowed where the specification permits them.",
   "tests": [
     {
       "name": "Literal separators",
@@ -32,7 +32,7 @@
             {
               "name": "Unedited action",
               "input": "",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "output": ""
             }
           ]
@@ -62,7 +62,7 @@
             {
               "name": "Unedited action",
               "input": "abc",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "output": "abc"
             }
           ]
@@ -92,7 +92,7 @@
             {
               "name": "Unedited action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "output": "a,b"
             }
           ]
@@ -122,7 +122,7 @@
             {
               "name": "Unedited action",
               "input": ",a",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "output": ",a"
             }
           ]
@@ -152,7 +152,7 @@
             {
               "name": "Unedited action",
               "input": "a,",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "output": "a,"
             }
           ]
@@ -182,7 +182,7 @@
             {
               "name": "Unedited action",
               "input": ",",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "output": ","
             }
           ]
@@ -212,7 +212,7 @@
             {
               "name": "Unedited action",
               "input": ",,",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "output": ",,"
             }
           ]
@@ -242,7 +242,7 @@
             {
               "name": "Unedited action",
               "input": "a,,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "output": "a,,b"
             }
           ]
@@ -272,7 +272,7 @@
             {
               "name": "Unedited action",
               "input": ",a,b,",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "output": ",a,b,"
             }
           ]
@@ -302,7 +302,7 @@
             {
               "name": "Unedited action",
               "input": "a,b,,",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "output": "a,b,,"
             }
           ]
@@ -332,7 +332,7 @@
             {
               "name": "Unedited action",
               "input": "aaaaa",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT","aa"]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"aa"]],
               "output": "aaaaa"
             }
           ]
@@ -362,7 +362,7 @@
             {
               "name": "Unedited action",
               "input": "ababa",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT","aba"]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"aba"]],
               "output": "ababa"
             }
           ]
@@ -392,7 +392,7 @@
             {
               "name": "Unedited action",
               "input": "a.*b.*",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",".*"]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],".*"]],
               "output": "a.*b.*"
             }
           ]
@@ -422,7 +422,7 @@
             {
               "name": "Unedited action",
               "input": "a\\b\\",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT","\\"]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"\\"]],
               "output": "a\\b\\"
             }
           ]
@@ -452,7 +452,7 @@
             {
               "name": "Unedited action",
               "input": "a\u0000b\u0000",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT","\u0000"]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"\u0000"]],
               "output": "a\u0000b\u0000"
             }
           ]
@@ -482,7 +482,7 @@
             {
               "name": "Unedited action",
               "input": "AaA",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT","A"]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"A"]],
               "output": "AaA"
             }
           ]
@@ -512,7 +512,7 @@
             {
               "name": "Unedited action",
               "input": "a\r\nb\r\n",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT","\r\n"]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"\r\n"]],
               "output": "a\r\nb\r\n"
             }
           ]
@@ -542,7 +542,7 @@
             {
               "name": "Unedited action",
               "input": "a😀b😀",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT","😀"]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"😀"]],
               "output": "a😀b😀"
             }
           ]
@@ -572,7 +572,7 @@
             {
               "name": "Unedited action",
               "input": "éx́",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT","́"]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"́"]],
               "output": "éx́"
             }
           ]
@@ -602,7 +602,7 @@
             {
               "name": "Unedited action",
               "input": "é,é",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT","é"]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"é"]],
               "output": "é,é"
             }
           ]
@@ -626,7 +626,7 @@
             {
               "name": "Round trip",
               "input": "",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",""]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],""]],
               "output": ""
             },
             {
@@ -650,7 +650,7 @@
             {
               "name": "Round trip",
               "input": "abc",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",""]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],""]],
               "output": "abc"
             },
             {
@@ -674,7 +674,7 @@
             {
               "name": "Round trip",
               "input": "a😀b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",""]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],""]],
               "output": "a😀b"
             },
             {
@@ -698,7 +698,7 @@
             {
               "name": "Round trip",
               "input": "𐀀􏿿",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",""]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],""]],
               "output": "𐀀􏿿"
             },
             {
@@ -722,7 +722,7 @@
             {
               "name": "Round trip",
               "input": "é",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",""]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],""]],
               "output": "é"
             },
             {
@@ -746,7 +746,7 @@
             {
               "name": "Round trip",
               "input": "a\u0000b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",""]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],""]],
               "output": "a\u0000b"
             },
             {
@@ -771,7 +771,7 @@
             {
               "name": "Round trip",
               "input": "\ud800",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",""]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],""]],
               "output": "\ud800",
               "needLoneSurrogate": true
             },
@@ -798,7 +798,7 @@
             {
               "name": "Round trip",
               "input": "\udc00",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",""]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],""]],
               "output": "\udc00",
               "needLoneSurrogate": true
             },
@@ -825,7 +825,7 @@
             {
               "name": "Round trip",
               "input": "\ud800😀\udc00",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",""]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],""]],
               "output": "\ud800😀\udc00",
               "needLoneSurrogate": true
             },
@@ -852,7 +852,7 @@
             {
               "name": "Round trip",
               "input": "\udc00\ud800",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",""]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],""]],
               "output": "\udc00\ud800",
               "needLoneSurrogate": true
             },
@@ -874,7 +874,7 @@
         {
           "name": "Empty regex matches retain actual separators",
           "input": "baabca",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["REP",0,-1,"a"],"default":"!"}]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["REP",0,-1,"a"],"default":"!"}]],
           "output": "baabca"
         },
         {
@@ -911,7 +911,7 @@
     },
     {
       "name": "Longest-match regex separators",
-      "desc": "At each candidate position SPLIT chooses the longest successful separator before scanning further. Alternative order and greedy preferences do not hide valid longer endpoints. A regex without keep requires a string default.",
+      "desc": "At each candidate position SPLIT chooses the longest successful separator before scanning further. Alternative order and greedy preferences do not hide valid longer endpoints. Only JOIN and ATSPLIT require a string default for regex separators without keep.",
       "tests": [
         {
           "name": "Short alternative first",
@@ -926,7 +926,7 @@
             {
               "name": "Round trip",
               "input": "a:b::c",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","::"],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","::"],"default":"/"}]],
               "output": "a:b::c"
             }
           ]
@@ -944,7 +944,7 @@
             {
               "name": "Round trip",
               "input": "a:b::c",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY","::",":"],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY","::",":"],"default":"/"}]],
               "output": "a:b::c"
             }
           ]
@@ -962,7 +962,7 @@
             {
               "name": "Round trip",
               "input": "abcd",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY","ab","bcd"],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY","ab","bcd"],"default":"/"}]],
               "output": "abcd"
             }
           ]
@@ -980,7 +980,7 @@
             {
               "name": "Round trip",
               "input": "a,b,",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["IS",44],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["IS",44],"default":"/"}]],
               "output": "a,b,"
             }
           ]
@@ -998,7 +998,7 @@
             {
               "name": "Round trip",
               "input": "a,b,",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["SEQ",44],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["SEQ",44],"default":"/"}]],
               "output": "a,b,"
             }
           ]
@@ -1016,7 +1016,7 @@
             {
               "name": "Round trip",
               "input": "a   b c",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["REP",1,-1," "],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["REP",1,-1," "],"default":"/"}]],
               "output": "a   b c"
             }
           ]
@@ -1034,7 +1034,7 @@
             {
               "name": "Round trip",
               "input": "a-->b-->>c",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["SEQ","--",["REP",1,2,">"]],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["SEQ","--",["REP",1,2,">"]],"default":"/"}]],
               "output": "a-->b-->>c"
             }
           ]
@@ -1052,7 +1052,7 @@
             {
               "name": "Round trip",
               "input": "a:b::c",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",["ANY",":"],"::"],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",["ANY",":"],"::"],"default":"/"}]],
               "output": "a:b::c"
             }
           ]
@@ -1070,7 +1070,7 @@
             {
               "name": "Round trip",
               "input": "xaaaay",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ALL",["ANY","a","aaa"],["ANY","aa","aaaa"]],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ALL",["ANY","a","aaa"],["ANY","aa","aaaa"]],"default":"/"}]],
               "output": "xaaaay"
             }
           ]
@@ -1088,7 +1088,7 @@
             {
               "name": "Round trip",
               "input": "aba",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["SEQ",["NONE","a"],["EXISTS"]],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["SEQ",["NONE","a"],["EXISTS"]],"default":"/"}]],
               "output": "aba"
             }
           ]
@@ -1106,7 +1106,7 @@
             {
               "name": "Round trip",
               "input": "aab",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["SEQ",["START"],"a"],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["SEQ",["START"],"a"],"default":"/"}]],
               "output": "aab"
             }
           ]
@@ -1124,7 +1124,7 @@
             {
               "name": "Round trip",
               "input": "abxb",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["SEQ","b",["END"]],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["SEQ","b",["END"]],"default":"/"}]],
               "output": "abxb"
             }
           ]
@@ -1142,7 +1142,7 @@
             {
               "name": "Round trip",
               "input": "a😀😀b😀",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["REP",1,-1,128512],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["REP",1,-1,128512],"default":"/"}]],
               "output": "a😀😀b😀"
             }
           ]
@@ -1160,7 +1160,7 @@
             {
               "name": "Round trip",
               "input": "á́b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["REP",1,-1,769],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["REP",1,-1,769],"default":"/"}]],
               "output": "á́b"
             }
           ]
@@ -1178,7 +1178,7 @@
             {
               "name": "Round trip",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",["FAIL"],","],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",["FAIL"],","],"default":"/"}]],
               "output": "a,b"
             }
           ]
@@ -1196,7 +1196,7 @@
             {
               "name": "Round trip",
               "input": "abac",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["SEQ","a",["NONE","c"]],"default":"/"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["SEQ","a",["NONE","c"]],"default":"/"}]],
               "output": "abac"
             }
           ]
@@ -1238,7 +1238,7 @@
             {
               "name": "< round trip",
               "input": "ab",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"<"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"<"}]],
               "output": "ab"
             },
             {
@@ -1250,7 +1250,7 @@
             {
               "name": "> round trip",
               "input": "ab",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":">"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":">"}]],
               "output": "ab"
             },
             {
@@ -1262,7 +1262,7 @@
             {
               "name": "@ round trip",
               "input": "ab",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"@"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"@"}]],
               "output": "ab"
             }
           ]
@@ -1280,7 +1280,7 @@
             {
               "name": "< round trip",
               "input": ",a",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"<"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"<"}]],
               "output": ",a"
             },
             {
@@ -1292,7 +1292,7 @@
             {
               "name": "> round trip",
               "input": ",a",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":">"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":">"}]],
               "output": ",a"
             },
             {
@@ -1304,7 +1304,7 @@
             {
               "name": "@ round trip",
               "input": ",a",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"@"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"@"}]],
               "output": ",a"
             }
           ]
@@ -1322,7 +1322,7 @@
             {
               "name": "< round trip",
               "input": "a,",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"<"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"<"}]],
               "output": "a,"
             },
             {
@@ -1334,7 +1334,7 @@
             {
               "name": "> round trip",
               "input": "a,",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":">"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":">"}]],
               "output": "a,"
             },
             {
@@ -1346,7 +1346,7 @@
             {
               "name": "@ round trip",
               "input": "a,",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"@"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"@"}]],
               "output": "a,"
             }
           ]
@@ -1364,7 +1364,7 @@
             {
               "name": "< round trip",
               "input": ",",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"<"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"<"}]],
               "output": ","
             },
             {
@@ -1376,7 +1376,7 @@
             {
               "name": "> round trip",
               "input": ",",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":">"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":">"}]],
               "output": ","
             },
             {
@@ -1388,7 +1388,7 @@
             {
               "name": "@ round trip",
               "input": ",",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"@"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"@"}]],
               "output": ","
             }
           ]
@@ -1406,7 +1406,7 @@
             {
               "name": "< round trip",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"<"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"<"}]],
               "output": "a,b"
             },
             {
@@ -1418,7 +1418,7 @@
             {
               "name": "> round trip",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":">"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":">"}]],
               "output": "a,b"
             },
             {
@@ -1430,7 +1430,7 @@
             {
               "name": "@ round trip",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"@"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"@"}]],
               "output": "a,b"
             }
           ]
@@ -1448,7 +1448,7 @@
             {
               "name": "< round trip",
               "input": "a,,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"<"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"<"}]],
               "output": "a,,b"
             },
             {
@@ -1460,7 +1460,7 @@
             {
               "name": "> round trip",
               "input": "a,,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":">"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":">"}]],
               "output": "a,,b"
             },
             {
@@ -1472,7 +1472,7 @@
             {
               "name": "@ round trip",
               "input": "a,,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"@"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"@"}]],
               "output": "a,,b"
             }
           ]
@@ -1490,7 +1490,7 @@
             {
               "name": "< round trip",
               "input": "",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"<"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"<"}]],
               "output": ""
             },
             {
@@ -1502,7 +1502,7 @@
             {
               "name": "> round trip",
               "input": "",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":">"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":">"}]],
               "output": ""
             },
             {
@@ -1514,7 +1514,7 @@
             {
               "name": "@ round trip",
               "input": "",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"@"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"@"}]],
               "output": ""
             }
           ]
@@ -1532,7 +1532,7 @@
             {
               "name": "Round trip",
               "input": "a:b::c",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","::"],"keep":"<"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","::"],"keep":"<"}]],
               "output": "a:b::c"
             }
           ]
@@ -1550,7 +1550,7 @@
             {
               "name": "Round trip",
               "input": "a:b::c",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","::"],"keep":">"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","::"],"keep":">"}]],
               "output": "a:b::c"
             }
           ]
@@ -1568,7 +1568,7 @@
             {
               "name": "Round trip",
               "input": "a:b::c",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","::"],"keep":"@"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","::"],"keep":"@"}]],
               "output": "a:b::c"
             }
           ]
@@ -1576,25 +1576,25 @@
         {
           "name": "Delete an explicit separator element",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"@"},["MOVE",["NODE",1],null]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"@"},["MOVE",["NODE",1],null]]],
           "output": "ab"
         },
         {
           "name": "Replace an explicit separator element",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"@"},["COPY","|",1]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"@"},["COPY","|",1]]],
           "output": "a|b"
         },
         {
           "name": "Append with no injected separator",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"<"},["COPY","c",2]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"<"},["COPY","c",2]]],
           "output": "a,bc"
         },
         {
           "name": "Default is not injected when keep is used",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":">","default":"!"},["COPY","c",2]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":">","default":"!"},["COPY","c",2]]],
           "output": "a,bc"
         }
       ]
@@ -1616,7 +1616,7 @@
             {
               "name": "Round trip",
               "input": "a\\,b,c",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
               "output": "a\\,b,c"
             }
           ]
@@ -1634,7 +1634,7 @@
             {
               "name": "Round trip",
               "input": "a\\\\,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
               "output": "a\\\\,b"
             }
           ]
@@ -1652,7 +1652,7 @@
             {
               "name": "Round trip",
               "input": "a\\,b\\,c,d",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
               "output": "a\\,b\\,c,d"
             }
           ]
@@ -1670,7 +1670,7 @@
             {
               "name": "Round trip",
               "input": "a\\,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
               "output": "a\\,b"
             }
           ]
@@ -1688,7 +1688,7 @@
             {
               "name": "Round trip",
               "input": ",a",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
               "output": ",a"
             }
           ]
@@ -1706,7 +1706,7 @@
             {
               "name": "Round trip",
               "input": "a,",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","element":["REP",0,-1,["ANY",["SEQ","\\",["EXISTS"]],["SEQ",["NONE","\\"],["EXISTS"]]]]}]],
               "output": "a,"
             }
           ]
@@ -1774,7 +1774,7 @@
         {
           "name": "Hidden quotes are restored",
           "input": "\"a,b\",c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","element":["ANY",["SEQ","\"",["REP",0,-1,["SEQ",["NONE","\""],["EXISTS"]]],"\""],["REP",0,-1,["SEQ",["NONE","\""],["EXISTS"]]]],"trim":"\""},["COPY","X",0]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","element":["ANY",["SEQ","\"",["REP",0,-1,["SEQ",["NONE","\""],["EXISTS"]]],"\""],["REP",0,-1,["SEQ",["NONE","\""],["EXISTS"]]]],"trim":"\""},["COPY","X",0]]],
           "output": "\"X\",c"
         },
         {
@@ -1808,13 +1808,13 @@
             {
               "name": "Restore metadata",
               "input": "  a  , b ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "}]],
               "output": "  a  , b "
             },
             {
               "name": "Discard trimming",
               "input": "  a  , b ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" ","discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" ","discard":true}]],
               "output": " a ,b"
             }
           ]
@@ -1832,13 +1832,13 @@
             {
               "name": "Restore metadata",
               "input": " a ,  b ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","ltrim":" "}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","ltrim":" "}]],
               "output": " a ,  b "
             },
             {
               "name": "Discard trimming",
               "input": " a ,  b ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","ltrim":" ","discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","ltrim":" ","discard":true}]],
               "output": "a , b "
             }
           ]
@@ -1856,13 +1856,13 @@
             {
               "name": "Restore metadata",
               "input": " a , b  ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","rtrim":" "}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","rtrim":" "}]],
               "output": " a , b  "
             },
             {
               "name": "Discard trimming",
               "input": " a , b  ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","rtrim":" ","discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","rtrim":" ","discard":true}]],
               "output": " a, b "
             }
           ]
@@ -1880,13 +1880,13 @@
             {
               "name": "Restore metadata",
               "input": "<<a>>,<b>",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","ltrim":"<","rtrim":">"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","ltrim":"<","rtrim":">"}]],
               "output": "<<a>>,<b>"
             },
             {
               "name": "Discard trimming",
               "input": "<<a>>,<b>",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","ltrim":"<","rtrim":">","discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","ltrim":"<","rtrim":">","discard":true}]],
               "output": "<a>,b"
             }
           ]
@@ -1904,13 +1904,13 @@
             {
               "name": "Restore metadata",
               "input": "x a y",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "}]],
               "output": "x a y"
             },
             {
               "name": "Discard trimming",
               "input": "x a y",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" ","discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" ","discard":true}]],
               "output": "x a y"
             }
           ]
@@ -1928,13 +1928,13 @@
             {
               "name": "Restore metadata",
               "input": "aaax",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","ltrim":["ANY","a","aaa"]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","ltrim":["ANY","a","aaa"]}]],
               "output": "aaax"
             },
             {
               "name": "Discard trimming",
               "input": "aaax",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","ltrim":["ANY","a","aaa"],"discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","ltrim":["ANY","a","aaa"],"discard":true}]],
               "output": "x"
             }
           ]
@@ -1952,13 +1952,13 @@
             {
               "name": "Restore metadata",
               "input": "xaaa",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","rtrim":["ANY","a","aaa"]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","rtrim":["ANY","a","aaa"]}]],
               "output": "xaaa"
             },
             {
               "name": "Discard trimming",
               "input": "xaaa",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","rtrim":["ANY","a","aaa"],"discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","rtrim":["ANY","a","aaa"],"discard":true}]],
               "output": "x"
             }
           ]
@@ -1976,13 +1976,13 @@
             {
               "name": "Restore metadata",
               "input": "   a  , b   ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":["REP",0,-1," "]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":["REP",0,-1," "]}]],
               "output": "   a  , b   "
             },
             {
               "name": "Discard trimming",
               "input": "   a  , b   ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":["REP",0,-1," "],"discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":["REP",0,-1," "],"discard":true}]],
               "output": "a,b"
             }
           ]
@@ -2000,13 +2000,13 @@
             {
               "name": "Restore metadata",
               "input": "abc",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","ltrim":"ab","rtrim":"bc"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","ltrim":"ab","rtrim":"bc"}]],
               "output": "abc"
             },
             {
               "name": "Discard trimming",
               "input": "abc",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","ltrim":"ab","rtrim":"bc","discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","ltrim":"ab","rtrim":"bc","discard":true}]],
               "output": "c"
             }
           ]
@@ -2024,13 +2024,13 @@
             {
               "name": "Restore metadata",
               "input": "aaa",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":["REP",1,-1,"a"]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":["REP",1,-1,"a"]}]],
               "output": "aaa"
             },
             {
               "name": "Discard trimming",
               "input": "aaa",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":["REP",1,-1,"a"],"discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":["REP",1,-1,"a"],"discard":true}]],
               "output": ""
             }
           ]
@@ -2048,13 +2048,13 @@
             {
               "name": "Restore metadata",
               "input": " a ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":""}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":""}]],
               "output": " a "
             },
             {
               "name": "Discard trimming",
               "input": " a ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":"","discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":"","discard":true}]],
               "output": " a "
             }
           ]
@@ -2072,13 +2072,13 @@
             {
               "name": "Restore metadata",
               "input": " , , ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "}]],
               "output": " , , "
             },
             {
               "name": "Discard trimming",
               "input": " , , ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" ","discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" ","discard":true}]],
               "output": ",,"
             }
           ]
@@ -2096,13 +2096,13 @@
             {
               "name": "Restore metadata",
               "input": "😀a😀,😀b😀",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":"😀"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":"😀"}]],
               "output": "😀a😀,😀b😀"
             },
             {
               "name": "Discard trimming",
               "input": "😀a😀,😀b😀",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":"😀","discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":"😀","discard":true}]],
               "output": "a,b"
             }
           ]
@@ -2120,13 +2120,13 @@
             {
               "name": "Restore metadata",
               "input": "\u0000a\u0000",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":"\u0000"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":"\u0000"}]],
               "output": "\u0000a\u0000"
             },
             {
               "name": "Discard trimming",
               "input": "\u0000a\u0000",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":"\u0000","discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":"\u0000","discard":true}]],
               "output": "a"
             }
           ]
@@ -2144,13 +2144,13 @@
             {
               "name": "Restore metadata",
               "input": "   ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "}]],
               "output": "   "
             },
             {
               "name": "Discard trimming",
               "input": "   ",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" ","discard":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" ","discard":true}]],
               "output": " "
             }
           ]
@@ -2158,13 +2158,13 @@
         {
           "name": "Edited field retains original trimming",
           "input": " a ,  b ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" "},["COPY","X",1]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" "},["COPY","X",1]]],
           "output": " a , X "
         },
         {
           "name": "Discard only affects trimming, not variable separators",
           "input": " a : b | c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","|"],"default":"/","trim":" ","discard":true}]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","|"],"default":"/","trim":" ","discard":true}]],
           "output": "a:b|c"
         },
         {
@@ -3054,175 +3054,175 @@
       ]
     },
     {
-      "name": "SPLIT action scope and editing",
-      "desc": "Subactions execute in order against the temporary array at the original current-node path. Reassembly uses the final array and the action configuration; side effects in namespaces remain visible according to ordinary action scope rules.",
+      "name": "ATSPLIT action scope and editing",
+      "desc": "The path is resolved once, then subactions execute against the selected node viewed as a temporary array. Reassembly uses the final array and the pre-evaluated action configuration; namespace side effects follow ordinary action scope rules.",
       "tests": [
         {
           "name": "Overwrite one field",
           "input": "a,b,c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY","B",1]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY","B",1]]],
           "output": "a,B,c"
         },
         {
           "name": "Later edit sees earlier assignment",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY","X",0],["COPY",["CONCAT",["NODE",0],"!"],1]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY","X",0],["COPY",["CONCAT",["NODE",0],"!"],1]]],
           "output": "X,X!"
         },
         {
           "name": "Append a field",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY","c",2]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY","c",2]]],
           "output": "a,b,c"
         },
         {
           "name": "Delete the final empty field",
           "input": "a,b,",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["MOVE",["NODE",2],null]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["MOVE",["NODE",2],null]]],
           "output": "a,b"
         },
         {
           "name": "Append a final empty field",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY","",2]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY","",2]]],
           "output": "a,b,"
         },
         {
           "name": "Delete all fields",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["SPLICE",0,null]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["SPLICE",0,null]]],
           "output": ""
         },
         {
           "name": "Replace the temporary array",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",[["x","y"]],["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",[["x","y"]],["NODE"]]]],
           "output": "x,y"
         },
         {
           "name": "Replace with an empty array",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",[[]],["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",[[]],["NODE"]]]],
           "output": ""
         },
         {
           "name": "Default does not override a constant action separator",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","default":"!"},["COPY","c",2]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","default":"!"},["COPY","c",2]]],
           "output": "a,b,c"
         },
         {
           "name": "New plain array uses the regex default",
           "input": "a:b|c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","|"],"default":"/"},["COPY",[["x","y"]],["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","|"],"default":"/"},["COPY",[["x","y"]],["NODE"]]]],
           "output": "x/y"
         },
         {
           "name": "Transferred metadata does not override a constant",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",["SPLIT",{"sep":["ANY",";",":"],"default":";","trim":" "}," x ; y "],["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",["SPLIT",{"sep":["ANY",";",":"],"default":";","trim":" "}," x ; y "],["NODE"]]]],
           "output": " x , y "
         },
         {
           "name": "Transferred variable separators are used",
           "input": "a:b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","|"],"default":"/"},["COPY",["SPLIT",{"sep":["ANY",";",":"],"default":";"},"x;y:z"],["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","|"],"default":"/"},["COPY",["SPLIT",{"sep":["ANY",";",":"],"default":";"},"x;y:z"],["NODE"]]]],
           "output": "x;y:z"
         },
         {
           "name": "Action discard overrides transferred trimming",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","discard":true},["COPY",["SPLIT",{"sep":";","trim":" "}," x ; y "],["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","discard":true},["COPY",["SPLIT",{"sep":";","trim":" "}," x ; y "],["NODE"]]]],
           "output": "x,y"
         },
         {
           "name": "Action keep ignores transferred separators",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","keep":"<"},["COPY",["SPLIT",{"sep":["ANY",";",":"],"default":";","trim":" "}," x ; y "],["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","keep":"<"},["COPY",["SPLIT",{"sep":["ANY",";",":"],"default":";","trim":" "}," x ; y "],["NODE"]]]],
           "output": " x  y "
         },
         {
           "name": "Nested split edits one field",
           "input": "a:b,c:d",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["AT",["NODE",1],["SPLIT",":",["COPY","D",1]]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["AT",["NODE",1],["ATSPLIT",["NODE"],":",["COPY","D",1]]]]],
           "output": "a:b,c:D"
         },
         {
           "name": "Nested path leaves siblings untouched",
           "input": {"text":"a,b","keep":[1]},
-          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE","text"],["SPLIT",",",["COPY","B",1]]]],
+          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE","text"],["ATSPLIT",["NODE"],",",["COPY","B",1]]]],
           "output": {"text":"a,B","keep":[1]}
         },
         {
           "name": "AT relative references see the temporary array",
           "input": {"text":"a,b"},
-          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE","text"],["SPLIT",",",["MATCH",["IS",[["a","b"]]]],["COPY","B",1]]]],
+          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE","text"],["ATSPLIT",["NODE"],",",["MATCH",["IS",[["a","b"]]]],["COPY","B",1]]]],
           "output": {"text":"a,B"}
         },
         {
           "name": "COPY of a direct element carries trimming",
           "input": " A | B ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY","|",":"],"default":"|","trim":" "},["COPY",["NODE",0],2]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY","|",":"],"default":"|","trim":" "},["COPY",["NODE",0],2]]],
           "output": " A | B | A "
         },
         {
           "name": "Derived element gets adjacent trimming",
           "input": " A | B ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY","|",":"],"default":"|","trim":" "},["COPY",["CONCAT",["NODE",0],""],2]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY","|",":"],"default":"|","trim":" "},["COPY",["CONCAT",["NODE",0],""],2]]],
           "output": " A | B | A"
         },
         {
           "name": "Inserted value gets preceding separator",
           "input": "a:b|c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","|"],"default":"/"},["SPLICE",1,0,"x"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","|"],"default":"/"},["SPLICE",1,0,"x"]]],
           "output": "a:x:b|c"
         },
         {
           "name": "Inserted first value gets following separator",
           "input": "a:b|c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","|"],"default":"/"},["SPLICE",0,0,"x"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","|"],"default":"/"},["SPLICE",0,0,"x"]]],
           "output": "x:a:b|c"
         },
         {
           "name": "Appended value inherits the final separator",
           "input": "a:b|c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","|"],"default":"/"},["COPY","d",3]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","|"],"default":"/"},["COPY","d",3]]],
           "output": "a:b|c|d"
         },
         {
           "name": "Overwrite retains destination metadata",
           "input": " a : b | c ",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","|"],"default":"/","trim":" "},["COPY",["NODE",2],0]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","|"],"default":"/","trim":" "},["COPY",["NODE",2],0]]],
           "output": " c : b | c "
         },
         {
           "name": "Delete a middle field with its following separator",
           "input": "a:b|c",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","|"],"default":"/"},["MOVE",["NODE",1],null]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","|"],"default":"/"},["MOVE",["NODE",1],null]]],
           "output": "a:c"
         },
         {
           "name": "Deleting before a trailing empty field preserves its predecessor separator",
           "input": "a:b|",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",":","|"],"default":"/"},["MOVE",["NODE",1],null]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",":","|"],"default":"/"},["MOVE",["NODE",1],null]]],
           "output": "a:"
         },
         {
           "name": "Different split origins use adjacent metadata",
           "input": " a : b ",
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",":","|"],"default":"/","trim":" "}," X | Y "],["STASH","other"]],["SPLIT",{"sep":["ANY",":","|"],"default":"/","trim":" "},["COPY",["STASH","other",0],2]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",":","|"],"default":"/","trim":" "}," X | Y "],["STASH","other"]],["ATSPLIT",["NODE"],{"sep":["ANY",":","|"],"default":"/","trim":" "},["COPY",["STASH","other",0],2]]],
           "output": " a : b : X"
         },
         {
           "name": "Stashed fields remain available after reassembly",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",["NODE",1],["STASH","field"]]],["COPY",["STASH","field"],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",["NODE",1],["STASH","field"]]],["COPY",["STASH","field"],["NODE"]]],
           "output": "b"
         },
         {
           "name": "Numeric action and expression IDs",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},[6,",",[3,"B",1]]],
+          "jgraft": ["JGRAFT",{"v":1},[2,["NODE"],",",[5,"B",1]]],
           "output": "a,B"
         }
       ]
@@ -3300,7 +3300,7 @@
         {
           "name": "Own prototype-like path",
           "input": {"__proto__":"a,b"},
-          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE","__proto__"],["SPLIT",",",["COPY","B",1]]]],
+          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE","__proto__"],["ATSPLIT",["NODE"],",",["COPY","B",1]]]],
           "output": {"__proto__":"a,B"},
           "needProto": true
         },
@@ -3431,7 +3431,7 @@
     },
     {
       "name": "Default evaluation and ignoring",
-      "desc": "When sep is a regex, default is evaluated as a value and must return a string, even when rooted in a match expression. A literal-string sep makes default irrelevant, so ignored values and intentional failures do not change splitting or joining.",
+      "desc": "SPLIT never uses default. JOIN and ATSPLIT evaluate it as a value and require a string for regex separators without keep. Literal-string separators and keep modes make default irrelevant.",
       "tests": [
         {
           "name": "Ignored null",
@@ -3451,7 +3451,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","default":null}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","default":null}]],
               "output": "a,b"
             }
           ]
@@ -3474,7 +3474,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","default":false}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","default":false}]],
               "output": "a,b"
             }
           ]
@@ -3497,7 +3497,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","default":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","default":true}]],
               "output": "a,b"
             }
           ]
@@ -3520,7 +3520,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","default":0}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","default":0}]],
               "output": "a,b"
             }
           ]
@@ -3543,7 +3543,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","default":{}}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","default":{}}]],
               "output": "a,b"
             }
           ]
@@ -3569,7 +3569,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","default":[]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","default":[]}]],
               "output": "a,b",
               "errors": {"INVALID_GRAFT":true}
             }
@@ -3593,7 +3593,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","default":["FAIL"]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","default":["FAIL"]}]],
               "output": "a,b"
             }
           ]
@@ -3605,10 +3605,10 @@
           "output": ["a","b"]
         },
         {
-          "name": "A matching default is a boolean, not a regex",
+          "name": "SPLIT does not evaluate a match-valued default",
           "input": "a,b",
           "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"],"default":["HAS","a,b"]}],["NODE"]]],
-          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+          "output": ["a","b"]
         },
         {
           "name": "A failing match default is still a boolean",
@@ -3632,7 +3632,7 @@
     },
     {
       "name": "Invalid targets and array elements",
-      "desc": "SPLIT requires a string, JOIN requires an array of strings, and the SPLIT action must finish with an array of strings. No target or element coercion is allowed.",
+      "desc": "SPLIT requires a string, JOIN requires an array of strings, and the ATSPLIT action must finish with an array of strings. No target or element coercion is allowed.",
       "tests": [
         {
           "name": "SPLIT target null",
@@ -3653,7 +3653,7 @@
             {
               "name": "Action target",
               "input": null,
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "errors": {"INVALID_TARGET":true}
             }
           ]
@@ -3677,7 +3677,7 @@
             {
               "name": "Action target",
               "input": false,
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "errors": {"INVALID_TARGET":true}
             }
           ]
@@ -3701,7 +3701,7 @@
             {
               "name": "Action target",
               "input": true,
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "errors": {"INVALID_TARGET":true}
             }
           ]
@@ -3725,7 +3725,7 @@
             {
               "name": "Action target",
               "input": 0,
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "errors": {"INVALID_TARGET":true}
             }
           ]
@@ -3749,7 +3749,7 @@
             {
               "name": "Action target",
               "input": 1.5,
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "errors": {"INVALID_TARGET":true}
             }
           ]
@@ -3773,7 +3773,7 @@
             {
               "name": "Action target",
               "input": {},
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "errors": {"INVALID_TARGET":true}
             }
           ]
@@ -3797,7 +3797,7 @@
             {
               "name": "Action target",
               "input": [],
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "errors": {"INVALID_TARGET":true}
             }
           ]
@@ -3821,7 +3821,7 @@
             {
               "name": "Action target",
               "input": ["a"],
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],","]],
               "errors": {"INVALID_TARGET":true}
             }
           ]
@@ -3965,7 +3965,7 @@
             {
               "name": "Action rejects edited element",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",null,0]]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",null,0]]],
               "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
             }
           ]
@@ -3983,7 +3983,7 @@
             {
               "name": "Action rejects edited element",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",false,0]]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",false,0]]],
               "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4001,7 +4001,7 @@
             {
               "name": "Action rejects edited element",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",true,0]]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",true,0]]],
               "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4019,7 +4019,7 @@
             {
               "name": "Action rejects edited element",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",0,0]]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",0,0]]],
               "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4037,7 +4037,7 @@
             {
               "name": "Action rejects edited element",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",1.5,0]]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",1.5,0]]],
               "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4055,7 +4055,7 @@
             {
               "name": "Action rejects edited element",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",{},0]]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",{},0]]],
               "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4073,7 +4073,7 @@
             {
               "name": "Action rejects edited element",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",[[]],0]]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",[[]],0]]],
               "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4091,7 +4091,7 @@
             {
               "name": "Action rejects edited element",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",[["nested"]],0]]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",[["nested"]],0]]],
               "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4099,38 +4099,38 @@
         {
           "name": "Action root null",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",null,["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",null,["NODE"]]]],
           "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         },
         {
           "name": "Action root false",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",false,["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",false,["NODE"]]]],
           "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         },
         {
           "name": "Action root 1",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",1,["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",1,["NODE"]]]],
           "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         },
         {
           "name": "Action root {}",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",{},["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",{},["NODE"]]]],
           "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         },
         {
           "name": "Action root \"replacement\"",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY","replacement",["NODE"]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY","replacement",["NODE"]]]],
           "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         }
       ]
     },
     {
       "name": "Specification validation",
-      "desc": "Unknown options and illegal literal property values are INVALID_OPERAND, with static INVALID_GRAFT allowed for intrinsically invalid configurations. trim cannot be combined with ltrim or rtrim. Regex separators without keep require default.",
+      "desc": "Unknown options and illegal literal property values are INVALID_OPERAND, with static INVALID_GRAFT allowed for intrinsically invalid configurations. trim cannot be combined with ltrim or rtrim. JOIN and ATSPLIT require default for regex separators without keep; SPLIT does not.",
       "tests": [
         {
           "name": "Unknown option",
@@ -4151,7 +4151,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","unknown":true}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","unknown":true}]],
               "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4175,7 +4175,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","constructor":"x"}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","constructor":"x"}]],
               "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4199,7 +4199,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" ","ltrim":" "}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" ","ltrim":" "}]],
               "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4223,7 +4223,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":",","trim":" ","rtrim":" "}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":",","trim":" ","rtrim":" "}]],
               "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4247,7 +4247,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{}]],
               "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4260,7 +4260,7 @@
               "name": "SPLIT",
               "input": "a,b",
               "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"]}],["NODE"]]],
-              "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+              "output": ["a","b"]
             },
             {
               "name": "JOIN",
@@ -4271,7 +4271,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["ANY",",",";"]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["ANY",",",";"]}]],
               "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4284,7 +4284,7 @@
               "name": "SPLIT",
               "input": "a,b",
               "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["SEQ",","]}],["NODE"]]],
-              "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+              "output": ["a","b"]
             },
             {
               "name": "JOIN",
@@ -4295,7 +4295,7 @@
             {
               "name": "Action",
               "input": "a,b",
-              "jgraft": ["JGRAFT",{"v":1},["SPLIT",{"sep":["SEQ",","]}]],
+              "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["SEQ",","]}]],
               "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
             }
           ]
@@ -4307,10 +4307,10 @@
           "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
         },
         {
-          "name": "Invalid default null",
+          "name": "SPLIT ignores default null",
           "input": "a,b",
           "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"],"default":null}],["NODE"]]],
-          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+          "output": ["a","b"]
         },
         {
           "name": "Invalid trim null",
@@ -4337,10 +4337,10 @@
           "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
         },
         {
-          "name": "Invalid default false",
+          "name": "SPLIT ignores default false",
           "input": "a,b",
           "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"],"default":false}],["NODE"]]],
-          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+          "output": ["a","b"]
         },
         {
           "name": "Invalid trim false",
@@ -4367,10 +4367,10 @@
           "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
         },
         {
-          "name": "Invalid default true",
+          "name": "SPLIT ignores default true",
           "input": "a,b",
           "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"],"default":true}],["NODE"]]],
-          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+          "output": ["a","b"]
         },
         {
           "name": "Invalid trim true",
@@ -4397,10 +4397,10 @@
           "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
         },
         {
-          "name": "Invalid default 0",
+          "name": "SPLIT ignores default 0",
           "input": "a,b",
           "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"],"default":0}],["NODE"]]],
-          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+          "output": ["a","b"]
         },
         {
           "name": "Invalid trim 0",
@@ -4427,10 +4427,10 @@
           "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
         },
         {
-          "name": "Invalid default 1.5",
+          "name": "SPLIT ignores default 1.5",
           "input": "a,b",
           "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"],"default":1.5}],["NODE"]]],
-          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+          "output": ["a","b"]
         },
         {
           "name": "Invalid trim 1.5",
@@ -4457,10 +4457,10 @@
           "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
         },
         {
-          "name": "Invalid default {}",
+          "name": "SPLIT ignores default {}",
           "input": "a,b",
           "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"],"default":{}}],["NODE"]]],
-          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+          "output": ["a","b"]
         },
         {
           "name": "Invalid trim {}",
@@ -4682,25 +4682,25 @@
         {
           "name": "Subaction failure propagates",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY",["FAIL"],0]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",["FAIL"],0]]],
           "errors": {"INVALID_TARGET":true}
         },
         {
           "name": "Nested MATCH failure propagates",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["MATCH",["IS",[["other"]]]]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["MATCH",["IS",[["other"]]]]]],
           "errors": {"NO_MATCH":true,"INVALID_GRAFT":true}
         },
         {
           "name": "An earlier edit is not applied to the input on failure",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["COPY","X",0],["COPY",["FAIL"],1]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY","X",0],["COPY",["FAIL"],1]]],
           "errors": {"INVALID_TARGET":true}
         },
         {
           "name": "Subaction syntax is not a false probe",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT",",",["UNKNOWN"]]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["UNKNOWN"]]],
           "errors": {"INVALID_GRAFT":true}
         },
         {
@@ -4730,7 +4730,7 @@
         {
           "name": "Action needs a specification",
           "input": "a,b",
-          "jgraft": ["JGRAFT",{"v":1},["SPLIT"]],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"]]],
           "errors": {"INVALID_GRAFT":true}
         },
         {
@@ -4757,6 +4757,156 @@
           "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",true,["SPLIT",{"sep":["UNKNOWN"],"default":","}]],["NODE"]]],
           "output": true,
           "errors": {"INVALID_GRAFT":true}
+        }
+      ]
+    },
+    {
+      "name": "Explicit ATSPLIT paths and validation",
+      "desc": "ATSPLIT navigates as AT, evaluates its configuration in the selected node scope, runs subactions on the split array, and rejoins at the original resolved path without re-evaluating path or configuration. Wrong namespaces are operand errors; nonexistent nodes are target errors.",
+      "tests": [
+        {
+          "name": "Nested property and restored outer node",
+          "input": {"text":"a,b"},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT","text",",",["COPY","B",1]],["COPY",true,"done"]],
+          "output": {"text":"a,B","done":true}
+        },
+        {
+          "name": "Array element path",
+          "input": ["a,b","c,d"],
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",-1,",",["COPY","D",1]]],
+          "output": ["a,b","c,D"]
+        },
+        {
+          "name": "Computed path is resolved only once",
+          "input": {"left":"a,b","right":"c,d"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","left",["STASH","key"]],["ATSPLIT",["NODE",["STASH","key"]],",",["COPY","right",["STASH","key"]],["COPY","B",1]]],
+          "output": {"left":"a,B","right":"c,d"}
+        },
+        {
+          "name": "Specification sees the selected string",
+          "input": {"text":"a,b","sep":";"},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT","text",{"sep":["SLICE",["NODE"],1,1]},["COPY","B",1]]],
+          "output": {"text":"a,B","sep":";"}
+        },
+        {
+          "name": "Default is evaluated before subactions change the node",
+          "input": {"text":"a,b"},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT","text",{"sep":["ANY",",",";"],"default":["SLICE",["NODE"],1,1]},["COPY",[["x","y"]],["NODE"]]]],
+          "output": {"text":"x,y"}
+        },
+        {
+          "name": "Trim expression is evaluated before subactions",
+          "input": {"text":" a , b "},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT","text",{"sep":",","trim":["SLICE",["NODE"],0,1]},["COPY","B",1]]],
+          "output": {"text":" a , B "}
+        },
+        {
+          "name": "No subactions round trips a property",
+          "input": {"text":"a,b"},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT","text",","]],
+          "output": {"text":"a,b"}
+        },
+        {
+          "name": "Missing path",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT","text",","]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Selected node must be a string",
+          "input": {"text":[]},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT","text",","]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Path is required",
+          "input": "a,b",
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT"]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Specification is required after path",
+          "input": "a,b",
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Old action name is not an alias",
+          "input": "a,b",
+          "jgraft": ["JGRAFT",{"v":1},["SPLIT",","]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Specification validation precedes source type",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","keep":"bad"}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "JOIN specification validation precedes source type",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",{"sep":",","keep":"bad"}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Reject STASH path",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["STASH"],","]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Reject TEMP path",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["TEMP"],","]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Reject CONST path",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["CONST"],","]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Reject CAP path",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["CAP"],","]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        }
+      ]
+    },
+    {
+      "name": "SPLIT does not require a joining default",
+      "desc": "Splitting preserves actual regex separators in metadata without needing a fallback separator. A default is relevant only when joining, including the joining phase of ATSPLIT.",
+      "tests": [
+        {
+          "name": "SPLIT ignores omitted default",
+          "input": "a,b;c",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"]}],["NODE"]]],
+          "output": ["a","b","c"]
+        },
+        {
+          "name": "SPLIT ignores intentional failure default",
+          "input": "a,b;c",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"],"default":["FAIL"]}],["NODE"]]],
+          "output": ["a","b","c"]
+        },
+        {
+          "name": "SPLIT ignores missing reference default",
+          "input": "a,b;c",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"],"default":["NODE","missing"]}],["NODE"]]],
+          "output": ["a","b","c"]
+        },
+        {
+          "name": "SPLIT ignores wrong type default",
+          "input": "a,b;c",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["ANY",",",";"],"default":false}],["NODE"]]],
+          "output": ["a","b","c"]
+        },
+        {
+          "name": "Common reference to a regex needs no splitting default",
+          "input": "a,b;c",
+          "jgraft": ["JGRAFT",{"v":1,"expr":["sep",["ANY",",",";"]]},["COPY",["SPLIT",["EXPR","sep"]],["NODE"]]],
+          "output": ["a","b","c"]
         }
       ]
     }

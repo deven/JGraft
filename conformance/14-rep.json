@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "REP",
-  "desc": "Integer bounds and aliases, all legal repetition counts and successor endpoints, finite and unbounded repetitions, zero-width and variable-width bodies, nested contexts, arrays and Unicode regexes, operand scope and evaluation, sequence-only restrictions, capture suppression and fresh function match states. Resource-counter details and optional fuzzy matching are outside these portable fixtures.",
+  "desc": "All four REP forms, omitted-bound defaults and implicit EXISTS bodies, integer bounds and aliases, all legal repetition counts and successor endpoints, finite and unbounded repetitions, zero-width and variable-width bodies, nested contexts, arrays and Unicode regexes, operand scope and evaluation, sequence-only restrictions, capture suppression and fresh function match states. Resource-counter details and optional fuzzy matching are outside these portable fixtures.",
   "tests": [
     {
       "name": "Array count table",
@@ -1659,22 +1659,22 @@
       "desc": "SEQ may initiate sequence context only at the root of an array specification. Descending structurally starts ordinary element matching, while EXPR expansion preserves the declared expression classification. Runtime INVALID_TARGET and INVALID_OPERAND faults are failed match probes. Static INVALID_GRAFT is permitted where specified, including unreachable syntax faults; intentional FAIL is not upgraded.",
       "tests": [
         {
-          "name": "Invalid REP arity 0",
+          "name": "No arguments defaults to zero or more",
           "input": [],
           "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["SEQ",["REP"]]]]]],
-          "errors": {"INVALID_GRAFT":true}
+          "output": []
         },
         {
-          "name": "Invalid REP arity 1",
+          "name": "Minimum alone defaults to no upper bound",
           "input": [],
           "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["SEQ",["REP",0]]]]]],
-          "errors": {"INVALID_GRAFT":true}
+          "output": []
         },
         {
-          "name": "Invalid REP arity 2",
+          "name": "Bounds alone default to EXISTS",
           "input": [],
           "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["SEQ",["REP",0,1]]]]]],
-          "errors": {"INVALID_GRAFT":true}
+          "output": []
         },
         {
           "name": "Invalid REP arity 4",
@@ -1930,6 +1930,373 @@
           "input": [1,1,1],
           "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2,0,["IS",["SEQ",1,1]]],1]]]]]],
           "output": [1,1,1]
+        }
+      ]
+    },
+    {
+      "name": "Shorthand defaults",
+      "desc": "Omitted min defaults to zero, omitted max to -1, and omitted body to EXISTS. Tests assert exact whole-array or anchored-string consumption, all continuation endpoints, scope, capture ranking, and ordinary sequence-only restrictions.",
+      "tests": [
+        {
+          "name": "All",
+          "tests": [
+            {
+              "name": "Length 0",
+              "input": [],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP"]]]]]]],
+              "output": []
+            },
+            {
+              "name": "Length 1",
+              "input": [null],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP"]]]]]]],
+              "output": [null]
+            },
+            {
+              "name": "Length 2",
+              "input": [null,false],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP"]]]]]]],
+              "output": [null,false]
+            },
+            {
+              "name": "Length 3",
+              "input": [null,false,0],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP"]]]]]]],
+              "output": [null,false,0]
+            },
+            {
+              "name": "Length 4",
+              "input": [null,false,0,"x"],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP"]]]]]]],
+              "output": [null,false,0,"x"]
+            },
+            {
+              "name": "Length 5",
+              "input": [null,false,0,"x",{}],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP"]]]]]]],
+              "output": [null,false,0,"x",{}]
+            }
+          ]
+        },
+        {
+          "name": "At least two",
+          "tests": [
+            {
+              "name": "Length 0",
+              "input": [],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2]]]]]]],
+              "errors": {"NO_MATCH":true}
+            },
+            {
+              "name": "Length 1",
+              "input": [null],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2]]]]]]],
+              "errors": {"NO_MATCH":true}
+            },
+            {
+              "name": "Length 2",
+              "input": [null,false],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2]]]]]]],
+              "output": [null,false]
+            },
+            {
+              "name": "Length 3",
+              "input": [null,false,0],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2]]]]]]],
+              "output": [null,false,0]
+            },
+            {
+              "name": "Length 4",
+              "input": [null,false,0,"x"],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2]]]]]]],
+              "output": [null,false,0,"x"]
+            },
+            {
+              "name": "Length 5",
+              "input": [null,false,0,"x",{}],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2]]]]]]],
+              "output": [null,false,0,"x",{}]
+            }
+          ]
+        },
+        {
+          "name": "Between one and three",
+          "tests": [
+            {
+              "name": "Length 0",
+              "input": [],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",1,3]]]]]]],
+              "errors": {"NO_MATCH":true}
+            },
+            {
+              "name": "Length 1",
+              "input": [null],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",1,3]]]]]]],
+              "output": [null]
+            },
+            {
+              "name": "Length 2",
+              "input": [null,false],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",1,3]]]]]]],
+              "output": [null,false]
+            },
+            {
+              "name": "Length 3",
+              "input": [null,false,0],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",1,3]]]]]]],
+              "output": [null,false,0]
+            },
+            {
+              "name": "Length 4",
+              "input": [null,false,0,"x"],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",1,3]]]]]]],
+              "errors": {"NO_MATCH":true}
+            },
+            {
+              "name": "Length 5",
+              "input": [null,false,0,"x",{}],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",1,3]]]]]]],
+              "errors": {"NO_MATCH":true}
+            }
+          ]
+        },
+        {
+          "name": "Exactly two",
+          "tests": [
+            {
+              "name": "Length 0",
+              "input": [],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2,0]]]]]]],
+              "errors": {"NO_MATCH":true}
+            },
+            {
+              "name": "Length 1",
+              "input": [null],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2,0]]]]]]],
+              "errors": {"NO_MATCH":true}
+            },
+            {
+              "name": "Length 2",
+              "input": [null,false],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2,0]]]]]]],
+              "output": [null,false]
+            },
+            {
+              "name": "Length 3",
+              "input": [null,false,0],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2,0]]]]]]],
+              "errors": {"NO_MATCH":true}
+            },
+            {
+              "name": "Length 4",
+              "input": [null,false,0,"x"],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2,0]]]]]]],
+              "errors": {"NO_MATCH":true}
+            },
+            {
+              "name": "Length 5",
+              "input": [null,false,0,"x",{}],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2,0]]]]]]],
+              "errors": {"NO_MATCH":true}
+            }
+          ]
+        },
+        {
+          "name": "Zero or one",
+          "tests": [
+            {
+              "name": "Length 0",
+              "input": [],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",0,1]]]]]]],
+              "output": []
+            },
+            {
+              "name": "Length 1",
+              "input": [null],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",0,1]]]]]]],
+              "output": [null]
+            },
+            {
+              "name": "Length 2",
+              "input": [null,false],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",0,1]]]]]]],
+              "errors": {"NO_MATCH":true}
+            },
+            {
+              "name": "Length 3",
+              "input": [null,false,0],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",0,1]]]]]]],
+              "errors": {"NO_MATCH":true}
+            },
+            {
+              "name": "Length 4",
+              "input": [null,false,0,"x"],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",0,1]]]]]]],
+              "errors": {"NO_MATCH":true}
+            },
+            {
+              "name": "Length 5",
+              "input": [null,false,0,"x",{}],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",0,1]]]]]]],
+              "errors": {"NO_MATCH":true}
+            }
+          ]
+        },
+        {
+          "name": "Default body consumes heterogeneous elements",
+          "input": ["REP",null,false,{},[],["EXISTS"]],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP"]]]]]]],
+          "output": ["REP",null,false,{},[],["EXISTS"]]
+        },
+        {
+          "name": "Continuation sees shorter endpoints",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP"],3]]]]]],
+          "output": [1,2,3]
+        },
+        {
+          "name": "Nonzero starting position",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[1,["SEQ",["REP",2,0]]]]]]],
+          "output": [1,2,3]
+        },
+        {
+          "name": "Reference minimum sees the starting element",
+          "input": [{"n":2},null],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",["NODE","n"]]]]]]]],
+          "output": [{"n":2},null]
+        },
+        {
+          "name": "Computed maximum",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",1,["ADD",1,1]]]]]]]],
+          "output": [1,2]
+        },
+        {
+          "name": "Common expression retains sequence legality",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1,"expr":["rest",["REP"]]},["MATCH",["IS",[[["SEQ",["EXPR","rest"]]]]]]],
+          "output": [1,2]
+        },
+        {
+          "name": "No bounds outside sequence",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["REP"]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "No bounds regex length 0",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["STR",["SEQ",["START"],["REP"],["END"]]]]],
+          "output": ""
+        },
+        {
+          "name": "No bounds regex length 1",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["STR",["SEQ",["START"],["REP"],["END"]]]]],
+          "output": "a"
+        },
+        {
+          "name": "No bounds regex length 3",
+          "input": "a\n😀",
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["STR",["SEQ",["START"],["REP"],["END"]]]]],
+          "output": "a\n😀"
+        },
+        {
+          "name": "Only minimum outside sequence",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["REP",1]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Only minimum regex length 0",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["STR",["SEQ",["START"],["REP",1],["END"]]]]],
+          "errors": {"NO_MATCH":true}
+        },
+        {
+          "name": "Only minimum regex length 1",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["STR",["SEQ",["START"],["REP",1],["END"]]]]],
+          "output": "a"
+        },
+        {
+          "name": "Only minimum regex length 3",
+          "input": "a\n😀",
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["STR",["SEQ",["START"],["REP",1],["END"]]]]],
+          "output": "a\n😀"
+        },
+        {
+          "name": "Both bounds outside sequence",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["REP",1,2]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Both bounds regex length 0",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["STR",["SEQ",["START"],["REP",1,2],["END"]]]]],
+          "errors": {"NO_MATCH":true}
+        },
+        {
+          "name": "Both bounds regex length 1",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["STR",["SEQ",["START"],["REP",1,2],["END"]]]]],
+          "output": "a"
+        },
+        {
+          "name": "Both bounds regex length 3",
+          "input": "a\n😀",
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["STR",["SEQ",["START"],["REP",1,2],["END"]]]]],
+          "errors": {"NO_MATCH":true}
+        },
+        {
+          "name": "Invalid shorthand minimum -1",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",-1]]]]]]],
+          "errors": {"NO_MATCH":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Invalid shorthand minimum 0.5",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",0.5]]]]]]],
+          "errors": {"NO_MATCH":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Invalid shorthand minimum \"1\"",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP","1"]]]]]]],
+          "errors": {"NO_MATCH":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Invalid shorthand minimum null",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",null]]]]]]],
+          "errors": {"NO_MATCH":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Invalid shorthand minimum true",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",true]]]]]]],
+          "errors": {"NO_MATCH":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Invalid shorthand minimum {}",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",{}]]]]]]],
+          "errors": {"NO_MATCH":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Intentional failing minimum is a failed probe",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",["REP",["FAIL"]]]]]],["NODE"]]],
+          "output": false
+        },
+        {
+          "name": "Minimum capture chooses the shortest continuation",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQMIN","first",["REP"]],["SEQMAX","rest",["REP"]]]]],["COPY",["CAP"],["NODE"]]]],
+          "output": {"first":{"path":[],"ofs":0,"len":0,"lim":0},"rest":{"path":[],"ofs":0,"len":3,"lim":3}}
         }
       ]
     }
