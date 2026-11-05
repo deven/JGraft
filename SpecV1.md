@@ -2653,6 +2653,115 @@ when not configured to allow them must fail with `INVALID_TARGET`.
 Note that this is not the same as the C language `%` operator, which returns
 a remainder.
 
+#### <span id="ex-round">ROUND</span>
+
+    [ROUND]
+    [ROUND, options]
+    [ROUND, options, value_expr]
+
+Round to a decimal position, defined for both numbers and strings.
+
+This operates on the current node unless a second argument (value context) is
+provided.  The input must be a number or string.  The options (value context)
+may be an integer providing the `at` parameter, or an object with any of the
+following properties: `mode`, `at`, `shift`, `as`.  Invalid options are
+classified as `INVALID_OPERAND`.
+
+This expression is defined in terms of decimal digits, allowing it to operate
+on strings as well as numbers.  Numeric inputs are first converted to decimal
+representations according to CASTSTR, and rounding is defined in terms of those
+decimal digits.  (implementations are free to use any algorithm that produces
+equivalent results)  In many cases, floating point error cannot be avoided, and
+graft authors should attempt to process numbers in an integer or string form to
+work around the problem.
+
+Rounding is performed according to one of the following modes, which may be
+specified by ID or name:
+
+ID | Name      | Meaning
+---|-----------|---------------------------------
+ 0 | DOWN      | round toward zero (truncate)
+ 1 | HALF_UP   | round nearest, exact .5 away from zero (financial)
+ 2 | HALF_EVEN | round nearest, exact .5 toward even (scientific)
+ 3 | CEILING   | round toward positive
+ 4 | FLOOR     | round toward negative
+ 5 | UP        | round away from zero
+
+The default mode is `1`, for standard math and accounting rounding.
+
+The `at` and `shift` options must be integers, but default to zero if not
+specified.  Rounding is applied at the `at`-th digit below the decimal point as
+if multiplying by `10**at`, rounding to an integer, then dividing by that
+same multiplier.  `at` may be negative to round within the whole portion
+of the number.  The parameter `shift` works in a similar manner, but actually
+does pre-multiply the number by `10**shift`.  The overall effect can described
+as
+
+    round_to_int(number * 10**shift * 10**at) * 10**(-at)
+
+but all changes to the decimal point should be done logically according to
+base-10 instead of using base-2 floating point math.  If the number was
+described in scientific notation, the exponent should be processed directly.
+
+The `as` option determines the output format, and may be specified by ID or by
+name:
+
+ID | Name | Behavior
+---|------|-----------------------------------------------------------------
+ 0 | NUM  | Return a number in any available number format
+ 1 | INT  | Return a number specifically as an integer (lossless)
+ 2 | STR  | Return a string of pure decimal digits (and sign)
+ 3 | SIG  | Return a string preserving significant digits
+
+When the input is a string, `as` defaults to "STR".  When applied to numbers,
+`as` defaults to "NUM".  Negative zero is preserved as negative zero if that
+information is available and can be preserved in the desired format.  (host
+JSON decoders often discard it, but it will be known if the input was a string)
+With `"NUM"`, casting to a number is permitted to lose precsion.
+When `as == "INT"` the implementation must store the value in a container
+without loss of precision, failing with `INVALID_TARGET` if the number is not
+an integer and `UNSUPPORTED_GRAFT` if the integer is too large to store without
+loss.
+
+When `as == "STR"`, the implementation must write the full decimal
+representation without scientific notation.  If `at` is positive, exactly `at`
+digits must follow the decimal point, including trailing zeroes as necessary.
+Otherwise, the result must have no decimal point.
+This may run into resource limits if the exponent is particularly large.
+Under `"SIG"`, the result should have as many significant digits as existed in
+the input minus any that were lost to rounding.  Significant digits in the
+input are determined by the usual convention where leading zeroes do not count,
+and trailing zeroes do not count unless a decimal point is present.  (though
+the number may not end with a decimal point since that is not a valid per JSON)
+In other words, the precision of the result is the lesser of the input's
+significant decimal position (adjusted by shift) and the rounding position `at`.
+For numeric zero inputs, the precision is the last explicitly represented digit,
+including fractional zeroes.  `"SIG"` must preserve this precision in its
+textual representation, including trailing zeros when necessary.  When rounding
+produces zero, `"SIG"` must preserve the decimal decimal precision using
+fractional zeroes or scientific notation.
+
+By example:
+
+   [ROUND, { as: "SIG" }, "9.9"]
+       -> "1.0e1"
+   [ROUND, { as: "SIG" }, "9.900"]
+       -> "1.0e1"
+   [ROUND, { at: 2, as: "SIG" }, "9.500"]
+       -> "9.50"
+   [ROUND, { at: -2, as: "SIG" }, "1234"]
+       -> "1.2e3"
+   [ROUND, { at: -10, as: "SIG" }, "1.25e20"]
+       -> "1.25e20"
+   [ROUND, { at: -9, as: "SIG" }, "1.25e10"]
+       -> "1.3e10"
+
+Implementations must not fail with `UNSUPPORTED_GRAFT` due to the logical size
+of the number unless the output format requires a number and, after scaling,
+would exceed limits of the available format.  Implementations may also fail
+with `UNSUPPORTED_GRAFT` if the addition/subtraction on the exponent number
+itself would exceed the limits of an integer.
+
 ## Implementation Hints
 
 This specification tries not to dictate too many details of an implementation,
