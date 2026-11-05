@@ -80,10 +80,11 @@
           "output": "__proto__constructortoString"
         },
         {
-          "name": "Lone surrogate operands 1",
+          "name": "Complementary surrogate operands follow host character semantics",
+          "desc": "Concatenation may form U+1F642 or retain the exact U+D83D, U+DE42 sequence. The anchored pattern accepts both host representations, but no replacement characters, extra characters, or reordered halves.",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT","\ud83d","\ude42"],["NODE"]]],
-          "output": "🙂",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["CONCAT","\ud83d","\ude42"],["STR",["SEQ",["START"],["ANY",["SEQ",128578],["SEQ",55357,56898]],["END"]]]],["NODE"]]],
+          "output": true,
           "needLoneSurrogate": true
         },
         {
@@ -108,10 +109,11 @@
           "needLoneSurrogate": true
         },
         {
-          "name": "Codepoint length after a pair forms",
+          "name": "Codepoint length after complementary surrogate concatenation",
+          "desc": "Both a combined supplementary character and two preserved surrogate codepoints are permitted by the host-dependent string model.",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH",["CONCAT","\ud83d","\ude42"]],["NODE"]]],
-          "output": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["LENGTH",["CONCAT","\ud83d","\ude42"]],["ANY",1,2]],["NODE"]]],
+          "output": true,
           "needLoneSurrogate": true
         },
         {

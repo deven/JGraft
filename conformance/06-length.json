@@ -475,10 +475,11 @@
           "output": [1,2,null]
         },
         {
-          "name": "Concatenating lone surrogates can form one character",
+          "name": "Concatenating lone surrogates follows host character semantics",
+          "desc": "The original lone surrogate counts as one character. Concatenating a complementary half may form one supplementary character or preserve two surrogate codepoints, according to the host's string model.",
           "input": "\ud800",
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH"],["STASH","before"]],["COPY",["CONCAT",["NODE"],"\udc00"],["NODE"]],["COPY",{"before":["STASH","before"],"after":["LENGTH"]},["NODE"]]],
-          "output": {"before":1,"after":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH"],["STASH","before"]],["COPY",["CONCAT",["NODE"],"\udc00"],["NODE"]],["COPY",{"before":["STASH","before"],"afterSupported":["IS",["LENGTH"],["ANY",1,2]]},["NODE"]]],
+          "output": {"before":1,"afterSupported":true},
           "needLoneSurrogate": true
         }
       ]

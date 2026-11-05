@@ -1743,10 +1743,11 @@
           "errors": {"INVALID_GRAFT":true}
         },
         {
-          "name": "Explicit array operand needs an offset",
+          "name": "Runtime configuration must be an object",
+          "desc": "The one-argument form accepts an expression returning a configuration object. An input-dependent array result is INVALID_OPERAND, rather than an intrinsic arity error.",
           "input": [0],
           "jgraft": ["JGRAFT",{"v":1},["COPY",["SLICE",["NODE"]],["NODE"]]],
-          "errors": {"INVALID_GRAFT":true}
+          "errors": {"INVALID_OPERAND":true}
         },
         {
           "name": "Explicit string operand needs an offset",
