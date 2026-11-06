@@ -2453,7 +2453,8 @@ Cast a value to a number.
 
 Numeric values always pass through.  Any string which parses as a valid number
 according to JSON syntax also becomes a number, but non-numeric characters like
-whitespace are not permitted.
+whitespace are not permitted.  In addition to JSON syntax, leading '+' and
+trailing '.' are permitted.
 Extensions to the data model permitted by the implementation may also support
 numification, as decided by the implementation.
 Numbers outside the range supported by an implementation generate
@@ -2662,18 +2663,19 @@ a remainder.
 Round to a decimal position, defined for both numbers and strings.
 
 This operates on the current node unless a second argument (value context) is
-provided.  The input must be a number or string.  The options (value context)
-may be an integer providing the `at` parameter, or an object with any of the
-following properties: `mode`, `at`, `shift`, `as`.  Invalid options are
-classified as `INVALID_OPERAND`.
+provided.  The input must be a number or string, with other types triggering
+`INVALID_TARGET`.  The options (value context) may be an integer providing the
+`shift` parameter, or an object with any of the following properties: `mode`,
+`at`, `shift`, `as`.  Invalid options are classified as `INVALID_OPERAND`.
 
 This expression is defined in terms of decimal digits, allowing it to operate
-on strings as well as numbers.  Numeric inputs are first converted to decimal
-representations according to CASTSTR, and rounding is defined in terms of those
-decimal digits.  (implementations are free to use any algorithm that produces
-equivalent results)  In many cases, floating point error cannot be avoided, and
-graft authors should attempt to process numbers in an integer or string form to
-work around the problem.
+on strings as well as numbers.  String inputs must pass validation according to
+CASTNUM.  Numeric inputs are first converted to decimal representations
+according to CASTSTR, and rounding is defined in terms of those decimal digits.
+(implementations are free to use any algorithm that produces equivalent
+results)    In many cases, floating point error cannot be avoided, and graft
+authors should attempt to process numbers in an integer or string form to work
+around the problem.
 
 Rounding is performed according to one of the following modes, which may be
 specified by ID or name:
@@ -2714,32 +2716,33 @@ ID | Name | Behavior
  3 | SIG  | Return a string preserving significant digits
 
 When the input is a string, `as` defaults to "STR".  When applied to numbers,
-`as` defaults to "NUM".  Negative zero is preserved as negative zero if that
-information is available and can be preserved in the desired format.  (host
-JSON decoders often discard it, but it will be known if the input was a string)
-With `"NUM"`, casting to a number is permitted to lose precsion.
-When `as == "INT"` the implementation must store the value in a container
+`as` defaults to "NUM".  Negative zero is preserved if that information is
+available and can be preserved in the desired format.  (host JSON decoders
+often discard it, but it will be known if the input was a string)
+When returned as `"NUM"`, casting to a number is permitted to lose precsion.
+When returned as `"INT"` the implementation must store the value in a container
 without loss of precision, failing with `INVALID_TARGET` if the number is not
 an integer and `UNSUPPORTED_GRAFT` if the integer is too large to store without
 loss.
 
-When `as == "STR"`, the implementation must write the full decimal
+When returned as `"STR"`, the implementation must write the full decimal
 representation without scientific notation.  If `at` is positive, exactly `at`
 digits must follow the decimal point, including trailing zeroes as necessary.
 Otherwise, the result must have no decimal point.
 This may run into resource limits if the exponent is particularly large.
-Under `"SIG"`, the result should have as many significant digits as existed in
-the input minus any that were lost to rounding.  Significant digits in the
-input are determined by the usual convention where leading zeroes do not count,
-and trailing zeroes do not count unless a decimal point is present.  (though
-the number may not end with a decimal point since that is not a valid per JSON)
-In other words, the precision of the result is the lesser of the input's
-significant decimal position (adjusted by shift) and the rounding position `at`.
-For numeric zero inputs, the precision is the last explicitly represented digit,
-including fractional zeroes.  `"SIG"` must preserve this precision in its
-textual representation, including trailing zeros when necessary.  When rounding
-produces zero, `"SIG"` must preserve the decimal decimal precision using
-fractional zeroes or scientific notation.
+
+When returned as `"SIG"`, the result preserves the decimal precision of the
+input, possibly truncated at the digits being rounded.  Precision of the input
+is determined in the usual manner where trailing zeroes do not count unless
+they follow a decimal point.  However, for this function the number may not end
+with a decimal point since that is not a valid JSON syntax; scientific notation
+is required for representing a precision coarser than the tenths digit when the
+digits end with zero.  More precisely, the precision of the result is the
+lesser of the input's significant decimal position (adjusted by shift) and the
+rounding position `at`.  When the trailing digits of precision are zero,
+including when rounding produces a value of zero, the decimal precision must
+still be represented.  Scientific notation outputs should have exactly one
+digit before a decimal point.
 
 By example:
 
@@ -2755,12 +2758,22 @@ By example:
        -> "1.25e20"
    [ROUND, { at: -9, as: "SIG" }, "1.25e10"]
        -> "1.3e10"
+   [ROUND, { at: 2, as: "SIG" }, "0.0000" ]
+       -> "0.00"
+   [ROUND, { at: -1, as: "SIG" }, "0" ]
+       -> "0e1"
 
 Implementations must not fail with `UNSUPPORTED_GRAFT` due to the logical size
-of the number unless the output format requires a number and, after scaling,
-would exceed limits of the available format.  Implementations may also fail
-with `UNSUPPORTED_GRAFT` if the addition/subtraction on the exponent number
-itself would exceed the limits of an integer.
+of the number unless the output format requires a number and the final computed
+value would exceed limits of the available storage type.  Implementations may
+also fail with `UNSUPPORTED_GRAFT` if the addition/subtraction on the exponent
+number itself would exceed the limits of an integer.
+
+Note that the plain-integer form of the options argument is used as the `shift`
+parameter to enable easy tests against floating-point numbers:
+
+  // foo == 1.234, without relying on floating point equality
+  { foo: [IS, [ROUND,6], 1234000] }
 
 ## Implementation Hints
 
