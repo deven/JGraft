@@ -1,0 +1,2876 @@
+{
+  "version": 1,
+  "name": "ROUND",
+  "desc": "Covers decimal rounding of numbers and strings: current-node and explicit operands, all six modes by name and ID, at and shift, NUM/INT/STR/SIG output, decimal carries, signed zero in strings, significant precision, scientific notation and large logical magnitudes, value-context options, namespaces, match error trapping, guarded evaluation, and invalid syntax and operands. Numeric expectations use small integers or exact binary fractions. Host-specific numeric storage limits, nonfinite extensions, and numeric negative-zero preservation are not prescribed.",
+  "tests": [
+    {
+      "name": "Defaults and operand forms",
+      "desc": "The first operand is always options, including the integer shorthand for shift. Omitted input means the current node; explicit input does not inspect the type of that node. Numbers default to NUM and strings default to STR.",
+      "tests": [
+        {
+          "name": "Integer",
+          "input": 12,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": 12
+        },
+        {
+          "name": "Zero",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": 0
+        },
+        {
+          "name": "Positive below half",
+          "input": 2.25,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": 2
+        },
+        {
+          "name": "Positive tie",
+          "input": 2.5,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": 3
+        },
+        {
+          "name": "Negative below half",
+          "input": -2.25,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": -2
+        },
+        {
+          "name": "Negative tie",
+          "input": -2.5,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": -3
+        },
+        {
+          "name": "String integer",
+          "input": "12",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": "12"
+        },
+        {
+          "name": "String below half",
+          "input": "2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": "2"
+        },
+        {
+          "name": "String tie",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": "3"
+        },
+        {
+          "name": "Negative string tie",
+          "input": "-2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": "-3"
+        },
+        {
+          "name": "String trailing zeroes",
+          "input": "12.000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": "12"
+        },
+        {
+          "name": "String exponent",
+          "input": "1.25e2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": "125"
+        },
+        {
+          "name": "Empty options retain defaults",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{}],["NODE"]]],
+          "output": "3"
+        },
+        {
+          "name": "Explicit default properties",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1,"at":0,"shift":0}],["NODE"]]],
+          "output": "3"
+        },
+        {
+          "name": "Explicit numeric input on an object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},2.5],["NODE"]]],
+          "output": 3
+        },
+        {
+          "name": "Explicit string input on null",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},"2.5"],["NODE"]]],
+          "output": "3"
+        },
+        {
+          "name": "Explicit input ignores invalid current-node type",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},-2.5],["NODE"]]],
+          "output": -3
+        },
+        {
+          "name": "Explicit reference",
+          "input": {"value":"-2.5"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["NODE","value"]],["NODE"]]],
+          "output": "-3"
+        },
+        {
+          "name": "Zero shorthand",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",0],["NODE"]]],
+          "output": "3"
+        },
+        {
+          "name": "Positive shorthand shifts before rounding",
+          "input": 1.234375,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",3],["NODE"]]],
+          "output": 1234
+        },
+        {
+          "name": "Negative shorthand shifts before rounding",
+          "input": "1250",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",-2],["NODE"]]],
+          "output": "13"
+        },
+        {
+          "name": "One integer operand is not a value operand",
+          "input": 2.5,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",2],["NODE"]]],
+          "output": 250
+        },
+        {
+          "name": "Integral numeric expression is valid options",
+          "input": "1.235",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["CASTNUM","2.0"]],["NODE"]]],
+          "output": "124"
+        },
+        {
+          "name": "Integral numeric expressions are valid positions",
+          "input": "1.235",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":["CASTNUM","2.0"],"shift":["CASTNUM","0.0"]}],["NODE"]]],
+          "output": "1.24"
+        }
+      ]
+    },
+    {
+      "name": "Rounding modes",
+      "desc": "Each row tests below-half, exact-half with even and odd retained digits, above-half, negative counterparts, and an exact integer. The same matrix is required for each mode name and numeric ID. String inputs avoid binary floating-point and signed-zero decoder differences.",
+      "tests": [
+        {
+          "name": "DOWN",
+          "tests": [
+            {
+              "name": "Name: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "Name: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "Name: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "Name: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "Name: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "Name: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "Name: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "Name: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "Name: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "Name: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "Name: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "ID: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "ID: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "ID: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "ID: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "ID: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "ID: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "ID: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "ID: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "ID: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "ID: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "ID: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "Distant nonzero discarded digit",
+              "input": "-0.000000000000000000001",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": "-0"
+            },
+            {
+              "name": "Numeric input defaults to numeric output",
+              "input": 2.5,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+              "output": 2
+            }
+          ]
+        },
+        {
+          "name": "HALF_UP",
+          "tests": [
+            {
+              "name": "Name: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "Name: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "Name: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "Name: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "Name: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "Name: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "Name: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "Name: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "Name: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "Name: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "Name: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "ID: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "ID: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "ID: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "ID: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "ID: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "ID: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "ID: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "ID: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "ID: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "ID: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "ID: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":1}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "Distant nonzero discarded digit",
+              "input": "-0.000000000000000000001",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": "-0"
+            },
+            {
+              "name": "Numeric input defaults to numeric output",
+              "input": 2.5,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+              "output": 3
+            }
+          ]
+        },
+        {
+          "name": "HALF_EVEN",
+          "tests": [
+            {
+              "name": "Name: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "Name: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "Name: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "Name: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "Name: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "Name: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "Name: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "Name: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "Name: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "Name: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "Name: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "ID: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":2}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "ID: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":2}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "ID: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":2}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "ID: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":2}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "ID: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":2}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "ID: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":2}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "ID: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":2}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "ID: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":2}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "ID: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":2}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "ID: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":2}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "ID: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":2}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "Distant nonzero discarded digit",
+              "input": "-0.000000000000000000001",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": "-0"
+            },
+            {
+              "name": "Numeric input defaults to numeric output",
+              "input": 2.5,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+              "output": 2
+            }
+          ]
+        },
+        {
+          "name": "CEILING",
+          "tests": [
+            {
+              "name": "Name: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "Name: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "Name: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "Name: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "Name: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "Name: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "Name: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "Name: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "Name: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "Name: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "Name: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "ID: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":3}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "ID: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":3}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "ID: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":3}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "ID: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":3}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "ID: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":3}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "ID: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":3}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "ID: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":3}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "ID: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":3}],["NODE"]]],
+              "output": "-2"
+            },
+            {
+              "name": "ID: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":3}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "ID: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":3}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "ID: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":3}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "Distant nonzero discarded digit",
+              "input": "0.000000000000000000001",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": "1"
+            },
+            {
+              "name": "Numeric input defaults to numeric output",
+              "input": 2.5,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+              "output": 3
+            }
+          ]
+        },
+        {
+          "name": "FLOOR",
+          "tests": [
+            {
+              "name": "Name: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "Name: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "Name: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "Name: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "Name: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "Name: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "Name: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "Name: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "Name: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "Name: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "Name: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "ID: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":4}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "ID: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":4}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "ID: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":4}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "ID: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":4}],["NODE"]]],
+              "output": "2"
+            },
+            {
+              "name": "ID: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":4}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "ID: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":4}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "ID: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":4}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "ID: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":4}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "ID: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":4}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "ID: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":4}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "ID: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":4}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "Distant nonzero discarded digit",
+              "input": "-0.000000000000000000001",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": "-1"
+            },
+            {
+              "name": "Numeric input defaults to numeric output",
+              "input": 2.5,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+              "output": 2
+            }
+          ]
+        },
+        {
+          "name": "UP",
+          "tests": [
+            {
+              "name": "Name: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "Name: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "Name: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "Name: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "Name: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "Name: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "Name: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "Name: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "Name: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "Name: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "Name: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "ID: 2.1",
+              "input": "2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":5}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "ID: 2.5",
+              "input": "2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":5}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "ID: 3.5",
+              "input": "3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":5}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "ID: 2.9",
+              "input": "2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":5}],["NODE"]]],
+              "output": "3"
+            },
+            {
+              "name": "ID: -2.1",
+              "input": "-2.1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":5}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "ID: -2.5",
+              "input": "-2.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":5}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "ID: -3.5",
+              "input": "-3.5",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":5}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "ID: -2.9",
+              "input": "-2.9",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":5}],["NODE"]]],
+              "output": "-3"
+            },
+            {
+              "name": "ID: 4.000",
+              "input": "4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":5}],["NODE"]]],
+              "output": "4"
+            },
+            {
+              "name": "ID: -4.000",
+              "input": "-4.000",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":5}],["NODE"]]],
+              "output": "-4"
+            },
+            {
+              "name": "ID: 0",
+              "input": "0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":5}],["NODE"]]],
+              "output": "0"
+            },
+            {
+              "name": "Distant nonzero discarded digit",
+              "input": "0.000000000000000000001",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": "1"
+            },
+            {
+              "name": "Numeric input defaults to numeric output",
+              "input": 2.5,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+              "output": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Decimal positions, shifts, and carries",
+      "desc": "at chooses a decimal position without rescaling the result; shift changes the value before rounding. Point movement and scientific exponents use decimal arithmetic. Exact ties and digits beyond the first discarded digit must be distinguished.",
+      "tests": [
+        {
+          "name": "Two decimal places",
+          "input": "12.345",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "12.35"
+        },
+        {
+          "name": "Negative two decimal places",
+          "input": "-12.345",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "-12.35"
+        },
+        {
+          "name": "Round to tens",
+          "input": "125",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":-1}],["NODE"]]],
+          "output": "130"
+        },
+        {
+          "name": "Round to hundreds",
+          "input": "1250",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":-2}],["NODE"]]],
+          "output": "1300"
+        },
+        {
+          "name": "Negative hundreds",
+          "input": "-1250",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":-2}],["NODE"]]],
+          "output": "-1300"
+        },
+        {
+          "name": "Whole carry",
+          "input": "9.999",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{}],["NODE"]]],
+          "output": "10"
+        },
+        {
+          "name": "Fractional carry",
+          "input": "9.999",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "10.00"
+        },
+        {
+          "name": "Negative fractional carry",
+          "input": "-9.999",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "-10.00"
+        },
+        {
+          "name": "Long carry",
+          "input": "99999999999999999999.995",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "100000000000000000000.00"
+        },
+        {
+          "name": "Below decimal half",
+          "input": "1.004999999999999999999",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "1.00"
+        },
+        {
+          "name": "Decimal half",
+          "input": "1.005",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "1.01"
+        },
+        {
+          "name": "Above decimal half",
+          "input": "1.005000000000000000001",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2,"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "1.01"
+        },
+        {
+          "name": "Half even retains even digit",
+          "input": "1.245",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2,"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "1.24"
+        },
+        {
+          "name": "Half even increments odd digit",
+          "input": "1.255",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2,"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "1.26"
+        },
+        {
+          "name": "Negative half even retains even digit",
+          "input": "-1.245",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2,"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "-1.24"
+        },
+        {
+          "name": "Negative half even increments odd digit",
+          "input": "-1.255",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2,"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "-1.26"
+        },
+        {
+          "name": "Half even carry",
+          "input": "9.995",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2,"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "10.00"
+        },
+        {
+          "name": "Half even tens even",
+          "input": "1250",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":-2,"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "1200"
+        },
+        {
+          "name": "Half even tens odd",
+          "input": "1350",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":-2,"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "1400"
+        },
+        {
+          "name": "Below half with distant tail",
+          "input": "2.499999999999999999999",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{}],["NODE"]]],
+          "output": "2"
+        },
+        {
+          "name": "Half with zero tail",
+          "input": "2.500000000000000000000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "2"
+        },
+        {
+          "name": "Above half with distant tail",
+          "input": "2.500000000000000000001",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "3"
+        },
+        {
+          "name": "Positive shift",
+          "input": "1.2345",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":2}],["NODE"]]],
+          "output": "123"
+        },
+        {
+          "name": "Negative shift",
+          "input": "1234.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":-2}],["NODE"]]],
+          "output": "12"
+        },
+        {
+          "name": "Shift then fractional rounding",
+          "input": "1.23456",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":2,"at":2}],["NODE"]]],
+          "output": "123.46"
+        },
+        {
+          "name": "Opposing positive shift and negative at",
+          "input": "12.345",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":2,"at":-1}],["NODE"]]],
+          "output": "1230"
+        },
+        {
+          "name": "Opposing negative shift and positive at",
+          "input": "1234.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":-2,"at":2}],["NODE"]]],
+          "output": "12.35"
+        },
+        {
+          "name": "Exponent with positive sign",
+          "input": "1.2345e+3",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":1}],["NODE"]]],
+          "output": "1234.5"
+        },
+        {
+          "name": "Uppercase exponent",
+          "input": "1.2345E-2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":4}],["NODE"]]],
+          "output": "0.0123"
+        },
+        {
+          "name": "Exponent with leading zeroes",
+          "input": "1.25e+0002",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{}],["NODE"]]],
+          "output": "125"
+        },
+        {
+          "name": "Shift cancels exponent",
+          "input": "1.25e-20",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":22}],["NODE"]]],
+          "output": "125"
+        },
+        {
+          "name": "Negative shift cancels exponent",
+          "input": "1.25e20",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":-20,"at":2}],["NODE"]]],
+          "output": "1.25"
+        },
+        {
+          "name": "Scientific decimal tie",
+          "input": "125e-3",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "0.13"
+        },
+        {
+          "name": "Very small directed up",
+          "input": "1e-1000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP","at":2}],["NODE"]]],
+          "output": "0.01"
+        },
+        {
+          "name": "Very small negative floor",
+          "input": "-1e-1000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR","at":2}],["NODE"]]],
+          "output": "-0.01"
+        },
+        {
+          "name": "Tiny half up becomes zero",
+          "input": "1e-1000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "0.00"
+        },
+        {
+          "name": "Large exponent cancels without numeric overflow",
+          "input": "1.25e1000000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":-999998}],["NODE"]]],
+          "output": "125"
+        },
+        {
+          "name": "Tiny exponent cancels without numeric underflow",
+          "input": "1.25e-1000000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":1000002}],["NODE"]]],
+          "output": "125"
+        },
+        {
+          "name": "Huge integer rounded beyond its highest digit",
+          "input": "1e1000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":-1001}],["NODE"]]],
+          "output": "0"
+        },
+        {
+          "name": "Huge negative integer rounded beyond its highest digit",
+          "input": "-1e1000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":-1001}],["NODE"]]],
+          "output": "-0"
+        },
+        {
+          "name": "Long integer remains exact as a string",
+          "input": "123456789012345678901234567890",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{}],["NODE"]]],
+          "output": "123456789012345678901234567890"
+        },
+        {
+          "name": "Expand scientific notation",
+          "input": "1.25e25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{}],["NODE"]]],
+          "output": "12500000000000000000000000"
+        },
+        {
+          "name": "Pad decimal precision",
+          "input": "1.2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":5}],["NODE"]]],
+          "output": "1.20000"
+        },
+        {
+          "name": "Integer gains fractional zeroes",
+          "input": "12",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":3}],["NODE"]]],
+          "output": "12.000"
+        },
+        {
+          "name": "No decimal point at zero",
+          "input": "1.00",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":0}],["NODE"]]],
+          "output": "1"
+        },
+        {
+          "name": "No decimal point for negative at",
+          "input": "120.00",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":-1}],["NODE"]]],
+          "output": "120"
+        },
+        {
+          "name": "Zero with large positive exponent",
+          "input": "0e1000000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "0.00"
+        },
+        {
+          "name": "Zero with large negative exponent",
+          "input": "0e-1000000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "0.00"
+        }
+      ]
+    },
+    {
+      "name": "Output formats and result types",
+      "desc": "All output formats accept numeric IDs or uppercase names. STR is pure decimal with exactly max(at, 0) fractional digits. NUM and INT return numbers even from string inputs. INT checks the final rounded value for an exact integer rather than rejecting fractional input or positive at in advance.",
+      "tests": [
+        {
+          "name": "NUM name",
+          "input": "12.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"NUM","at":0}],["NODE"]]],
+          "output": 12
+        },
+        {
+          "name": "NUM ID",
+          "input": "12.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":0,"at":0}],["NODE"]]],
+          "output": 12
+        },
+        {
+          "name": "INT name",
+          "input": "12.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","at":0}],["NODE"]]],
+          "output": 12
+        },
+        {
+          "name": "INT ID",
+          "input": "12.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":1,"at":0}],["NODE"]]],
+          "output": 12
+        },
+        {
+          "name": "STR name",
+          "input": "12.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":0}],["NODE"]]],
+          "output": "12"
+        },
+        {
+          "name": "STR ID",
+          "input": "12.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":2,"at":0}],["NODE"]]],
+          "output": "12"
+        },
+        {
+          "name": "SIG name",
+          "input": "12.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":0}],["NODE"]]],
+          "output": "12"
+        },
+        {
+          "name": "SIG ID",
+          "input": "12.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":3,"at":0}],["NODE"]]],
+          "output": "12"
+        },
+        {
+          "name": "NUM fractional result",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"NUM","at":2}],["NODE"]]],
+          "output": 1.25
+        },
+        {
+          "name": "NUM negative fractional result",
+          "input": "-1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"NUM","at":2}],["NODE"]]],
+          "output": -1.25
+        },
+        {
+          "name": "NUM handles huge canceled exponent",
+          "input": "1.25e1000000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"NUM","shift":-1000000,"at":2}],["NODE"]]],
+          "output": 1.25
+        },
+        {
+          "name": "INT rounds fractional input",
+          "input": "1.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT"}],["NODE"]]],
+          "output": 2
+        },
+        {
+          "name": "INT permits positive at when result is integral",
+          "input": "1.000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","at":3}],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "INT permits integral exponent notation",
+          "input": "1.25e2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","at":2}],["NODE"]]],
+          "output": 125
+        },
+        {
+          "name": "INT checks after shift",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","shift":2,"at":2}],["NODE"]]],
+          "output": 125
+        },
+        {
+          "name": "INT accepts zero",
+          "input": "0.001",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT"}],["NODE"]]],
+          "output": 0
+        },
+        {
+          "name": "INT negative result",
+          "input": "-1250",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","at":-2}],["NODE"]]],
+          "output": -1300
+        },
+        {
+          "name": "INT handles huge canceled exponent",
+          "input": "1e1000000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","shift":-1000000}],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "STR from number",
+          "input": 1.25,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":3}],["NODE"]]],
+          "output": "1.250"
+        },
+        {
+          "name": "STR decimal rounding of number",
+          "input": 1.125,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":2}],["NODE"]]],
+          "output": "1.13"
+        },
+        {
+          "name": "SIG from integer number",
+          "input": 123,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2}],["NODE"]]],
+          "output": "123"
+        },
+        {
+          "name": "INT rejects final fraction 1.25",
+          "input": {"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","at":2},["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "INT rejects final fraction -1.25",
+          "input": {"value":"-1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","at":2},["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "INT rejects final fraction 0.01",
+          "input": {"value":"0.01"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","at":2},["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "INT literal final fraction",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","at":2},"1.25"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "INT shift produces a fraction",
+          "input": {"value":"125"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","shift":-2,"at":2},["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        }
+      ]
+    },
+    {
+      "name": "Significant decimal precision",
+      "desc": "SIG keeps the lesser of the input precision after shift and the requested rounding position. Trailing whole-number zeroes are not significant; trailing fractional zeroes are. These cases include all examples from the ROUND specification, plus decimal padding avoidance, carries, shifted precision, negative values, and zero.",
+      "tests": [
+        {
+          "name": "Spec: 9.9",
+          "input": "9.9",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG"}],["NODE"]]],
+          "output": "1.0e1"
+        },
+        {
+          "name": "Spec: 9.900",
+          "input": "9.900",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG"}],["NODE"]]],
+          "output": "1.0e1"
+        },
+        {
+          "name": "Spec: truncate fractional precision",
+          "input": "9.500",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2}],["NODE"]]],
+          "output": "9.50"
+        },
+        {
+          "name": "Spec: hundreds",
+          "input": "1234",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":-2}],["NODE"]]],
+          "output": "1.2e3"
+        },
+        {
+          "name": "Spec: coarse input precision",
+          "input": "1.25e20",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":-10}],["NODE"]]],
+          "output": "1.25e20"
+        },
+        {
+          "name": "Spec: rounded scientific precision",
+          "input": "1.25e10",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":-9}],["NODE"]]],
+          "output": "1.3e10"
+        },
+        {
+          "name": "Spec: fractional zero",
+          "input": "0.0000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2}],["NODE"]]],
+          "output": "0.00"
+        },
+        {
+          "name": "Spec: coarse zero",
+          "input": "0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":-1}],["NODE"]]],
+          "output": "0e1"
+        },
+        {
+          "name": "Do not invent fractional precision",
+          "input": "1.2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":4}],["NODE"]]],
+          "output": "1.2"
+        },
+        {
+          "name": "Preserve fractional zeroes",
+          "input": "1.200",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":4}],["NODE"]]],
+          "output": "1.200"
+        },
+        {
+          "name": "Discard only excess precision",
+          "input": "1.200",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2}],["NODE"]]],
+          "output": "1.20"
+        },
+        {
+          "name": "Integer gains no fractional precision",
+          "input": "123",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":4}],["NODE"]]],
+          "output": "123"
+        },
+        {
+          "name": "Negative decimal",
+          "input": "-1.235",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2}],["NODE"]]],
+          "output": "-1.24"
+        },
+        {
+          "name": "Carry preserves tenths",
+          "input": "9.99",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":1}],["NODE"]]],
+          "output": "10.0"
+        },
+        {
+          "name": "Carry preserves hundredths",
+          "input": "9.999",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2}],["NODE"]]],
+          "output": "10.00"
+        },
+        {
+          "name": "Rounded zero preserves hundredths",
+          "input": "0.004",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2}],["NODE"]]],
+          "output": "0.00"
+        },
+        {
+          "name": "Coarse input zero is not padded",
+          "input": "0.0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":3}],["NODE"]]],
+          "output": "0.0"
+        },
+        {
+          "name": "Negative zero precision",
+          "input": "-0.000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2}],["NODE"]]],
+          "output": "-0.00"
+        },
+        {
+          "name": "Negative exact zero",
+          "input": "-0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":0}],["NODE"]]],
+          "output": "-0"
+        },
+        {
+          "name": "Negative rounded zero",
+          "input": "-0.004",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2}],["NODE"]]],
+          "output": "-0.00"
+        },
+        {
+          "name": "Shift reduces fractional precision",
+          "input": "1.2300",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","shift":2,"at":4}],["NODE"]]],
+          "output": "123.00"
+        },
+        {
+          "name": "Shift adds fractional precision",
+          "input": "123",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","shift":-2,"at":4}],["NODE"]]],
+          "output": "1.23"
+        },
+        {
+          "name": "Whole-number trailing zeroes are not precision",
+          "input": "1200",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","shift":-3,"at":4}],["NODE"]]],
+          "output": "1.2"
+        },
+        {
+          "name": "Decimal-point trailing zeroes are precision",
+          "input": "1200.0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","shift":-3,"at":4}],["NODE"]]],
+          "output": "1.2000"
+        },
+        {
+          "name": "Exponent moves significant position",
+          "input": "1.2300e2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":4}],["NODE"]]],
+          "output": "123.00"
+        },
+        {
+          "name": "Negative exponent moves precision",
+          "input": "123e-2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":4}],["NODE"]]],
+          "output": "1.23"
+        },
+        {
+          "name": "Half even zero retains position",
+          "input": "0.005",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2,"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "0.00"
+        },
+        {
+          "name": "Coarse precision requires scientific notation",
+          "input": "1200",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":0}],["NODE"]]],
+          "output": "1.2e3"
+        },
+        {
+          "name": "One significant digit",
+          "input": "1000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":0}],["NODE"]]],
+          "output": "1e3"
+        },
+        {
+          "name": "Rounded trailing zero requires scientific notation",
+          "input": "99.9",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":0}],["NODE"]]],
+          "output": "1.00e2"
+        },
+        {
+          "name": "Rounding position finer than huge input precision",
+          "input": "1.25e1000000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":0}],["NODE"]]],
+          "output": "1.25e1000000"
+        },
+        {
+          "name": "Huge exponent rounded at its scale",
+          "input": "1.25e1000000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":-999999}],["NODE"]]],
+          "output": "1.3e1000000"
+        },
+        {
+          "name": "Huge value rounds to coarse zero",
+          "input": "1e1000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":-1001}],["NODE"]]],
+          "output": "0e1001"
+        },
+        {
+          "name": "Shifted huge exponent remains compact",
+          "input": "1.2500e1000000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","shift":2,"at":0}],["NODE"]]],
+          "output": "1.2500e1000002"
+        }
+      ]
+    },
+    {
+      "name": "Signed zero in string output",
+      "desc": "A string supplies a known sign even when its value is zero. STR and SIG can preserve that sign. Numeric signed zero is not required because host input decoders and numeric storage may discard it.",
+      "tests": [
+        {
+          "name": "Exact negative zero",
+          "input": "-0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{}],["NODE"]]],
+          "output": "-0"
+        },
+        {
+          "name": "Negative fractional zero",
+          "input": "-0.000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "-0.00"
+        },
+        {
+          "name": "Negative exponent zero",
+          "input": "-0e20",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "-0.00"
+        },
+        {
+          "name": "Negative rounds to zero",
+          "input": "-0.4",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{}],["NODE"]]],
+          "output": "-0"
+        },
+        {
+          "name": "Negative tie to even zero",
+          "input": "-0.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+          "output": "-0"
+        },
+        {
+          "name": "Negative ceiling zero",
+          "input": "-0.1",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+          "output": "-0"
+        },
+        {
+          "name": "Negative truncation zero",
+          "input": "-0.9",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN","at":2,"shift":-2}],["NODE"]]],
+          "output": "-0.00"
+        },
+        {
+          "name": "Positive floor zero",
+          "input": "0.1",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+          "output": "0"
+        },
+        {
+          "name": "Positive truncation zero",
+          "input": "0.9",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+          "output": "0"
+        },
+        {
+          "name": "Negative zero is not rounded away",
+          "input": "-0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP","at":2}],["NODE"]]],
+          "output": "-0.00"
+        },
+        {
+          "name": "Negative zero after shift",
+          "input": "-0.000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":4,"at":2}],["NODE"]]],
+          "output": "-0.00"
+        }
+      ]
+    },
+    {
+      "name": "Value contexts and namespaces",
+      "desc": "Options and explicit input are evaluated in value context. Option-object property values are expressions too. Reused common expressions resolve the invoking node and bindings each time.",
+      "tests": [
+        {
+          "name": "Options reference",
+          "input": {"options":{"mode":"DOWN","at":2},"value":"1.239"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "output": "1.23"
+        },
+        {
+          "name": "Integer options expression",
+          "input": {"shift":2,"value":"1.235"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","shift"],["NODE","value"]],["NODE"]]],
+          "output": "124"
+        },
+        {
+          "name": "Constructed option properties",
+          "input": {"mode":"HALF_EVEN","at":2,"shift":1,"as":"STR","value":"1.245"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":["NODE","mode"],"at":["NODE","at"],"shift":["NODE","shift"],"as":["NODE","as"]},["NODE","value"]],["NODE"]]],
+          "output": "12.45"
+        },
+        {
+          "name": "Options built by MKOBJ",
+          "input": "1.239",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["MKOBJ","mode","DOWN","at",["ADD",1,1]]],["NODE"]]],
+          "output": "1.23"
+        },
+        {
+          "name": "Explicit arithmetic input",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["ADD",1,0.5]],["NODE"]]],
+          "output": 2
+        },
+        {
+          "name": "Explicit string expression",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2},["CONCAT","1.","235"]],["NODE"]]],
+          "output": "1.24"
+        },
+        {
+          "name": "MAP uses each current node",
+          "input": ["1.25","2.25","-3.25"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["ROUND",{"at":1}]],["NODE"]]],
+          "output": ["1.3","2.3","-3.3"]
+        },
+        {
+          "name": "LOCAL changes the implicit input",
+          "input": {"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",null,["NODE","value"],["ROUND",{"at":1}]],["NODE"]]],
+          "output": "1.3"
+        },
+        {
+          "name": "Constant options and input",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1,"const":["options",{"at":1},"value","1.25"]},["COPY",["ROUND",["CONST","options"],["CONST","value"]],["NODE"]]],
+          "output": "1.3"
+        },
+        {
+          "name": "STASH input",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","1.25",["STASH","value"]],["COPY",["ROUND",{"at":1},["STASH","value"]],["NODE"]]],
+          "output": "1.3"
+        },
+        {
+          "name": "Common expression uses invoking node",
+          "input": ["1.25","2.25"],
+          "jgraft": ["JGRAFT",{"v":1,"expr":["rounded",["ROUND",{"at":1}]]},["COPY",["MAP",["EXPR","rounded"]],["NODE"]]],
+          "output": ["1.3","2.3"]
+        },
+        {
+          "name": "Common expression uses invoking TEMP options",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1,"expr":["rounded",["ROUND",["TEMP","options"]]]},["COPY",[[["LOCAL","options",{"at":1},["EXPR","rounded"]],["LOCAL","options",{"at":2},["EXPR","rounded"]]]],["NODE"]]],
+          "output": ["1.3","1.25"]
+        }
+      ]
+    },
+    {
+      "name": "Invalid input types",
+      "desc": "Only numbers and strings are valid input types. Referenced arrays remain data, even when their contents resemble expression notation. A known literal error outside a match may be rejected statically.",
+      "tests": [
+        {
+          "name": "Null current node",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Null reference",
+          "input": {"value":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Null literal",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},null],["NODE"]]],
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "False current node",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "False reference",
+          "input": {"value":false},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "False literal",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},false],["NODE"]]],
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "True current node",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "True reference",
+          "input": {"value":true},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "True literal",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},true],["NODE"]]],
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Empty array current node",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Empty array reference",
+          "input": {"value":[]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Empty array literal",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},[[]]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Numeric array current node",
+          "input": [1.5],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Numeric array reference",
+          "input": {"value":[1.5]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Numeric array literal",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},[[1.5]]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Expression-looking array current node",
+          "input": ["ROUND"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Expression-looking array reference",
+          "input": {"value":["ROUND"]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Expression-looking array literal",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},[["ROUND"]]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Object current node",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Object reference",
+          "input": {"value":{}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Object literal",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},{}],["NODE"]]],
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Date is not a number or string",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["CASTDATE","2024-01-01"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+        }
+      ]
+    },
+    {
+      "name": "CASTNUM string syntax extensions",
+      "desc": "String input follows CASTNUM syntax, including a leading plus sign and a trailing decimal point. STR output omits a positive sign and uses the precision requested by at.",
+      "tests": [
+        {
+          "name": "Leading plus",
+          "input": "+1",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": "1"
+        },
+        {
+          "name": "Leading plus with fractional rounding",
+          "input": "+1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":1}],["NODE"]]],
+          "output": "1.3"
+        },
+        {
+          "name": "Leading plus with exponent",
+          "input": "+1.25e2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": "125"
+        },
+        {
+          "name": "Trailing decimal point",
+          "input": "1.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": "1"
+        },
+        {
+          "name": "Negative trailing decimal point",
+          "input": "-1.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": "-1"
+        },
+        {
+          "name": "Leading plus and trailing decimal point",
+          "input": "+1.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "output": "1"
+        },
+        {
+          "name": "Negative zero with trailing decimal point",
+          "input": "-0.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "output": "-0.00"
+        },
+        {
+          "name": "Referenced leading plus",
+          "input": {"value":"+2.5"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["NODE","value"]],["NODE"]]],
+          "output": "3"
+        },
+        {
+          "name": "Explicit trailing decimal point",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},"2."],["NODE"]]],
+          "output": "2"
+        }
+      ]
+    },
+    {
+      "name": "Invalid decimal text",
+      "desc": "Non-numeric strings are invalid targets rather than options errors. String input follows CASTNUM syntax, without surrounding whitespace. A sign or decimal point alone does not supply a number.",
+      "tests": [
+        {
+          "name": "Current node \"\"",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \" \"",
+          "input": " ",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \" 1\"",
+          "input": " 1",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"1 \"",
+          "input": "1 ",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"+\"",
+          "input": "+",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"01\"",
+          "input": "01",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"-01\"",
+          "input": "-01",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \".5\"",
+          "input": ".5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \".\"",
+          "input": ".",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"+.\"",
+          "input": "+.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"1e\"",
+          "input": "1e",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"1e+\"",
+          "input": "1e+",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"1e-\"",
+          "input": "1e-",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"--1\"",
+          "input": "--1",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"1.2.3\"",
+          "input": "1.2.3",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"1x\"",
+          "input": "1x",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"0x10\"",
+          "input": "0x10",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"1_000\"",
+          "input": "1_000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"1,000\"",
+          "input": "1,000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"NaN\"",
+          "input": "NaN",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"Infinity\"",
+          "input": "Infinity",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"-Infinity\"",
+          "input": "-Infinity",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"true\"",
+          "input": "true",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"null\"",
+          "input": "null",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"١\"",
+          "input": "١",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Current node \"1\\n\"",
+          "input": "1\n",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        }
+      ]
+    },
+    {
+      "name": "Invalid options",
+      "desc": "The options operand must be an integer shift or an object. mode and as accept only listed names or IDs; at and shift require integer numbers. Computed values retain INVALID_OPERAND classification, with INVALID_GRAFT also permitted for intrinsically invalid literal parameters.",
+      "tests": [
+        {
+          "name": "Null from reference",
+          "input": {"options":null,"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "Null literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",null],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "False from reference",
+          "input": {"options":false,"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "False literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",false],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "True from reference",
+          "input": {"options":true,"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "True literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",true],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "String integer from reference",
+          "input": {"options":"2","value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "String integer literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND","2"],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "String mode from reference",
+          "input": {"options":"DOWN","value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "String mode literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND","DOWN"],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Fractional shift from reference",
+          "input": {"options":0.5,"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "Fractional shift literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",0.5],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Empty array from reference",
+          "input": {"options":[],"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "Empty array literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",[[]]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "mode = null from reference",
+          "input": {"options":{"mode":null},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "mode = null literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":null}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "mode = true from reference",
+          "input": {"options":{"mode":true},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "mode = true literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":true}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "mode = false from reference",
+          "input": {"options":{"mode":false},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "mode = false literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":false}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "mode = \"2\" from reference",
+          "input": {"options":{"mode":"2"},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "mode = \"2\" literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"2"}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "mode = 0.5 from reference",
+          "input": {"options":{"mode":0.5},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "mode = 0.5 literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":0.5}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "mode = [] from reference",
+          "input": {"options":{"mode":[]},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "mode = [] literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":[[]]}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "mode = {} from reference",
+          "input": {"options":{"mode":{}},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "mode = {} literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":{}}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "as = null from reference",
+          "input": {"options":{"as":null},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "as = null literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":null}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "as = true from reference",
+          "input": {"options":{"as":true},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "as = true literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":true}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "as = false from reference",
+          "input": {"options":{"as":false},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "as = false literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":false}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "as = \"2\" from reference",
+          "input": {"options":{"as":"2"},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "as = \"2\" literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"2"}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "as = 0.5 from reference",
+          "input": {"options":{"as":0.5},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "as = 0.5 literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":0.5}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "as = [] from reference",
+          "input": {"options":{"as":[]},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "as = [] literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":[[]]}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "as = {} from reference",
+          "input": {"options":{"as":{}},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "as = {} literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":{}}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "at = null from reference",
+          "input": {"options":{"at":null},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "at = null literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":null}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "at = true from reference",
+          "input": {"options":{"at":true},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "at = true literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":true}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "at = false from reference",
+          "input": {"options":{"at":false},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "at = false literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":false}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "at = \"2\" from reference",
+          "input": {"options":{"at":"2"},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "at = \"2\" literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":"2"}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "at = 0.5 from reference",
+          "input": {"options":{"at":0.5},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "at = 0.5 literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":0.5}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "at = [] from reference",
+          "input": {"options":{"at":[]},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "at = [] literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":[[]]}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "at = {} from reference",
+          "input": {"options":{"at":{}},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "at = {} literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":{}}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "shift = null from reference",
+          "input": {"options":{"shift":null},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "shift = null literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":null}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "shift = true from reference",
+          "input": {"options":{"shift":true},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "shift = true literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":true}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "shift = false from reference",
+          "input": {"options":{"shift":false},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "shift = false literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":false}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "shift = \"2\" from reference",
+          "input": {"options":{"shift":"2"},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "shift = \"2\" literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":"2"}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "shift = 0.5 from reference",
+          "input": {"options":{"shift":0.5},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "shift = 0.5 literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":0.5}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "shift = [] from reference",
+          "input": {"options":{"shift":[]},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "shift = [] literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":[[]]}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "shift = {} from reference",
+          "input": {"options":{"shift":{}},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "shift = {} literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":{}}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Negative mode ID from reference",
+          "input": {"options":{"mode":-1},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "Negative mode ID literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":-1}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Unknown mode ID from reference",
+          "input": {"options":{"mode":6},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "Unknown mode ID literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":6}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Unknown mode name from reference",
+          "input": {"options":{"mode":"HALF_DOWN"},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "Unknown mode name literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_DOWN"}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Lowercase mode from reference",
+          "input": {"options":{"mode":"half_up"},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "Lowercase mode literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"half_up"}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Negative output ID from reference",
+          "input": {"options":{"as":-1},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "Negative output ID literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":-1}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Unknown output ID from reference",
+          "input": {"options":{"as":4},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "Unknown output ID literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":4}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Unknown output name from reference",
+          "input": {"options":{"as":"STRING"},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "Unknown output name literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STRING"}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Lowercase output from reference",
+          "input": {"options":{"as":"str"},"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","options"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true}
+        },
+        {
+          "name": "Lowercase output literal",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"str"}],["NODE"]]],
+          "errors": {"INVALID_OPERAND":true,"INVALID_GRAFT":true}
+        }
+      ]
+    },
+    {
+      "name": "Evaluation failures and matching",
+      "desc": "Errors from evaluating operands propagate from value context. Match probes trap INVALID_TARGET and runtime INVALID_OPERAND, including when an ANY alternative recovers. Invalid syntax and recursive resource exhaustion remain fatal.",
+      "tests": [
+        {
+          "name": "Missing options reference",
+          "input": {"value":"1.25"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","missing"],["NODE","value"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Missing input reference",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["NODE","missing"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Options FAIL",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["FAIL"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Input FAIL",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["FAIL"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Option property FAIL",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":["FAIL"]}],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Invalid target is a failed match",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ROUND"],0],["NODE"]]],
+          "output": false
+        },
+        {
+          "name": "Invalid literal target remains a failed match",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ROUND",{},null],0],["NODE"]]],
+          "output": false
+        },
+        {
+          "name": "NONE traps target failure",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["IS",["ROUND"],0]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "ANY recovers from target failure",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",["ROUND"],0],["IS",null]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "Computed invalid options are a failed match",
+          "input": {"options":{"at":0.5}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ROUND",["NODE","options"],"1.25"],1],["NODE"]]],
+          "output": false
+        },
+        {
+          "name": "ANY recovers from computed invalid options",
+          "input": {"options":{"as":"bad"}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",["ROUND",["NODE","options"],"1.25"],1],["IS",{"options":{"as":"bad"}}]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "Input type guard avoids rounding",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["IS",["NUM"]],["IS",["ROUND"],0]],["NODE"]]],
+          "output": false
+        },
+        {
+          "name": "Unused CASE branch does not evaluate input FAIL",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",["STR"],["ROUND",{"at":1}],["ROUND",{},["FAIL"]]],["NODE"]]],
+          "output": "1.3"
+        },
+        {
+          "name": "Unused CASE branch does not evaluate options FAIL",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",["STR"],["ROUND",{"at":1}],["ROUND",["FAIL"]]],["NODE"]]],
+          "output": "1.3"
+        },
+        {
+          "name": "Spec shift-based match example",
+          "input": {"foo":1.234375},
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",{"foo":["IS",["ROUND",3],1234]}]],
+          "output": {"foo":1.234375}
+        },
+        {
+          "name": "Extra operand",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},1,2],["NODE"]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Unknown options expression",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["UNKNOWN"]],["NODE"]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Unknown input expression",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},["UNKNOWN"]],["NODE"]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Recursive input remains fatal in match context",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1,"expr":["loop",["ROUND",{},["EXPR","loop"]]]},["COPY",["ANY",["IS",["EXPR","loop"],0],["IS",null]],["NODE"]]],
+          "errors": {"RESOURCE_LIMIT":true},
+          "limits": {"depth":24}
+        }
+      ]
+    }
+  ]
+}

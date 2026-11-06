@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "Scalar casts and type checks",
-  "desc": "Covers CASTBOOL, CASTNUM, CASTSTR, BOOL, NUM, and STR. Casts accept current-node or explicit value operands and enforce their specified conversions without host truthiness, loose numeric parsing, or object coercion. CASTNUM requires a whole JSON number token without surrounding whitespace; valid numeric text outside the supported host range (including nonzero underflow to zero) is UNSUPPORTED_GRAFT. BOOL/NUM/STR cover type checks, NUM inclusive/null bounds, and STR interface edges; regex algorithms and capture combinations remain in the sequence/regex suites. Fractional CASTSTR spellings are checked by round trip rather than fixed cross-platform formatting. Native Date and non-JSON number extensions require implementation-specific tests.",
+  "desc": "Covers CASTBOOL, CASTNUM, CASTSTR, BOOL, NUM, and STR. Casts accept current-node or explicit value operands and enforce their specified conversions without host truthiness, loose numeric parsing, or object coercion. CASTNUM accepts whole JSON number tokens plus leading '+' and trailing '.', without surrounding whitespace; valid numeric text outside the supported host range (including nonzero underflow to zero) is UNSUPPORTED_GRAFT. BOOL/NUM/STR cover type checks, NUM inclusive/null bounds, and STR interface edges; regex algorithms and capture combinations remain in the sequence/regex suites. Fractional CASTSTR spellings are checked by round trip rather than fixed cross-platform formatting. Native Date and non-JSON number extensions require implementation-specific tests.",
   "tests": [
     {
       "name": "CASTBOOL accepted values",
@@ -700,8 +700,8 @@
       ]
     },
     {
-      "name": "CASTNUM numeric values and JSON tokens",
-      "desc": "Numbers pass through. String parsing accepts precisely JSON number syntax: optional leading minus, canonical integer part, optional nonempty fraction, and optional exponent with optional sign and nonempty digits.",
+      "name": "CASTNUM numeric values and accepted tokens",
+      "desc": "Numbers pass through. String parsing accepts JSON number syntax plus a leading '+' and trailing '.'. The integer part remains mandatory and has no leading zeroes; exponent digits remain mandatory when an exponent is present. New syntax is tested as current-node, explicit literal, and referenced input without relaxing whitespace or accepting partial parses.",
       "tests": [
         {
           "name": "Numeric 0",
@@ -1472,6 +1472,366 @@
           ]
         },
         {
+          "name": "Token +0",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "+0",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+0"],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"+0"},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 0
+            }
+          ]
+        },
+        {
+          "name": "Token +1",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "+1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 1
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+1"],["NODE"]]],
+              "output": 1
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"+1"},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 1
+            }
+          ]
+        },
+        {
+          "name": "Token +12345",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "+12345",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 12345
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+12345"],["NODE"]]],
+              "output": 12345
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"+12345"},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 12345
+            }
+          ]
+        },
+        {
+          "name": "Token +0.125",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "+0.125",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 0.125
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+0.125"],["NODE"]]],
+              "output": 0.125
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"+0.125"},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 0.125
+            }
+          ]
+        },
+        {
+          "name": "Token +2.50",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "+2.50",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 2.5
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+2.50"],["NODE"]]],
+              "output": 2.5
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"+2.50"},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 2.5
+            }
+          ]
+        },
+        {
+          "name": "Token +1e+2",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "+1e+2",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 100
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+1e+2"],["NODE"]]],
+              "output": 100
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"+1e+2"},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 100
+            }
+          ]
+        },
+        {
+          "name": "Token +1.25E-1",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "+1.25E-1",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 0.125
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+1.25E-1"],["NODE"]]],
+              "output": 0.125
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"+1.25E-1"},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 0.125
+            }
+          ]
+        },
+        {
+          "name": "Token 0.",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "0.",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","0."],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"0."},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 0
+            }
+          ]
+        },
+        {
+          "name": "Token -0.",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "-0.",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","-0."],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"-0."},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 0
+            }
+          ]
+        },
+        {
+          "name": "Token 1.",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "1.",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 1
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","1."],["NODE"]]],
+              "output": 1
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"1."},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 1
+            }
+          ]
+        },
+        {
+          "name": "Token -12.",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "-12.",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": -12
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","-12."],["NODE"]]],
+              "output": -12
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"-12."},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": -12
+            }
+          ]
+        },
+        {
+          "name": "Token +0.",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "+0.",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+0."],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"+0."},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 0
+            }
+          ]
+        },
+        {
+          "name": "Token +1.",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "+1.",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 1
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+1."],["NODE"]]],
+              "output": 1
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"+1."},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 1
+            }
+          ]
+        },
+        {
+          "name": "Token +1250.",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "+1250.",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 1250
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+1250."],["NODE"]]],
+              "output": 1250
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"+1250."},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 1250
+            }
+          ]
+        },
+        {
+          "name": "Token +0e-9999",
+          "desc": "CASTNUM accepts a leading plus sign and a trailing decimal point in addition to JSON number syntax; the result is numeric.",
+          "tests": [
+            {
+              "name": "Current node",
+              "input": "+0e-9999",
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Explicit literal",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+0e-9999"],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Explicit reference",
+              "input": {"source":"+0e-9999"},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+              "output": 0
+            }
+          ]
+        },
+        {
           "name": "Numeric opcode",
           "input": "12.5",
           "jgraft": ["JGRAFT",{"v":1},["COPY",[69],["NODE"]]],
@@ -1481,7 +1841,7 @@
     },
     {
       "name": "CASTNUM malformed tokens and wrong types",
-      "desc": "The entire string must be one number token. Host-specific hexadecimal/octal/binary prefixes, nonfinite names, leading plus/zeros, incomplete components, whitespace, and trailing characters are invalid targets rather than partial parses.",
+      "desc": "The entire string must be one number token, optionally with a leading '+' or trailing '.'. Host-specific hexadecimal/octal/binary prefixes, nonfinite names, leading zeroes, missing integer or exponent digits, repeated signs or decimal points, whitespace, and trailing characters are invalid targets rather than partial parses.",
       "tests": [
         {
           "name": "Type null",
@@ -1832,14 +2192,230 @@
           "errors": {"INVALID_TARGET":true}
         },
         {
-          "name": "\"+1\"",
-          "input": "+1",
+          "name": "\"+\"",
+          "input": "+",
           "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
           "errors": {"INVALID_TARGET":true}
         },
         {
-          "name": "Computed \"+1\"",
-          "input": {"source":"+1"},
+          "name": "Computed \"+\"",
+          "input": {"source":"+"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"-\"",
+          "input": "-",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"-\"",
+          "input": {"source":"-"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\".\"",
+          "input": ".",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \".\"",
+          "input": {"source":"."},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"+.\"",
+          "input": "+.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"+.\"",
+          "input": {"source":"+."},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"-.\"",
+          "input": "-.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"-.\"",
+          "input": {"source":"-."},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"+.1\"",
+          "input": "+.1",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"+.1\"",
+          "input": {"source":"+.1"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"+01\"",
+          "input": "+01",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"+01\"",
+          "input": {"source":"+01"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"+00\"",
+          "input": "+00",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"+00\"",
+          "input": {"source":"+00"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"+01.\"",
+          "input": "+01.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"+01.\"",
+          "input": {"source":"+01."},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"01.\"",
+          "input": "01.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"01.\"",
+          "input": {"source":"01."},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"-01.\"",
+          "input": "-01.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"-01.\"",
+          "input": {"source":"-01."},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"+ 1\"",
+          "input": "+ 1",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"+ 1\"",
+          "input": {"source":"+ 1"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"+1 \"",
+          "input": "+1 ",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"+1 \"",
+          "input": {"source":"+1 "},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"1. \"",
+          "input": "1. ",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"1. \"",
+          "input": {"source":"1. "},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\" 1.\"",
+          "input": " 1.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \" 1.\"",
+          "input": {"source":" 1."},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"1..\"",
+          "input": "1..",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"1..\"",
+          "input": {"source":"1.."},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"+1..\"",
+          "input": "+1..",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"+1..\"",
+          "input": {"source":"+1.."},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"++1\"",
+          "input": "++1",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"++1\"",
+          "input": {"source":"++1"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "\"-+1\"",
+          "input": "-+1",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Computed \"-+1\"",
+          "input": {"source":"-+1"},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
           "errors": {"INVALID_TARGET":true}
         },
@@ -1876,18 +2452,6 @@
         {
           "name": "Computed \"-01\"",
           "input": {"source":"-01"},
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
-          "errors": {"INVALID_TARGET":true}
-        },
-        {
-          "name": "\"1.\"",
-          "input": "1.",
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
-          "errors": {"INVALID_TARGET":true}
-        },
-        {
-          "name": "Computed \"1.\"",
-          "input": {"source":"1."},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","source"]],["NODE"]]],
           "errors": {"INVALID_TARGET":true}
         },
