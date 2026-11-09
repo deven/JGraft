@@ -1,0 +1,398 @@
+{
+  "version": 1,
+  "name": "POW",
+  "desc": "Covers POW operand forms, numeric results, unambiguous domain failures, expression evaluation, match recovery, syntax and fatal recursion. Approximate results are tested through bounds. Host-specific overflow/underflow thresholds and nonfinite extensions are excluded. See group descriptions for cases deferred pending specification clarification.",
+  "tests": [
+    {
+      "name": "Operand forms and contexts",
+      "desc": "The first operand is always the base. Only the second operand defaults to the current node; explicit operands are evaluated in value context.",
+      "tests": [
+        {
+          "name": "Omitted second operand",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2],["NODE"]]],
+          "output": 8
+        },
+        {
+          "name": "Explicit second operand ignores current object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,3],["NODE"]]],
+          "output": 8
+        },
+        {
+          "name": "Numeric operation identifier",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[79,2,3],["NODE"]]],
+          "output": 8
+        },
+        {
+          "name": "Both operands from references",
+          "input": {"arg":3,"base":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",["NODE","base"],["NODE","arg"]],["NODE"]]],
+          "output": 8
+        },
+        {
+          "name": "Computed operands",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",["ADD",1,1],["ADD",1,1]],["NODE"]]],
+          "output": 4
+        },
+        {
+          "name": "Localized implicit operand",
+          "input": {"value":3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",null,["NODE","value"],["POW",2]],["NODE"]]],
+          "output": 8
+        },
+        {
+          "name": "Explicit null current node is unused",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,1],["NODE"]]],
+          "output": 2
+        },
+        {
+          "name": "Base evaluated in value context",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",["NODE"]],["NODE"]]],
+          "output": 4
+        }
+      ]
+    },
+    {
+      "name": "Numeric results",
+      "desc": "Integer powers use exact expectations. Other nontrivial results use open bounds to avoid prescribing host floating-point rounding.",
+      "tests": [
+        {
+          "name": "Zero to zero",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",0,0],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Zero to positive integer",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",0,3],["NODE"]]],
+          "output": 0
+        },
+        {
+          "name": "Zero to positive fraction",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",0,0.5],["NODE"]]],
+          "output": 0
+        },
+        {
+          "name": "Positive base to zero",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",7,0],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Fractional base to zero",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",0.5,0],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "One to negative exponent",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",1,-7],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "One to fractional exponent",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",1,0.5],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Integer power",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",3,5],["NODE"]]],
+          "output": 243
+        },
+        {
+          "name": "Power of two",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,20],["NODE"]]],
+          "output": 1048576
+        },
+        {
+          "name": "Exact integer beyond single precision",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",3,20],["NODE"]]],
+          "output": 3486784401
+        },
+        {
+          "name": "Fractional base integer exponent",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",0.5,3],["NODE"]]],
+          "output": 0.125
+        },
+        {
+          "name": "Negative exponent",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["LESS",0.124999,["POW",2,-3]],["LESS",["POW",2,-3],0.125001]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "Square root",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["LESS",2.99999,["POW",9,0.5]],["LESS",["POW",9,0.5],3.00001]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "Irrational square root",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["LESS",1.41421,["POW",2,0.5]],["LESS",["POW",2,0.5],1.41422]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "Fractional base and exponent",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["LESS",0.499999,["POW",0.25,0.5]],["LESS",["POW",0.25,0.5],0.500001]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "Negative fractional exponent",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["LESS",0.499999,["POW",4,-0.5]],["LESS",["POW",4,-0.5],0.500001]],["NODE"]]],
+          "output": true
+        }
+      ]
+    },
+    {
+      "name": "Invalid domains",
+      "desc": "Numeric types are strict, negative bases are forbidden, and zero cannot have a negative exponent. Invalid bases with exponent zero are deferred pending clarification of the always-one wording.",
+      "tests": [
+        {
+          "name": "Base null",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",null,2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Exponent null",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,null],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Implicit exponent null",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Base false",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",false,2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Exponent false",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,false],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Implicit exponent false",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Base true",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",true,2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Exponent true",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,true],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Implicit exponent true",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Base numeric string",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW","2",2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Exponent numeric string",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,"2"],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Implicit exponent numeric string",
+          "input": "2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Base empty string",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW","",2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Exponent empty string",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,""],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Implicit exponent empty string",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Base object",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",{},2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Exponent object",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,{}],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Implicit exponent object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Base array",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",[[2,3]],2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Exponent array",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,[[2,3]]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Implicit exponent array",
+          "input": [2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Negative base integer exponent",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",-2,3],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Negative base fractional exponent",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",-2,0.5],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Zero base negative exponent",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",0,-1],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Zero base negative fractional exponent",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",0,-0.5],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        }
+      ]
+    },
+    {
+      "name": "Evaluation and failure recovery",
+      "desc": "Missing references and FAIL propagate; matching traps INVALID_TARGET and guarded CASE branches remain unevaluated.",
+      "tests": [
+        {
+          "name": "Base missing reference",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",["NODE","missing"],2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Base failing expression",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",["FAIL"],2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Second missing reference",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,["NODE","missing"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Second failing expression",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,["FAIL"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "CASE guards invalid calculation",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,"guarded",["POW",-2]],["NODE"]]],
+          "output": "guarded"
+        },
+        {
+          "name": "Invalid domain is a negative match probe",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["IS",["POW",0,-1],0]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "ANY recovers from invalid domain",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",["POW",0,-1],0],["IS",null]],["NODE"]]],
+          "output": true
+        }
+      ]
+    },
+    {
+      "name": "Syntax and fatal failures",
+      "desc": "One or two operands are required. Fatal depth exhaustion must propagate through matching.",
+      "tests": [
+        {
+          "name": "Operand count 0",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW"],["NODE"]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Operand count 3",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,3,4],["NODE"]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Unknown operand expression",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,["UNKNOWN"]],["NODE"]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Recursive operand is fatal inside matching",
+          "input": null,
+          "jgraft": ["JGRAFT",{"expr":["loop",["POW",2,["EXPR","loop"]]],"v":1},["COPY",["NONE",["IS",["POW",2,["EXPR","loop"]],0]],["NODE"]]],
+          "errors": {"RESOURCE_LIMIT":true},
+          "limits": {"depth":24}
+        }
+      ]
+    }
+  ]
+}

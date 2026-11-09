@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "name": "LOG",
+  "desc": "Covers LOG operand forms, numeric results, unambiguous domain failures, expression evaluation, match recovery, syntax and fatal recursion. Approximate results are tested through bounds. Host-specific overflow/underflow thresholds and nonfinite extensions are excluded. See group descriptions for cases deferred pending specification clarification.",
+  "tests": [
+    {
+      "name": "Operand forms and contexts",
+      "desc": "The first operand is always the base. Only the second operand defaults to the current node; explicit operands are evaluated in value context.",
+      "tests": [
+        {
+          "name": "Omitted second operand",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Explicit second operand ignores current object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2,2],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Numeric operation identifier",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[80,2,2],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Both operands from references",
+          "input": {"arg":2,"base":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",["NODE","base"],["NODE","arg"]],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Computed operands",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",["ADD",1,1],["ADD",1,1]],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Localized implicit operand",
+          "input": {"value":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",null,["NODE","value"],["LOG",2]],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Explicit null current node is unused",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2,1],["NODE"]]],
+          "output": 0
+        },
+        {
+          "name": "Base evaluated in value context",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",["NODE"]],["NODE"]]],
+          "output": 1
+        }
+      ]
+    },
+    {
+      "name": "Numeric results",
+      "desc": "The specified zero and one identities use exact expectations. Other results use open bounds, including mathematically integral logarithms, to permit host floating-point rounding.",
+      "tests": [
+        {
+          "name": "Base 2 value one",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2,1],["NODE"]]],
+          "output": 0
+        },
+        {
+          "name": "Base 2 value equals base",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2,2],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Base 10 value one",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",10,1],["NODE"]]],
+          "output": 0
+        },
+        {
+          "name": "Base 10 value equals base",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",10,10],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Base 0.5 value one",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",0.5,1],["NODE"]]],
+          "output": 0
+        },
+        {
+          "name": "Base 0.5 value equals base",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",0.5,0.5],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Base 0.25 value one",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",0.25,1],["NODE"]]],
+          "output": 0
+        },
+        {
+          "name": "Base 0.25 value equals base",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",0.25,0.25],["NODE"]]],
+          "output": 1
+        },
+        {
+          "name": "Integer logarithm",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["LESS",2.99999,["LOG",2,8]],["LESS",["LOG",2,8],3.00001]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "Decimal logarithm",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["LESS",2.99999,["LOG",10,1000]],["LESS",["LOG",10,1000],3.00001]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "Fractional value",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["LESS",-3.00001,["LOG",2,0.125]],["LESS",["LOG",2,0.125],-2.99999]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "Fractional base positive result",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["LESS",2.99999,["LOG",0.5,0.125]],["LESS",["LOG",0.5,0.125],3.00001]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "Fractional base negative result",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["LESS",-3.00001,["LOG",0.5,8]],["LESS",["LOG",0.5,8],-2.99999]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "Nonintegral logarithm",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["LESS",1.58496,["LOG",2,3]],["LESS",["LOG",2,3],1.58497]],["NODE"]]],
+          "output": true
+        }
+      ]
+    },
+    {
+      "name": "Invalid domains",
+      "desc": "Base one explicitly fails, including when value is one. Other invalid domains are deferred until the specification states their error classification.",
+      "tests": [
+        {
+          "name": "Base one",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",1,2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Base one value one",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",1,1],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Base one implicit value one",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",1],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        }
+      ]
+    },
+    {
+      "name": "Evaluation and failure recovery",
+      "desc": "Missing references and FAIL propagate; matching traps INVALID_TARGET and guarded CASE branches remain unevaluated.",
+      "tests": [
+        {
+          "name": "Base missing reference",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",["NODE","missing"],2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Base failing expression",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",["FAIL"],2],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Second missing reference",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2,["NODE","missing"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "Second failing expression",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2,["FAIL"]],["NODE"]]],
+          "errors": {"INVALID_TARGET":true}
+        },
+        {
+          "name": "CASE guards invalid calculation",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,"guarded",["LOG",1]],["NODE"]]],
+          "output": "guarded"
+        },
+        {
+          "name": "Invalid domain is a negative match probe",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["IS",["LOG",1,2],0]],["NODE"]]],
+          "output": true
+        },
+        {
+          "name": "ANY recovers from invalid domain",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",["LOG",1,2],0],["IS",null]],["NODE"]]],
+          "output": true
+        }
+      ]
+    },
+    {
+      "name": "Syntax and fatal failures",
+      "desc": "One or two operands are required. Fatal depth exhaustion must propagate through matching.",
+      "tests": [
+        {
+          "name": "Operand count 0",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG"],["NODE"]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Operand count 3",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2,3,4],["NODE"]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Unknown operand expression",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2,["UNKNOWN"]],["NODE"]]],
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "Recursive operand is fatal inside matching",
+          "input": null,
+          "jgraft": ["JGRAFT",{"expr":["loop",["LOG",2,["EXPR","loop"]]],"v":1},["COPY",["NONE",["IS",["LOG",2,["EXPR","loop"]],0]],["NODE"]]],
+          "errors": {"RESOURCE_LIMIT":true},
+          "limits": {"depth":24}
+        }
+      ]
+    }
+  ]
+}
