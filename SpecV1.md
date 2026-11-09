@@ -670,6 +670,9 @@ Name                     | Type  | ID | Description
 [MUL](#ex-mul)           | Fn    | 76 | Multiply numbers
 [DIV](#ex-div)           | Fn    | 77 | Divide numbers
 [MOD](#ex-mod)           | Fn    | 78 | Calculate Modulus
+[POW](#ex-pow)           | Fn    | 79 | Calculate exponents
+[LOG](#ex-log)           | Fn    | 80 | Calculate logarithms
+[ROUND](#ex-round)       | Fn    | 81 | Decimal rounding on numbers or strings
 
 ### Expression Interaction
 
@@ -2653,6 +2656,50 @@ when not configured to allow them must fail with `INVALID_TARGET`.
 
 Note that this is not the same as the C language `%` operator, which returns
 a remainder.
+
+#### <span id="ex-pow">POW</span>
+
+    [POW, base]
+    [POW, base, exponent]
+
+Return the value of `base` to the power of `exponent`.  If `exponent` is
+omitted the current node is used.
+
+The `base` (value context) must be a nonnegative number.  The `exponent`
+(value context) can be any number but must be nonnegative if `base` is zero.
+Invalid values for either argument count as `INVALID_TARGET`.
+
+For valid arguments, when `exponent` is zero, the result is always one.
+If `base` and `exponent` are both integers, implementations must check to see
+if the result can be represented exactly in an available number storage type,
+and if so, use an exact power caluclation instead of floating point math.
+
+Overflow and underflow count as `UNSUPPORTED_GRAFT`.  A nonzero mathematical
+result must not be returned as zero due to floating-point underflow.
+
+If an implementation permits NaN and Inf values, it must specify how they
+behave for inputs and outputs of this function.
+
+#### <span id="ex-log">LOG</span>
+
+    [LOG, base]
+    [LOG, base, value]
+
+Return the `base` logarithm of `value`.  If `value` is omitted the current
+node is used.
+
+The `base` and `value` (both value context) must be positive numbers, and
+`base` may not be exactly one.  Invalid values for either argument count as
+`INVALID_TARGET`.
+
+For valid arguments, when `value` is one the result is zero, and if `value` is
+equal to `base` the result is one.
+
+Overflow and underflow count as `UNSUPPORTED_GRAFT`.  A nonzero mathematical
+result must not be returned as zero due to floating-point underflow.
+
+If an implementation permits NaN and Inf values, it must specify how they
+behave for inputs and outputs of this function.
 
 #### <span id="ex-round">ROUND</span>
 
