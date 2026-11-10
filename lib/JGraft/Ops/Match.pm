@@ -39,7 +39,7 @@ for my $exact (0, 1) {
         my $get   = $value->{code};
         my $n;
         if ($c->matches($ctx, $spec)) {     # matching begins anew, on the given value
-            my $m    = $c->match({ %$in, seq => 0, regex => 0 }, $spec);
+            my $m    = $c->binding(['node'], sub { $c->match({ %$in, seq => 0, regex => 0 }, $spec) });
             my $test = $m->{code};
             $n = node(sub { my $x = $_[0]; my $v = &$get; local $x->{path} = []; $test->($x, $v, undef, undef) },
                 $value, $m);
@@ -49,7 +49,7 @@ for my $exact (0, 1) {
             $n = { code => sub { match_lit(&$get, &$want, $exact) } };
         }
         return { %$n, throws => 1, zero => 1 };
-    }, seq => 1;
+    }, seq => 1, blind => 1;        # what they match looks at the node; they do not
 }
 
 defop EXISTS => 6, 'match', '', sub ($c, $ctx) {
@@ -149,12 +149,14 @@ defop ALL => 5, 'match', 'X+', sub ($c, $ctx, @spec) {
 defop WITH => 12, 'match', 'X+', sub ($c, $ctx, @arg) {
     my $spec = pop @arg;
     @arg && @arg % 2 == 0 or return $c->fault('WITH takes name/value pairs and a pattern');
-    my @bind;
+    my (@bind, @bound);     # each value, and then the pattern, sees the names before it
     while (my ($name, $value) = splice @arg, 0, 2) {
         is_str($name) || is_int($name) or return $c->fault('WITH names must be literal strings');
-        push @bind, [ "$name", $c->here($ctx, $c->value($ctx, $value)->{code}) ];
+        my @so_far = @bound;
+        push @bind, [ "$name", $c->here($ctx, $c->binding(\@so_far, sub { $c->value($ctx, $value) })->{code}) ];
+        push @bound, "temp $name";
     }
-    my $body  = $c->match($ctx, $spec);
+    my $body  = $c->binding(\@bound, sub { $c->match($ctx, $spec) });
     my $under = sub ($code, @pick) {
         sub {
             my $x = $_[0];

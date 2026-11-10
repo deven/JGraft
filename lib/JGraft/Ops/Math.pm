@@ -61,7 +61,7 @@ for my $op (sort keys %CAST) {
         $c->{dates} = 1 if $op eq 'CASTDATE';       # the only source of dates: see JGraft::Exec::outgoing
         my $get = $of->{code};
         sub { $cast->($_[0], &$get) };
-    }, pure => 1, dated => $op eq 'CASTDATE';
+    }, dated => $op eq 'CASTDATE';
 }
 
 # [DATE]: would CASTDATE accept the current node?
@@ -93,7 +93,7 @@ for ([ LESS => 72, 0 ], [ LESSEQ => 73, 1 ]) {
     defop $op, $id, 'fn', 'N?V', sub ($c, $ctx, $left, $right) {
         my ($a, $b) = ($left->{code}, $right->{code});
         sub { compare($_[0], &$a, &$b) < $below ? $TRUE : $FALSE };
-    }, pure => 1;
+    };
 }
 
 #---------------------------------------------------------------------------
@@ -116,7 +116,7 @@ for ([ ADD => 74, 0, sub { $_[0] + $_[1] } ], [ MUL => 76, 1, sub { $_[0] * $_[1
             }
             number($x, $result);
         };
-    }, pure => 1;
+    };
 }
 
 my %BINARY = (
@@ -236,7 +236,7 @@ defop ROUND => 81, 'fn', 'V?N?', sub ($c, $ctx, @arg) {
     my $get = pop(@arg)->{code};
     my $opt = @arg ? $arg[0]{code} : sub { {} };
     sub { my $o = &$opt; round($_[0], $o, &$get) };
-}, pure => 1;
+};
 
 for my $op (sort keys %BINARY) {
     my ($id, $f) = @{ $BINARY{$op} };
@@ -248,7 +248,7 @@ for my $op (sort keys %BINARY) {
             created_as_number($m) && created_as_number($n) or $x->fail_target("$op needs numbers");
             number($x, $f->($x, $m, $n));
         };
-    }, pure => 1;
+    };
 }
 
 1;

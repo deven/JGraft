@@ -911,13 +911,25 @@ say.
 
 Each of these made the code smaller; none changes behaviour the suite can see.
 
-- **Constant folding (§5.5 step 5)** is as planned, with the details the plan
-  left open. A function marked `pure` in the table is evaluated at compile
-  time, under a small budget, when all its arguments are constant. Anything
-  that fails or exceeds the budget is left to raise its error in the run that
-  reaches it. Operands that default to the current node are declared in the
-  table (argument letter `N`), which is how the compiler knows that
-  `[POW, 2]` is not constant.
+- **Constant folding goes further than §5.5 step 5**, which folded an
+  operation marked `pure` when all its arguments were constant. There is no
+  such mark now. While an expression is compiled, a note is kept of what it
+  will read from the run: the current node, a named TEMP property, or
+  something unknowable. An operation that supplies one of these to an
+  expression inside it (MAP and FILTER the node, REDUCE and LOCAL a TEMP name
+  as well, a two-value IS or HAS the node) cancels that name. Whatever is left
+  reading nothing is a constant, at any depth, and is evaluated at compile
+  time under a small budget. So `[MAP, [ADD, [NODE], 1], [[1,2,3]]]` folds,
+  though its inner expression alone does not. Anything that fails or exceeds
+  the budget is left to raise its error in the run that reaches it.
+  Operands that default to the current node are declared in the table
+  (argument letter `N`), which is how `[POW, 2]` is known to read the node.
+- **Named constants are constants.** A `const` definition whose value is
+  known when the graft is compiled is recorded in its lexical scope, and
+  `[CONST, name, ...]` then reads nothing from the run. A common expression
+  referred to by a literal name is compiled at that point (unless it refers
+  to itself), so that what it reads is known; one that is a constant value
+  simply takes the place of each reference to it.
 - **Constants are shared, and the output is documented as read-only.** A
   value known at compile time — written literally or folded — is handed to
   every evaluation as is, so a literal costs nothing however large it is.

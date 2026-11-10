@@ -32,8 +32,9 @@ sub spec ($c, $ctx, $s) {
     my (%pattern, $tails);
     for my $name (grep { exists $o{$_} } qw(sep element ltrim rtrim)) {
         my $row = row(\%EXPR, $c->deref($ctx, $o{$name}));
-        if ($row && $row->{kind} eq 'match') {
-            my $n     = $c->match({ scope => $ctx->{scope}, regex => 1, seq => 1, top => 1 }, $o{$name});
+        if ($row && $row->{kind} eq 'match') {      # it is matched against the characters of the string
+            my $n = $c->binding(['node'],
+                sub { $c->match({ scope => $ctx->{scope}, regex => 1, seq => 1, top => 1 }, $o{$name}) });
             my $regex = trap($n);
             $pattern{$name} = sub { $regex };
             $tails = $n->{tails} if $name eq 'rtrim';

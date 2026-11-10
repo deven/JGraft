@@ -23,10 +23,18 @@ defop CAPTURE => 50, 'fn', 'X', sub ($c, $ctx, $spec) {
 defop LOCAL => 51, 'fn', 'X+', sub ($c, $ctx, @arg) {
     @arg % 2 or return $c->fault('LOCAL takes name/value pairs and a result');
     my $last = pop @arg;
-    my @kid  = map { $c->value($ctx, $_) } @arg;
-    my $rebinds = grep { $kid[$_]{const} && !defined $kid[$_]{value} } grep { $_ % 2 == 0 } 0 .. $#kid;
-    my $result  = $c->value($rebinds ? { %$ctx, regex => 0 } : $ctx, $last)->{code};
-    my @bind    = map { $_->{code} } @kid;
+    # Each pair is compiled with the names before it already supplied; the
+    # compiler knows what a pair supplies when its name is a literal.
+    my (@bind, @bound, $rebinds);
+    while (my @pair = splice @arg, 0, 2) {
+        my @so_far = @bound;
+        my ($name, $value) = map { my $s = $_; $c->binding(\@so_far, sub { $c->value($ctx, $s) }) } @pair;
+        push @bind, $name->{code}, $value->{code};
+        next unless $name->{const};
+        push @bound, defined $name->{value} ? "temp $name->{value}" : 'node';
+        $rebinds ||= !defined $name->{value};
+    }
+    my $result = $c->binding(\@bound, sub { $c->value($rebinds ? { %$ctx, regex => 0 } : $ctx, $last) })->{code};
     return sub {
         my ($x, @env) = @_;
         local $x->{temp} = { %{ $x->{temp} } };
@@ -58,7 +66,7 @@ defop FAIL => 67, 'fn', '', sub ($c, $ctx) {
 
 defop CURPROP => 56, 'fn', '', sub ($c, $ctx) {
     sub { $_[2] };
-}, safe => 1;
+}, safe => 1, reads => 'node';
 
 #---------------------------------------------------------------------------
 # Logic: each operand must be a boolean; evaluation stops when decided.
@@ -75,7 +83,7 @@ for ([ NOT => 52, 1, 0 ], [ AND => 53, 0, 0 ], [ OR => 54, 1, 1 ]) {
             }
             $yield ? $FALSE : $TRUE;
         };
-    }, pure => 1;
+    };
 }
 
 #---------------------------------------------------------------------------
@@ -87,7 +95,7 @@ defop LENGTH => 55, 'fn', 'N?', sub ($c, $ctx, $of) {
         my $v = &$get;
         ref $v eq 'ARRAY' ? scalar @$v : is_str($v) ? length $v : $_[0]->fail_target('LENGTH needs an array or string');
     };
-}, pure => 1;
+};
 
 # The array an iterating function works on, with its elements counted.
 my $elements = sub ($x, $v, $who) {
@@ -106,7 +114,7 @@ my $inherit = sub ($x, $new, $a, @from) {
 
 # [FILTER, spec, array?]: the elements that match.
 defop FILTER => 60, 'fn', 'XN?', sub ($c, $ctx, $spec, $of) {
-    my $keep = $c->root({ %$ctx, regex => 0 }, $spec)->{code};
+    my $keep = $c->binding(['node'], sub { $c->root({ %$ctx, regex => 0 }, $spec) })->{code};
     my $get  = $of->{code};
     return sub {
         my $x    = $_[0];
@@ -118,7 +126,7 @@ defop FILTER => 60, 'fn', 'XN?', sub ($c, $ctx, $spec, $of) {
 
 # [MAP, value, array?]: the value computed with each element as current node.
 defop MAP => 61, 'fn', 'XN?', sub ($c, $ctx, $each, $of) {
-    my $f   = $c->value({ %$ctx, regex => 0 }, $each)->{code};
+    my $f   = $c->binding(['node'], sub { $c->value({ %$ctx, regex => 0 }, $each) })->{code};
     my $get = $of->{code};
     return sub {
         my $x = $_[0];
@@ -150,12 +158,13 @@ defop CONCAT => 58, 'fn', 'V+', sub ($c, $ctx, @arg) {
         }
         \@all;
     };
-}, pure => 1;
+};
 
 # [SLICE, value, offset, length?] or [SLICE, { ofs, len, lim, path }]
 defop SLICE => 57, 'fn', 'VV?V?', sub ($c, $ctx, @arg) {
     return $c->fault('SLICE needs a value and offset, or an object')
         if @arg == 1 && $arg[0]{const} && ref $arg[0]{value} ne 'HASH';
+    $c->reads('node') if @arg == 1;         # the object form slices the current node
     my @get = map { $_->{code} } @arg;
     return sub {
         my $x = $_[0];
@@ -243,7 +252,7 @@ defop MKOBJ => 65, 'fn', 'V*', sub ($c, $ctx, @arg) {
 # [REDUCE, value, name, initial, array?]: fold, with TEMP name as accumulator.
 defop REDUCE => 59, 'fn', 'XXVN?', sub ($c, $ctx, $each, $name, $initial, $of) {
     is_str($name) || created_as_number($name) or return $c->fault('REDUCE accumulator name must be a string');
-    my $f = $c->value({ %$ctx, regex => 0 }, $each)->{code};
+    my $f = $c->binding([ 'node', "temp $name" ], sub { $c->value({ %$ctx, regex => 0 }, $each) })->{code};
     my ($first, $get) = ($initial->{code}, $of->{code});
     return sub {
         my $x   = $_[0];

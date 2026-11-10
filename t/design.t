@@ -98,25 +98,96 @@ subtest 'compile-time decisions' => sub {
 };
 
 subtest 'constant folding' => sub {
-    my $c   = bless { faults => [] }, 'JGraft::Compiler';
-    my $ctx = { scope => { exprs => {}, cells => {} } };
+    my $c     = bless { faults => [] }, 'JGraft::Compiler';
+    my %exprs = (limit => 100, sum => [ ADD => 1, 2 ], inc => [ ADD => ['NODE'], 1 ], big => [ NUM => 2 ],
+                 bad => [ DIV => 1, 0 ], loop => [ EXPR => 'loop' ]);
+    my $ctx    = { scope => { exprs => \%exprs, cells => {}, known => { tbl => { a => 1, b => 2 } } } };
     my $folded = sub ($s) { my $n = $c->value($ctx, $s); $n->{const} ? show($n->{value}) : 'not folded' };
 
-    is $folded->([ ADD => 1, 2 ]),                                          '3',        'arithmetic on literals';
-    is $folded->([ CONCAT => 'n=', [ CASTSTR => [ MUL => 2, [ ADD => 1, 2 ] ] ] ]), '"n=6"', 'nested';
-    is $folded->([ LESS => [ CASTDATE => '2024-01-01' ], [ CASTDATE => '2024-06-15' ] ]), 'true', 'dates compared';
-    is $folded->([ LENGTH => [ [ 1, 2, 3 ] ] ]),                            '3',        'a scalar from a literal array';
-    is $folded->([ ROUND => { at => 1 }, '2.25' ]),                         '"2.3"',    'ROUND with both operands';
+    # An expression that reads nothing from the run is evaluated when compiled.
+    my @constant = (
+        [ 'arithmetic'                   => [ ADD => 1, 2 ],                                            '3' ],
+        [ 'nested operations'            => [ CONCAT => 'n=', [ CASTSTR => [ MUL => 2, [ ADD => 1, 2 ] ] ] ], '"n=6"' ],
+        [ 'dates'                        => [ LESS => [ CASTDATE => '2024-01-01' ], [ CASTDATE => '2024-06-15' ] ], 'true' ],
+        [ 'a result that is an array'    => [ CONCAT => [ [1] ], [ [ { a => 2 } ] ] ],                  '[1,{"a":2}]' ],
+        [ 'SLICE of a string'            => [ SLICE => 'abcdef', 1, 2 ],                                '"bc"' ],
+        [ 'SLICE of an array'            => [ SLICE => [ [ 1, 2, 3 ] ], 1 ],                            '[2,3]' ],
+        [ 'MKOBJ'                        => [ MKOBJ => 'a', 1, 'b', 2 ],                                '{"a":1,"b":2}' ],
+        [ 'PROPS'                        => [ PROPS => { a => 1, b => 2 } ],                            '["a","b"]' ],
+        [ 'ROUND'                        => [ ROUND => { at => 1 }, '2.25' ],                           '"2.3"' ],
+        [ 'SPLIT'                        => [ SPLIT => ',', 'a,b' ],                                    '["a","b"]' ],
+        [ 'JOIN'                         => [ JOIN => ',', [ [ 'a', 'b' ] ] ],                          '"a,b"' ],
+        [ 'a match of two values'        => [ IS => [ [ 1, 2 ] ], [ ARRAY => 2 ] ],                     'true' ],
+        [ 'a regex on a literal'         => [ IS => 'abc', [ STR => [ SEQ => 'b', ['END'] ] ] ],        'false' ],
+        [ 'an object of constants'       => { n => [ ADD => 1, 2 ], s => [ SLICE => 'abcdef', 1, 2 ] }, '{"n":3,"s":"bc"}' ],
+        # an operation supplies what the expression inside it reads
+        [ 'MAP over a literal'           => [ MAP => [ ADD => ['NODE'], 1 ], [ [ 1, 2, 3 ] ] ],         '[2,3,4]' ],
+        [ 'MAP, by position'             => [ MAP => [ [ ['CURPROP'], ['LENGTH'] ] ], [ [ 'ab', 'c' ] ] ], '[[0,2],[1,1]]' ],
+        [ 'FILTER a literal'             => [ FILTER => [ NUM => 2 ], [ [ 1, 2, 3 ] ] ],                '[2,3]' ],
+        [ 'REDUCE a literal'             => [ REDUCE => [ ADD => [ 'TEMP', 'a' ], ['NODE'] ], 'a', 0, [ [ 1, 2, 3 ] ] ], '6' ],
+        [ 'LOCAL'                        => [ LOCAL => 'x', 2, 'y', [ ADD => [ 'TEMP', 'x' ], 1 ], [ MUL => [ 'TEMP', 'x' ], [ 'TEMP', 'y' ] ] ], '6' ],
+        [ 'CASE, on a node from LOCAL'   => [ LOCAL => undef, 5, [ CASE => [ NUM => 0, 9 ], 'small', 'big' ] ], '"small"' ],
+        [ 'one inside another'           => [ MAP => [ LOCAL => 'n', ['NODE'], [ REDUCE => [ ADD => [ 'TEMP', 'a' ], [ 'TEMP', 'n' ] ], 'a', 0, [ [ 1, 1 ] ] ] ], [ [ 1, 2 ] ] ], '[2,4]' ],
+        # named constants
+        [ 'EXPR, a literal'              => [ EXPR => 'limit' ],                                        '100' ],
+        [ 'EXPR, a constant expression'  => [ EXPR => 'sum' ],                                          '3' ],
+        [ 'EXPR that reads the node'     => [ MAP => [ EXPR => 'inc' ], [ [ 1, 2, 3 ] ] ],              '[2,3,4]' ],
+        [ 'EXPR that is a match'         => [ FILTER => [ EXPR => 'big' ], [ [ 1, 2, 3 ] ] ],           '[2,3]' ],
+        [ 'CONST'                        => [ ADD => [ 'CONST', 'tbl', 'b' ], 1 ],                      '3' ],
+        [ 'CONST, by a computed key'     => [ MAP => [ 'CONST', 'tbl', ['NODE'] ], [ [ 'a', 'b' ] ] ],  '[1,2]' ],
+    );
+    is $folded->($_->[1]), $_->[2], $_->[0] for @constant;
 
-    is $folded->([ ADD => 1, ['NODE'] ]), 'not folded', 'not when an operand reads the data';
-    is $folded->($_), 'not folded', "not when the current node is implied: $_->[0]"
-        for ['LENGTH'], [ POW => 2 ], [ LESS => 5 ], [ ROUND => 2 ], ['CASTNUM'], ['CURPROP'];
-    is $folded->([ CONCAT => [ [1] ], [ [ { a => 2 } ] ] ]), '[1,{"a":2}]', 'an array, too';
-    is $folded->([ DIV => 1, 0 ]),                'not folded', 'not what fails';
-    is $folded->([ ROUND => { as => 'STR', at => 1e7 }, '1' ]), 'not folded', 'not what costs too much';
+    my @not = (
+        [ 'an operand reads the document'    => [ ADD => 1, ['NODE'] ] ],
+        (map { [ "the current node is implied ($_->[0])" => $_ ] } ['LENGTH'], [ POW => 2 ], [ LESS => 5 ], [ ROUND => 2 ],
+            ['CASTNUM'], ['CURPROP'], [ SLICE => { ofs => 1 } ], [ CASE => [ NUM => 0, 9 ], 'small', 'big' ]),
+        [ 'a value comes from the stash'     => [ MAP => [ ADD => ['NODE'], [ 'STASH', 'n' ] ], [ [ 1, 2 ] ] ] ],
+        [ 'a TEMP name is supplied by nothing' => [ LOCAL => 'x', 2, [ MUL => [ 'TEMP', 'y' ], 3 ] ] ],
+        [ 'a LOCAL name is computed'         => [ LOCAL => ['NODE'], 2, [ 'TEMP', 'x' ] ] ],
+        [ 'a constant is not known yet'      => [ 'CONST', 'other' ] ],
+        [ 'a common expression is recursive' => [ EXPR => 'loop' ] ],
+        [ 'it fails'                         => [ DIV => 1, 0 ] ],
+        [ 'a common expression fails'        => [ EXPR => 'bad' ] ],
+        [ 'it costs too much'                => [ ROUND => { as => 'STR', at => 1e7 }, '1' ] ],
+        [ 'a SPLIT hides separators'         => [ SPLIT => { sep => [ ANY => ',', ';' ], default => ',' }, 'a,b;c' ] ],
+    );
+    is $folded->($_->[1]), 'not folded', "but not when $_->[0]" for @not;
 
-    ok exists $c->match($ctx, { a => [ CONCAT => 'a', 'b' ] })->{lit}, 'a folded value is a literal to a pattern';
+    ok exists $c->match($ctx, { a => [ CONCAT => 'a', [ CASTSTR => [ EXPR => 'limit' ] ] ] })->{lit},
+        'a folded value is a literal to a pattern';
+    ok !$c->match($ctx, [ ANY => [ 'CONST', 'tbl', 'a' ], [ EXPR => 'sum' ] ])->{throws}, 'and so are named constants';
     ok !@{ $c->{faults} }, 'none of which is a fault';
+
+    # What a run sees is the same either way.
+    my %same = (
+        'a constant redefined by a computed one, further in' => [
+            [ JGRAFT => { const => [ n => 1 ] },
+                [ JGRAFT => { const => [ n => [ 'NODE', 'v' ] ] }, [ COPY => [ ADD => [ 'CONST', 'n' ], 1 ], 'inner' ] ],
+                [ COPY => [ ADD => [ 'CONST', 'n' ], 1 ], 'outer' ] ],
+            { v => 10 }, '{"inner":11,"outer":2,"v":10}' ],
+        'a constant defined from an earlier one, and then again' => [
+            [ JGRAFT => { const => [ a => 2, b => [ MUL => [ 'CONST', 'a' ], 3 ], a => 10 ] },
+                [ COPY => [ [ [ 'CONST', 'a' ], [ 'CONST', 'b' ] ] ], ['NODE'] ] ], 0, '[10,6]' ],
+        'the whole CONST namespace' => [
+            [ JGRAFT => { const => [ a => 1, b => ['NODE'] ] }, [ COPY => ['CONST'], ['NODE'] ] ], 7, '{"a":1,"b":7}' ],
+        'a constant used as a pattern' => [
+            [ JGRAFT => { const => [ want => { a => [ [ 1, 2 ] ] } ] },
+                [ MATCH => [ IS => [ 'CONST', 'want' ] ] ], [ COPY => 'yes', ['NODE'] ] ], { a => [ 1, 2 ] }, '"yes"' ],
+        'a common expression that recurses' => [
+            [ JGRAFT => { expr => [ down => [ CASE => 0, [ [] ],
+                    [ CONCAT => [ [ ['NODE'] ] ], [ LOCAL => undef, [ SUB => ['NODE'], 1 ], [ EXPR => 'down' ] ] ] ] ] },
+                [ COPY => [ LOCAL => undef, 3, [ EXPR => 'down' ] ], ['NODE'] ] ], 0, '[3,2,1]' ],
+        'a failing common expression that is never reached' => [
+            [ JGRAFT => { expr => [ bad => [ DIV => 1, 0 ] ] },
+                [ COPY => [ CASE => ['NUM'], 'n', [ EXPR => 'bad' ] ], ['NODE'] ] ], 3, '"n"' ],
+        'TEMP supplied to the run' => [
+            [ JGRAFT => {}, [ COPY => [ ADD => [ 'TEMP', 'ext' ], 1 ], ['NODE'] ] ], 0, '42' ],
+    );
+    for my $name (sort keys %same) {
+        my ($struct, $in, $want) = @{ $same{$name} };
+        is show(JGraft->new($struct)->apply($in, temp => { ext => 41 })), $want, "a run is unaffected: $name";
+    }
 
     my $r = graft([ COPY => [ DIV => 1, 0 ], 'a' ])->run({});
     is $r->error->code, 'INVALID_TARGET', 'a failure is raised by the run that reaches it';

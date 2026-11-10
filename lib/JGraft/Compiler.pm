@@ -29,6 +29,9 @@ package JGraft::Compiler;
 # HAS), regex (matching characters of a string), cap (captures observable),
 # seq (inside a sequence), top (directly an item of an array pattern), and
 # v (value context, where only scope and regex mean anything).
+#
+# A scope is { exprs, cells, known }: the common expressions as written, the
+# compiled copies of them, and the values of constants that are known now.
 
 use v5.36;
 use builtin qw(created_as_number is_bool);
@@ -50,9 +53,10 @@ our (%EXPR, %ACTION);    # operation tables, keyed by both name and ID
 # with ? * + and (..) meaning what they do in a regex.  The builder receives
 # the compiler, the context and the compiled arguments, and returns a node or
 # just its code.  Flags: `safe` (cannot raise a recoverable error of its own),
-# `seq` (the builder handles sequence context itself), `pure` (the result
-# depends on nothing but the arguments, so constants can be folded), `dated`
-# (the result may hold a date that did not come from a V or N argument).
+# `seq` (the builder handles sequence context itself), `dated` (the result may
+# hold a date that did not come from a V or N argument), `reads` (something it
+# reads besides its arguments: see below), `blind` (a match expression that
+# does not itself look at the current node).
 sub defop ($name, $id, $kind, $args, $build, %flag) {
     my $table = $kind eq 'action' ? \%ACTION : \%EXPR;
     $table->{$name} = $table->{$id} = { name => $name, kind => $kind, args => $args, build => $build, %flag };
@@ -100,7 +104,7 @@ sub compile ($class, $struct, %opt) {
     my $c    = bless { max_version => 1, %opt, faults => [], dates => 0 }, $class;
     my $root = row(\%ACTION, $struct);
     my $code = $root && $root->{name} eq 'JGRAFT'
-        ? $c->action({ scope => { exprs => {}, cells => {} } }, $struct)
+        ? $c->action({ scope => { exprs => {}, cells => {}, known => {} } }, $struct)
         : $c->fault('a graft must be a JGRAFT action')->{code};
     # `dates` is by reference: parts of a graft are compiled when first used
     return ($code, $c->{faults}, \$c->{dates});
@@ -145,6 +149,8 @@ sub build ($c, $ctx, $row, $s) {
     my @raw   = @$s[ 1 .. $#$s ];
     my $kinds = fit($row->{args}, scalar @raw)
         // return $c->fault("wrong number of arguments to $row->{name}");
+    $c->reads('node') if $kinds =~ /n/ || $row->{kind} eq 'match' && !$row->{blind};
+    $c->reads($row->{reads}) if $row->{reads};
     my (@arg, @kid);
     for my $k (split //, $kinds) {
         push @arg, $k eq 'n'    ? $c->cur
@@ -157,22 +163,49 @@ sub build ($c, $ctx, $row, $s) {
     }
     my $n = $row->{build}->($c, $ctx, @arg);
     return $n unless ref $n eq 'CODE';      # a builder that returns a whole node sets its own flags
-    my $known = $row->{pure} && !(grep { !$_->{const} } @kid) && fold($n);
-    return $known || {
+    return {
         code   => $n,
         throws => !$row->{safe} || !!(grep { $_->{throws} } @kid),
         dated  => $row->{dated} || !!(grep { $_->{dated} } @kid),
     };
 }
 
-# Constant folding: evaluate now what depends on nothing but the graft, and
-# return a constant node.  Returns nothing for whatever fails or costs too
-# much, which will then behave as it should when a run reaches it.
-sub fold ($code) {
+#---------------------------------------------------------------------------
+# Constant folding
+#
+# While an expression is compiled, note is taken of what it will read when it
+# runs: `node` (the current node), `temp NAME` (a property of TEMP), or `*`
+# (anything that cannot be known until the graft runs).  An operation that
+# supplies one of these to an expression inside it compiles that expression
+# with `binding`, and the name goes no further: [MAP, f, array] supplies the
+# node that f reads.  An expression left reading nothing is a constant,
+# however it is built, and `value` evaluates it there and then.
+
+sub reads ($c, @names) {
+    my $noted = $c->{reads} or return;
+    @$noted{@names} = ();
+}
+
+# Compile something, returning it along with the names it read (as the keys
+# of a hash), other than those in @bound.
+sub reading ($c, $compile, @bound) {
+    my %read;
+    my $n = do { local $c->{reads} = \%read; $compile->() };
+    delete @read{@bound};
+    $c->reads(keys %read);
+    return ($n, \%read);
+}
+
+sub binding ($c, $bound, $compile) { ($c->reading($compile, @$bound))[0] }
+
+# Evaluate now, and return a constant node.  Returns nothing for whatever
+# fails or costs too much, which will then behave as it should when a run
+# reaches it; and for a SPLIT, whose result is more than its value.
+sub fold ($ctx, $code) {
     my $x = JGraft::Exec->new(undef, limits => { ops => 10_000, mem => 65_536 });
-    $x->{quiet} = 1;
+    @$x{qw(quiet const)} = (1, $ctx->{scope}{known} // {});
     my $v;
-    return eval { $v = $code->($x, $MISSING, undef, undef); 1 } ? konst($v) : undef;
+    return eval { $v = $code->($x, $MISSING, undef, undef); 1 } && !%{ $x->{side} } ? konst($v) : undef;
 }
 
 sub action ($c, $ctx, $s) {
@@ -185,10 +218,16 @@ sub action ($c, $ctx, $s) {
 # Value context
 
 sub value ($c, $ctx, $s) {
+    return konst($s) if ref $s ne 'ARRAY' && ref $s ne 'HASH';
     $ctx = { scope => $ctx->{scope}, regex => $ctx->{regex}, v => 1 } unless $ctx->{v};
+    my ($n, $read) = $c->reading(sub { $c->_value($ctx, $s) });
+    return $n if $n->{const} || $n->{poison} || %$read;
+    return fold($ctx, $n->{code}) // $n;
+}
+
+sub _value ($c, $ctx, $s) {
     my $r = ref $s;
-    return $c->construct($ctx, $s) if $r eq 'HASH' || $r eq 'ARRAY' && @$s == 1 && ref $s->[0] eq 'ARRAY';
-    return konst($s) if $r ne 'ARRAY';
+    return $c->construct($ctx, $s) if $r eq 'HASH' || @$s == 1 && ref $s->[0] eq 'ARRAY';
     my $row = row(\%EXPR, $s)
         or return $c->fault(@$s ? 'unknown expression' : 'an empty array is not an expression');
     return $c->reader($ctx, $s)      if $row->{path};
@@ -230,18 +269,21 @@ sub cur ($c) {
 my %NS = (NODE => 'node', CONST => 'const', STASH => 'stash', TEMP => 'temp', CAP => 'cap');
 
 # Path context: { ns, keys }, where keys->(env) yields the validated keys.
-# $half permits a final half-index (MOVE destinations).
+# `fixed` is the keys themselves if all are literal, and `head` the first of
+# them if that one is.  $half permits a final half-index (MOVE destinations).
 sub path ($c, $ctx, $s, $half = 0) {
     $s = [ NODE => $s ] unless ref $s eq 'ARRAY' || ref $s eq 'HASH';
     my $row = row(\%EXPR, $s);
     my $ns  = $row && $NS{ $row->{name} } or return $c->fault('not a path');
     my @kid = map { $c->value($ctx, $_) } @$s[ 1 .. $#$s ];
-    if (!grep { !$_->{const} } @kid) {      # all literal: checked now, and `fixed`
+    if (!grep { !$_->{const} } @kid) {      # all literal: checked now
         my $k = path_keys($ns, $half, map { $_->{value} } @kid);
-        return ref $k ? { ns => $ns, keys => sub { @$k }, fixed => $k, throws => 1 } : $c->fault($k);
+        return ref $k ? { ns => $ns, keys => sub { @$k }, fixed => $k, head => $k->[0], throws => 1 } : $c->fault($k);
     }
     my @code = map { $_->{code} } @kid;
-    return { ns => $ns, throws => 1, keys => sub {
+    my $first = $kid[0]{const} ? $kid[0]{value} : undef;
+    my $head  = is_str($first) || created_as_number($first) ? "$first" : undef;
+    return { ns => $ns, head => $head, throws => 1, keys => sub {
         my $k = path_keys($ns, $half, map { $_->(@_) } @code);
         ref $k ? @$k : $_[0]->fail_operand($k);
     } };
@@ -269,6 +311,14 @@ sub path_keys ($ns, $half, @element) {
 sub reader ($c, $ctx, $s) {
     my $p = $c->path($ctx, $s);
     my ($ns, $keys) = @$p{qw(ns keys)};
+    # What it reads can be named if the path begins with a literal; and a
+    # constant whose value is already known is not read from the run at all.
+    my $first = $p->{head};
+    $c->reads($ns eq 'node' ? 'node'
+            : !defined $first ? '*'
+            : $ns eq 'temp' ? "temp $first"
+            : $ns eq 'const' && exists $ctx->{scope}{known}{$first} ? ()
+            : '*');
     return {
         %$p,
         dated => $ns eq 'stash' || $ns eq 'temp' || $ns eq 'const',     # where a date can be kept
@@ -302,6 +352,7 @@ sub _match ($c, $ctx, $s) {
     }
     return $c->matcher($ctx, konst($s)) if ref $s ne 'ARRAY' && ref $s ne 'HASH';
     return $c->fault('only characters can be matched in a string') if $ctx->{regex};
+    $c->reads('node');
     return $c->object($one, $s) if ref $s eq 'HASH';
     return $c->array($one, $s->[0]) if @$s == 1 && ref $s->[0] eq 'ARRAY';
     return $c->fault(@$s ? 'unknown expression' : 'an empty array is not an expression');
@@ -312,6 +363,7 @@ sub _match ($c, $ctx, $s) {
 # nodes collapse into one comparison.
 sub matcher ($c, $ctx, $v) {
     return $v if $v->{poison};
+    $c->reads('node');
     return $c->char_matcher($ctx, $v) if $ctx->{regex};
     my ($exact, $get) = ($ctx->{exact}, $v->{code});
     return { throws => 1, code => sub { match_lit($_[1], &$get, $exact) } } unless $v->{const};
@@ -518,13 +570,28 @@ defop EXPR => -5, 'ref', 'V', sub ($c, $ctx, $name) {
     };
     my $fixed = $name->{const} && ($cell->($name->{value}) // return $c->fault('unknown common expression'));
     my $which = $c->here($ctx, $name->{code});
-    # A definition is a value unless it is itself a match expression.
+    # A definition is a value unless it is itself a match expression.  One
+    # that is a constant can stand in place of every reference to it.
     my $compile = sub ($def) {
-        return $c->value($ctx, $def) if $ctx->{v};
-        my $row = row(\%EXPR, $def);
-        return $row && ($row->{kind} eq 'match' || $row->{name} eq 'EXPR')
-            ? $c->match($ctx, $def) : $c->as_seq($ctx, $c->matcher($ctx, $c->value($ctx, $def)));
+        my $row     = row(\%EXPR, $def);
+        my $matches = !$ctx->{v} && $row && ($row->{kind} eq 'match' || $row->{name} eq 'EXPR');
+        return $c->match($ctx, $def) if $matches;
+        my $v = $c->value($ctx, $def);
+        my $n = $ctx->{v} ? $v : $c->as_seq($ctx, $c->matcher($ctx, $v));
+        return { %$n, inline => $v->{const} };
     };
+    # A reference by a literal name is compiled now (unless it is to the very
+    # definition being compiled), so that what it reads is known here.
+    if ($fixed) {
+        if (!$fixed->{node} && !$fixed->{busy}) {
+            local $fixed->{busy} = 1;
+            ($fixed->{node}, my $read) = $c->reading(sub { $compile->($fixed->{def}) });
+            $fixed->{reads} = [ keys %$read ];
+        }
+        $c->reads($fixed->{reads} ? @{ $fixed->{reads} } : '*');
+        return { %{ $fixed->{node} } } if $fixed->{node} && $fixed->{node}{inline};
+    }
+    else { $c->reads('*') }
     # a literal reference to SEQMAX / SEQMIN keeps the length preference visible
     my $pref = $fixed && $ctx->{cap} && $ctx->{top}
         ? { SEQMAX => 'max', SEQMIN => 'min' }->{ $c->peek($ctx, $fixed->{def}) // '' } : undef;

@@ -28,12 +28,22 @@ defop JGRAFT => -1, 'action', 'XX*', sub ($c, $ctx, $meta, @body) {
             push @{ $declared{$which} }, [ "$name", $list->[ $i + 1 ] ];
         }
     }
-    # Constants are evaluated on entry, each seeing the ones before it.
-    my @const = map { [ $_->[0], $c->value($ctx, $_->[1])->{code} ] } @{ $declared{const} // [] };
+    # Constants are evaluated on entry, each seeing the ones before it.  A
+    # value that is already known is recorded in the scope, so that what
+    # follows can use it as a literal; one that is not hides any of that name.
+    my $scope = $ctx->{scope};
+    my @const;
+    for (@{ $declared{const} // [] }) {
+        my ($name, $def) = @$_;
+        my $value = $c->value({ scope => $scope }, $def);
+        my %known = %{ $scope->{known} // {} };
+        $value->{const} ? ($known{$name} = $value->{value}) : delete $known{$name};
+        $scope = { %$scope, cells => {}, known => \%known };
+        push @const, [ $name, $value->{code} ];
+    }
     # Common expressions are kept as written and compiled where they are used.
-    my $scope = $declared{expr}
-        ? { exprs => { %{ $ctx->{scope}{exprs} }, map { @$_ } @{ $declared{expr} } }, cells => {} }
-        : $ctx->{scope};
+    $scope = { %$scope, cells => {}, exprs => { %{ $scope->{exprs} }, map { @$_ } @{ $declared{expr} } } }
+        if $declared{expr};
     my @action = map { $c->action({ scope => $scope }, $_) } @body;
     return sub ($x) {
         local $x->{const} = $x->{const};
