@@ -56,32 +56,28 @@ sub defop ($name, $id, $kind, $args, $build, %flag) {
     $table->{$name} = $table->{$id} = { name => $name, kind => $kind, args => $args, build => $build, %flag };
 }
 
-# A node for a value that is known now.  A scalar is simply handed out.  An
-# array or object is copied for each evaluation, so that no result shares
-# structure with the graft; and a run is told of any dates it is given.
+# A node for a value that is known now.  Every evaluation, in every run, is
+# handed the same value, so it must never change; and a run is told of any
+# dates it is given.
 sub konst ($v) {
-    my %tally = (dates => 0, objects => 0, widest => 0);
-    my $copy  = copier($v, \%tally);
-    my ($dates, $objects, $widest) = @tally{qw(dates objects widest)};
-    my $code  = $copy  ? sub { my $x = $_[0]; $x->{dates} += $dates; $x->charge_obj($widest, $objects); $copy->() }
-              : $dates ? sub { $_[0]{dates}++; $v }
-              :          sub { $v };
-    return { code => $code, const => 1, value => $v };
+    my $dates = freeze($v);
+    return { const => 1, value => $v, code => $dates ? sub { $_[0]{dates} += $dates; $v } : sub { $v } };
 }
 
-# Code that makes a copy of constant $v: new arrays and objects around the
-# same scalars.  (Nothing, if $v is a scalar.)  Counts what a copy will hold.
-sub copier ($v, $tally) {
-    my $array = ref $v eq 'ARRAY';
-    $tally->{dates}++ if ref $v eq 'JGraft::Date';
-    return undef unless $array || ref $v eq 'HASH';
-    my @key  = $array ? 0 .. $#$v : keys %$v;
-    my @deep = grep { $_->[1] } map { [ $_, copier($array ? $v->[$_] : $v->{$_}, $tally) ] } @key;
-    $tally->{objects}++;
-    $tally->{widest} = @key if @key > $tally->{widest};
-    return $array
-        ? sub { my @new = @$v; $new[ $_->[0] ] = $_->[1]->() for @deep; \@new }
-        : sub { my %new = %$v; $new{ $_->[0] } = $_->[1]->() for @deep; \%new };
+# Protect a constant from change as far as Perl allows, and count the dates
+# in it.  Arrays, their elements and the values of objects become read-only.
+# An object cannot be kept from gaining or losing properties without also
+# making it an error to read one it lacks, so that is left to the caller.
+sub freeze ($v) {
+    my $r = ref $v;
+    return $r eq 'JGraft::Date' ? 1 : 0 unless $r eq 'ARRAY' || $r eq 'HASH';
+    Internals::SvREADONLY(@$v, 1) if $r eq 'ARRAY';
+    my $dates = 0;
+    for ($r eq 'ARRAY' ? @$v : values %$v) {
+        $dates += freeze($_);
+        Internals::SvREADONLY($_, 1);
+    }
+    return $dates;
 }
 
 # A node for $code whose flags are inherited from the nodes it calls.

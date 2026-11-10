@@ -21,7 +21,8 @@ sub struct ($self) { $self->{struct} }
 sub faults ($self) { @{ $self->{faults} } }
 
 # Apply the graft.  Never dies for JGraft errors; returns a JGraft::Result.
-# The input is not modified, and the output shares its untouched subtrees.
+# The input is not modified.  The output shares structure with it and with
+# the graft, and is to be treated as read-only (see the documentation below).
 sub run ($self, $input, %opt) {
     my $x = JGraft::Exec->new($input, %opt);
     my $error;
@@ -63,9 +64,39 @@ JGraft - apply JGraft edits to trees of JSON-like data
     my $result = $graft->run($input, limits => { ops => 1e6, depth => 100 });
     say $result->ok ? 'applied' : $result->error;
 
-A compiled graft can be applied any number of times.  The input is never
-modified; the output shares with it whatever the graft left untouched, so
-treat one as read-only for as long as you keep the other.
+A compiled graft can be applied any number of times, and never modifies its
+input.
+
+=head1 THE OUTPUT IS READ-ONLY
+
+Applying a graft copies only what it must.  The output shares with the input
+everything the graft left untouched, and shares with the graft itself the
+arrays and objects that the graft supplied: those written in it, and those
+computed from them when it was compiled.  The same is true of the data in
+C<logs>.
+
+So treat the output as read-only.  To change it, change a deep copy
+(C<Storable::dclone>, or encode and decode it as JSON).
+
+Perl enforces part of this.  In data that came from the graft, arrays, their
+elements, and the values of an object's properties are marked read-only, and
+changing one dies with C<Modification of a read-only value attempted>.
+
+The rest it cannot enforce, and getting it wrong fails silently:
+
+=over
+
+=item *
+
+Adding or deleting a property of an object that came from the graft changes
+what the graft produces from then on.  (Perl can lock a hash's keys, but then
+reading a key it lacks is an error too.)
+
+=item *
+
+Changing anything shared with the input changes the input.
+
+=back
 
 =head1 OPTIONS
 

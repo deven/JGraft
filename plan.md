@@ -918,12 +918,16 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   reaches it. Operands that default to the current node are declared in the
   table (argument letter `N`), which is how the compiler knows that
   `[POW, 2]` is not constant.
-- **A constant array or object is copied, not shared.** Its value is known at
-  compile time — whether written literally or folded — but each evaluation
-  receives its own copy, made by a closure compiled for that value's shape.
-  Sharing would let a caller who edits one run's output corrupt the compiled
-  graft. A constant that contains dates tells the run so when it is used,
-  because dates are exported only from runs that hold some.
+- **Constants are shared, and the output is documented as read-only.** A
+  value known at compile time — written literally or folded — is handed to
+  every evaluation as is, so a literal costs nothing however large it is.
+  The price is that a caller who edits the output could alter the compiled
+  graft. Where Perl can prevent that cleanly it does: arrays from the graft,
+  their elements and the values of objects are marked read-only. An object's
+  set of keys is not protected, because locking a Perl hash also makes it an
+  error to read a key it lacks; that case is left to the documentation in
+  `JGraft.pm`. A constant that contains dates tells the run so when it is
+  used, because dates are exported only from runs that hold some.
 - **`depth` counts EXPR nesting only** (§9). Static nesting is bounded by the
   graft, so there is no per-node depth and no per-action check.
 - **Dates are exported once, when the output is produced** (§7.2), not at each

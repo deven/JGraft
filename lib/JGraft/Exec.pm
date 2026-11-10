@@ -77,9 +77,9 @@ sub charge ($x, $ops, $mem = 0) {
     ($x->{mem} -= $mem) >= 0 or $x->limit('mem') if $mem;
 }
 
-# Account for $count new containers, of at most $props members each.
-sub charge_obj ($x, $props, $count = 1) {
-    ($x->{new_obj} -= $count) >= 0  or $x->limit('new_obj');
+# Account for a new container with $props members.
+sub charge_obj ($x, $props) {
+    --$x->{new_obj} >= 0            or $x->limit('new_obj');
     $props <= $x->{prop_per_obj}    or $x->limit('prop_per_obj');
 }
 

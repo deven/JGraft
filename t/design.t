@@ -7,6 +7,7 @@ use FindBin;
 use lib "$FindBin::Bin/../lib";
 use Test::More;
 use JSON::PP;
+use Storable ();
 use JGraft;
 use JGraft::Compiler;
 
@@ -27,7 +28,7 @@ subtest 'the examples in the README' => sub {
     is show([ map { $_->{id} } @{ $move->apply(\@records) } ]), '["efgh","ijkl","abcd","mnop"]', 'reordering records';
 };
 
-subtest 'results share nothing that can change' => sub {
+subtest 'the input is never changed, nor one result by another' => sub {
     my $in  = { a => { n => 1 }, list => [ { n => 1 }, { n => 2 } ] };
     my $was = show($in);
     my $out = graft(
@@ -46,10 +47,32 @@ subtest 'results share nothing that can change' => sub {
     is show($out->{kept}),   '[{"n":6},{"n":8}]', 'a filtered copy is independent';
     is show($out->{mapped}), '[{"n":7},{"n":5}]', 'a mapped copy is independent';
 
-    my $literal = graft([ COPY => { x => [ [ 1, 2 ] ] }, 'made' ]);
-    my $first   = $literal->apply({});
-    push @{ $first->{made}{x} }, 3;
-    is show($literal->apply({})), '{"made":{"x":[1,2]}}', 'a literal in the graft is built anew for each run';
+};
+
+subtest 'constants are shared, and protected where Perl can protect them' => sub {
+    my $struct = [ JGRAFT => { v => 1 },
+        [ COPY => { list => [ [ 1, { n => 2 } ] ], tag => 'x' }, 'made', [ CONCAT => [ [1] ], [ [2] ] ], 'folded' ] ];
+    my $g = JGraft->new($struct);
+    my ($one, $two) = map { $g->apply({}) } 1, 2;
+    my $was = show($one);
+    ok $one->{made} == $two->{made}, 'a literal is one value, however often it is produced';
+
+    my $refused = sub ($what, $edit) { ok !eval { $edit->(); 1 } && $@ =~ /read-only/, "$what is refused" };
+    $refused->('adding to its array',                  sub { push @{ $one->{made}{list} }, 3 });
+    $refused->('replacing an element',                 sub { $one->{made}{list}[0] = 9 });
+    $refused->('replacing a property',                 sub { $one->{made}{tag} = 'y' });
+    $refused->('a change at any depth',                sub { $one->{made}{list}[1]{n} = 9 });
+    $refused->('a change to a folded value',           sub { push @{ $one->{folded} }, 3 });
+
+    ok eval { $one->{mine} = 1; push @{ $struct->[2][1]{list}[0] }, 3; 1 },
+        'what a run builds, and the structure the graft was compiled from, stay writable';
+    my $copy = Storable::dclone($two);
+    ok eval { push @{ $copy->{made}{list} }, 3; $copy->{made}{tag} = 'y'; 1 }, 'and so does a deep copy of a result';
+    is show($g->apply({})), $was, 'and none of it reaches a later run';
+
+    my $edit = graft([ COPY => { x => [ [ 1, 2 ] ] }, 'made', 9, [ 'NODE', 'made', 'x', 0 ] ]);
+    is show([ map { $edit->apply({}) } 1, 2 ]), '[{"made":{"x":[9,2]}},{"made":{"x":[9,2]}}]',
+        'a graft can still change what it made: the engine copies first';
 };
 
 subtest 'repeated edits happen in place' => sub {
@@ -105,14 +128,6 @@ subtest 'constant folding' => sub {
         [ COPY => [ 'STASH', 'd', 'month' ], 'm' ], [ COPY => { in => [ [ [ CASTDATE => '2024-03-01' ] ] ] }, 'deep' ]);
     is show($date->apply({})), '{"d":"2024-02-29","deep":{"in":["2024-03-01"]},"m":2}',
         'a folded date is still a date inside, and a string outside';
-
-    # A folded array or object is a value each run copies, never one it shares.
-    my $list = graft([ COPY => [ CONCAT => [ [ { n => 1 } ] ], [ [2] ] ], 'a', ['NODE', 'a'], 'b' ]);
-    my $one  = $list->apply({});
-    push @{ $one->{a} }, 3;
-    $one->{a}[0]{n} = 9;
-    is show($list->apply({})), '{"a":[{"n":1},2],"b":[{"n":1},2]}', 'changing one result changes no later one';
-    is $list->run({}, limits => { new_obj => 1 })->error->code, 'RESOURCE_LIMIT', 'and the copy counts as new objects';
 };
 
 subtest 'the public interface' => sub {
