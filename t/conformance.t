@@ -2,7 +2,9 @@
 
 # Runs every case in conformance/*.json, once with eager validation of the
 # graft and once with lazy.  Each run, whether it succeeds or fails, must
-# also be undone by its own undo graft.
+# also be undone by its own undo graft; and must come out the same when the
+# document is one that JGraft::JSON read from a text, and be written back
+# as text that says what the run left.
 #
 #   JGRAFT_FILES=regex   only run matching files
 #   JGRAFT_MODE=1|0      only run strict (1) or lazy (0)
@@ -16,6 +18,7 @@ use lib "$FindBin::Bin/../lib";
 use Test::More;
 use JSON::PP;
 use JGraft;
+use JGraft::JSON;
 use JGraft::Util qw(match_lit);
 
 my $only = $ENV{JGRAFT_FILES};
@@ -83,6 +86,20 @@ sub check ($t, $strict) {
     if ($t->{logs} && $result) {
         same($result->logs, $t->{logs})
             or return 'logs ' . show($result->logs) . ', expected ' . show($t->{logs});
+    }
+    # The same graft on the same document, read from a text.
+    if ($result) {
+        my $doc   = JGraft::JSON->parse($json->encode($t->{input}));
+        my $again = eval { JGraft->new($t->{jgraft}, strict => $strict, limits => $t->{limits} // {})->run($doc->data, limits => $t->{limits} // {}) }
+            or return "from a text, it died: $@";
+        my ($left, $now) = map { $_->ok ? $_->output : $_->partial } $result, $again;
+        return 'from a text, ' . ($again->ok ? 'it succeeded' : 'it failed with ' . $again->error) . ', but not otherwise'
+            if !$again->ok != !$result->ok || !$again->ok && $again->error->code ne $code;
+        return 'from a text, it leaves ' . show($now) . ' and not ' . show($left) unless same($now, $left);
+        my $text = eval { $doc->write($now) } // return "what it left cannot be written: $@";
+        my $read = eval { JGraft::JSON->parse($text)->data };
+        return "what was written cannot be read: $@      text: $text" if $@;
+        return "what was written, $text, is not what it left, " . show($now) unless same($read, $now);
     }
     # Whatever happened, undoing it gives back the input.
     if ($result) {

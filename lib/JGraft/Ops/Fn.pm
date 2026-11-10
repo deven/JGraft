@@ -113,6 +113,7 @@ my $elements = sub ($x, $v, $who) {
 # @from, and give it their SPLIT metadata.
 my $made = sub ($x, $new, $a, @from) {
     $x->charge_obj;
+    if ($x->{src} and my $tok = JGraft::Source::tokens($a)) { JGraft::Source::made($new, [ @$tok[@from] ]) }
     my $split = $x->split_of($a) or return $new;
     $x->carry($new, $split->{origin}, @{ $split->{m} }[@from]);
     return $new;
@@ -156,6 +157,7 @@ defop CONCAT => 58, 'fn', 'V+', sub ($c, $ctx, @arg) {
         grep { ref ne 'ARRAY' } @v and $x->fail_target('CONCAT needs strings or arrays');
         $x->charge_obj;
         my @all = map { @{ $elements->($x, $_, 'CONCAT') } } @v;
+        JGraft::Source::made(\@all, [ map { my $tok = JGraft::Source::tokens($_) // []; @$tok[ 0 .. $#$_ ] } @v ]) if $x->{src};
         # metadata survives from the first SPLIT represented, and from any others like it
         if (my ($origin) = map { $_->{origin} } grep { $_ } map { $x->split_of($_) } @v) {
             $x->carry(\@all, $origin, map {
@@ -245,15 +247,15 @@ defop MKOBJ => 65, 'fn', 'V*', sub ($c, $ctx, @arg) {
                  ? (@{ $v[0] } == @{ $v[1] } ? map { $v[0][$_], $v[1][$_] } 0 .. $#{ $v[0] } : $bad->())
                  : @v;
         $x->charge(scalar @pair);
-        my (%object, $size);
+        my ($object, $size) = ($x->object, 16);
         while (my ($name, $value) = splice @pair, 0, 2) {
-            is_str($name) && !exists $object{$name} or $bad->();
-            $object{$name} = $value;
+            is_str($name) && !exists $object->{$name} or $bad->();
+            $object->{$name} = $value;
             $size += 16 + length $name;
         }
-        $x->charge(0, 16 + ($size // 0));
-        $x->charge_obj(scalar keys %object);
-        \%object;
+        $x->charge(0, $size);
+        $x->charge_obj(scalar %$object);
+        $object;
     };
 };
 

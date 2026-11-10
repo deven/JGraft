@@ -1194,9 +1194,66 @@ Each of these made the code smaller; none changes behaviour the suite can see.
 32. **CASTNUM must not turn a nonzero string into 0** (`"1e-400"`); 2463–2464
     speaks only of numbers "outside the range".
 
+33. **Nothing can place a property within an object.** An array has
+    half-indices (1213–1222); an object has no counterpart, so a graft cannot
+    say that a new property belongs after a given one. Where the order of
+    properties is kept (as `JGraft::JSON` keeps it), a new property can only
+    go last. → If order is ever to matter, give MOVE and COPY a way to name
+    the neighbour.
+
+### JSON kept as it was read (`JGraft::JSON`)
+
+Not in the plan. The engine works on decoded data, and a decoder forgets
+most of what a text says: the order of properties, how numbers and strings
+were spelled, white space, bytes that are not UTF-8. `JGraft::JSON` reads a
+text so that the result of a graft can be written back as that text,
+changed only where the data changed.
+
+- **Objects are ordered hashes** (`JGraft::Ordered`, a tie of some twenty
+  lines; the suggestion and the measurement that settled it are the
+  user's). Order is then a property of the data: setting, adding and
+  deleting keep it with no help from the engine, and any encoder sees it.
+  Reads cost 1.4 to 1.7 times a plain hash's, only for documents read this
+  way. The engine chooses the kind of hash in the four places it makes one
+  (the copy before a write, a container made along a path, an object written
+  with computed members, MKOBJ), and `Ordered::place` lets a MOVE within one
+  object leave the new name where the old one was.
+- **Where each value came from is kept beside its container**
+  (`JGraft::Source`): a "token" for each slot, `[ start, end, \$text ]`. The
+  reader records them; the engine copies them when it copies a container,
+  keeps an array's list in step through SPLICE and MOVE, and hands a token on
+  with a value that is moved or copied from a path (the same road SPLIT
+  metadata travels: `take`/`give`, the `tok` closure of a reference beside
+  its `meta`, and the array functions through `$made`). A tie cannot do
+  this: a tie belongs to a variable, and a value that moves is a copy. Nor
+  can a dualvar, which Perl cannot tell from a string once used as a number.
+- **A token is a hint, never trusted.** The writer uses one only if it
+  still says what the value is (it reads the token again and compares), so
+  a slip in keeping tokens in step can cost a spelling but cannot write a
+  wrong value. That is also what lets a value written over with its equal
+  keep its spelling, and a changed string be compared with the token that
+  was there.
+- **Writing is patching.** A container that was read and not changed is
+  copied out whole. One that was copied and changed is written over the
+  text of the one it came from: members that are still neighbours keep what
+  was between them, a property keeps its key as written, and what is new is
+  joined as the text joins things. A changed string is compared with what
+  it was by the same line comparison that undo uses, then by common ends,
+  then (if short) by characters, and the unchanged runs are copied from the
+  old token byte for byte.
+- **Checked by** every conformance case run again on a document read from
+  text (same outcome, and what is written reads back as what the run left),
+  20,000 random texts in random layouts written back identically, and some
+  10,000 random edits of them.
+- **Not done:** the spelling of a literal written in the graft is not
+  carried into the output (the compiler is handed values, not where they
+  were written); new values are written compactly, not indented to match;
+  the document's own root has no token of its own, so a scalar moved to
+  become the whole document is written plainly.
+
 ### For anyone running the suite from another JSON library
 
 Two things in `conformance/*.json` trip decoders: lone surrogate escapes
 (`JSON::PP` and `Cpanel::JSON::XS` both refuse them), and integers longer than
 the machine word (`JSON::PP` returns them as strings). `t/conformance.t` works
-around both; see `load`.
+around both; see `load`. `JGraft::JSON` reads both as they are.

@@ -57,7 +57,7 @@ sub match_lit ($v, $p, $exact, $x = undef) {
         return 1;
     }
     if ($t == T_OBJ) {
-        return 0 if $exact && keys %$v != keys %$p;
+        return 0 if $exact && scalar(%$v) != scalar(%$p);
         $x->charge(scalar keys %$p) if $x;
         exists $v->{$_} && match_lit($v->{$_}, $p->{$_}, $exact, $x) or return 0 for keys %$p;
         return 1;
@@ -68,7 +68,7 @@ sub match_lit ($v, $p, $exact, $x = undef) {
 # Shallow size estimate, in bytes, for the `mem` limit.
 sub sizeof ($v) {
     my $r = ref $v;
-    return $r eq 'ARRAY' ? 16 + 8 * @$v : $r eq 'HASH' ? 16 + 16 * keys %$v
+    return $r eq 'ARRAY' ? 16 + 8 * @$v : $r eq 'HASH' ? 16 + 16 * scalar(%$v)
          : 16 + (defined $v && !$r ? length $v : 0);
 }
 

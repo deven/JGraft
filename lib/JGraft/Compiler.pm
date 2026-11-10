@@ -41,6 +41,8 @@ use builtin qw(created_as_number is_bool refaddr);
 no warnings qw(experimental::builtin recursion);
 use JGraft::Util;
 use JGraft::Error;
+use JGraft::Ordered;
+use JGraft::Source;
 use JGraft::Exec;
 use JGraft::Seq;
 use Exporter 'import';
@@ -233,6 +235,7 @@ sub binding ($c, $bound, $compile) { ($c->reading($compile, @$bound))[0] }
 sub fold ($c, $ctx, $s, $n) {
     my $x = JGraft::Exec->new(undef, limits => $c->{limits});
     @$x{qw(folding const site)} = (1, $ctx->{scope}{known} // {}, $c->{site});
+    $x->{src} = 1;      # an object it makes keeps its order, in case it is wanted (see Exec::object)
     my $v;
     my $done  = eval { $v = $n->{code}->($x, $MISSING, undef, undef); 1 };
     my $error = $@;
@@ -290,14 +293,21 @@ sub construct ($c, $ctx, $s) {
     my $hash = ref $s eq 'HASH';
     my @key  = $hash ? keys %$s : ();
     my @kid  = map { $c->value($ctx, $_) } $hash ? @$s{@key} : @{ $s->[0] };
-    my $make = $hash ? sub { my %h; @h{@key} = @_; \%h } : sub { [@_] };
+    # (an object written in a graft whose own objects keep their order keeps the order it was written in)
+    my $ordered = $hash && JGraft::Ordered::is($s);
+    my $make = !$hash ? sub { [@_] } : $ordered ? sub { JGraft::Ordered::hash(map { $_ => shift } @key) } : sub { my %h; @h{@key} = @_; \%h };
     return konst($make->(map { $_->{value} } @kid)) unless grep { !$_->{const} } @kid;
     my @code = map { $_->{code} } @kid;
     my @meta = $hash ? () : map { $_->{meta} } @kid;
+    my @tok  = map { $_->{tok} } @kid;      # where the members that are read straight from a path came from
     return node(sub {
         my $x = $_[0];
         $x->charge_obj($hash ? scalar @code : 0);
         my $new = $make->(map { $_->(@_) } @code);
+        if ($x->{src} && grep { $_ } @tok) {
+            my @from = map { $_ && $_->(@_) } @tok;
+            JGraft::Source::made($new, $hash ? { map { $key[$_] => $from[$_] } 0 .. $#key } : \@from);
+        }
         if (@meta && %{ $x->{side} }) {     # elements referred to directly keep their SPLIT metadata
             $meta[$_] and $x->set_meta($new, $_, $meta[$_]->(@_)) for 0 .. $#meta;
             $x->settle($new);
@@ -389,6 +399,17 @@ sub reader ($c, $ctx, $s) {
             }
             elsif ($ns ne 'node') { return undef }
             return ref $a eq 'ARRAY' && is_idx($i) ? $x->elem_meta($a, $x->index_for($a, $i)) : undef;
+        },
+        # where the value came from in a text, if it is read straight from a place in an array or object
+        tok => sub {
+            my ($x, $v, $i, $a) = @_;
+            if (my @k = &$keys) {
+                $i = pop @k;
+                $a = $x->walk($ns eq 'node' ? $v : $x->{$ns}, @k);
+            }
+            elsif ($ns ne 'node') { return undef }
+            return undef if ref $a eq 'ARRAY' && !is_idx($i);
+            return ref $a ? JGraft::Source::token($a, ref $a eq 'ARRAY' ? $x->index_for($a, $i) : $i) : undef;
         },
     };
 }
@@ -555,7 +576,7 @@ sub object ($c, $ctx, $s) {
             $test->($x, $has ? $n->{$k} : $MISSING, $k, $n) or return 0;
             $present += $has;
         }
-        return !$exact || $present == keys %$n;
+        return !$exact || $present == scalar(%$n);
     }, values %kid);
 }
 

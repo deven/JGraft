@@ -143,15 +143,16 @@ defop COPY => 5, 'action', '(VP)+', sub ($c, $ctx, @arg) {
     my @pair;
     while (my ($value, $path) = splice @arg, 0, 2) {
         $path = target($c, $path);
-        push @pair, [ $value->{code}, carried($value), leaving($value, $path), @$path{qw(ns keys)} ];
+        push @pair, [ $value->{code}, carried($value), leaving($value, $path), @$path{qw(ns keys)}, $value->{tok} ];
     }
     return sub ($x) {
         local $x->{temp} = $x->{temp};      # TEMP lasts for one action
         for (@pair) {
-            my ($value, $carried, $leaving, $ns, $keys) = @$_;
+            my ($value, $carried, $leaving, $ns, $keys, $from) = @$_;
             my $v    = $value->($x->env);
             my $meta = $carried->($x->env);
-            $x->put($ns, [ $keys->($x->env) ], $leaving ? $x->outgoing($v) : $v, $meta);
+            my $tok  = $from && $x->{src} ? $from->($x->env) : undef;       # where it came from in a text
+            $x->put($ns, [ $keys->($x->env) ], $leaving ? $x->outgoing($v) : $v, $meta, $tok);
         }
     };
 };
@@ -170,13 +171,14 @@ defop MOVE => 6, 'action', '(XX)+', sub ($c, $ctx, @arg) {
         my $ok = eval {
             for (@pair) {
                 my ($src, $dst, $leaving) = @$_;
+                local $x->{vacated};        # where a property was that this pair took (see Exec::give)
                 my @from = $src ? $src->{keys}->($x->env) : ();
                 my @to   = $dst ? $dst->{keys}->($x->env) : ();
-                my ($v, $meta) = $src ? $x->take($src->{ns}, \@from) : ();
+                my ($v, $meta, $tok) = $src ? $x->take($src->{ns}, \@from) : ();
                 next unless $dst;
-                eval { $x->give($dst->{ns}, \@to, $leaving ? $x->outgoing($v) : $v, $meta); 1 } or do {
+                eval { $x->give($dst->{ns}, \@to, $leaving ? $x->outgoing($v) : $v, $meta, $tok); 1 } or do {
                     my $error = $@;
-                    $x->aside(sub { $x->give($src->{ns}, \@from, $v, $meta) }) if $src;    # a failed pair takes nothing away
+                    $x->aside(sub { $x->give($src->{ns}, \@from, $v, $meta, $tok) }) if $src;    # a failed pair takes nothing away
                     die $error;
                 };
             }
@@ -200,6 +202,7 @@ defop SPLICE => 7, 'action', 'PVV*', sub ($c, $ctx, $path, $count, @new) {
     my @value   = map { $_->{code} } @new;
     my @carried = map { carried($_) } @new;
     my @leaving = map { leaving($_, $path) } @new;
+    my @from    = map { $_->{tok} } @new;
     return sub ($x) {
         local $x->{temp} = $x->{temp};
         my @k = $keys->($x->env);
@@ -207,8 +210,9 @@ defop SPLICE => 7, 'action', 'PVV*', sub ($c, $ctx, $path, $count, @new) {
         !defined $n || is_int($n) or $x->fail_operand('SPLICE count must be an integer');
         my @v = map { $_->($x->env) } @value;
         my @m = map { $_->($x->env) } @carried;
+        my @t = $x->{src} ? map { $_ && $_->($x->env) } @from : ();
         $leaving[$_] and $v[$_] = $x->outgoing($v[$_]) for 0 .. $#v;
-        $x->splice_at($ns, \@k, $n, \@v, \@m);
+        $x->splice_at($ns, \@k, $n, \@v, \@m, \@t);
     };
 };
 

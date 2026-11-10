@@ -199,6 +199,74 @@ was made for.
 A date in the document (which there can be only if C<date_export> keeps
 them) is put back by a C<CASTDATE> expression.
 
+=head1 JSON, WRITTEN BACK AS IT WAS READ
+
+L<JGraft::JSON> reads JSON text so that a graft can be applied to it and the
+result written out as the same text, changed only where the data changed.
+
+    use JGraft::JSON;
+
+    my $doc    = JGraft::JSON->parse($bytes);
+    my $output = $graft->apply($doc->data);
+    my $text   = $doc->write($output);
+
+A text that is read and written with no change between is the same text,
+byte for byte.  After a change, what is kept is:
+
+=over
+
+=item *
+
+Everything about a value the graft did not touch: how a number is spelled
+(C<1e1>, C<-0>, C<1.50>, an integer of any length), the escapes of a string
+(C<"\u00e9">, C<"\/">), white space, and bytes in a string that are not
+UTF-8.
+
+=item *
+
+The order of an object's properties, as the graft left it.  A property that
+is written over stays where it is; a new one goes last; one that is removed
+and added again goes last; and one that is renamed (moved to another name in
+the same object, by one pair of a C<MOVE>) stays where it was.  A property
+that the text gives twice is kept twice, unless the graft changes or removes
+it.
+
+=item *
+
+The spelling of a value that the graft moves or copies from one place to
+another: by C<MOVE>, by C<COPY> or C<SPLICE> of a path, through the stash,
+through C<FILTER>, C<SLICE> and C<CONCAT>, and as a member of an array or
+object that the graft builds.  A value that is worked out (C<ADD>, a literal
+in the graft) is written plainly.
+
+=item *
+
+The parts of a string that a change to it left alone.  A changed string is
+compared with what it was, line by line and then within the lines that
+differ, and only what differs is written anew: an C<ATSPLIT> that changes
+one line of ten thousand rewrites that line.
+
+=back
+
+What is new is written as compactly as JSON allows, between separators like
+those already there.
+
+C<< $doc->data >> is ordinary data, with two differences.  Its objects are
+ordered hashes (L<JGraft::Ordered>, a tied hash that any Perl code can read
+and write as a hash); matching against them costs about half as much again
+as against plain ones.  And a byte in a string that is not UTF-8 is read as
+a character beyond the end of Unicode (0x110000 plus the byte), so that a
+graft sees one character there and the byte can be written back.  A number
+too large or too precise for Perl is seen by the graft as the nearest one
+Perl has, and keeps its spelling if the graft leaves it alone.
+
+The graft may be read the same way, C<< JGraft->new(JGraft::JSON->parse($g)->data) >>,
+and then an object written in it gives its properties to the output in the
+order written there.
+
+As with C<output> in general, treat C<< $doc->data >> as read-only: C<write>
+takes an array or object that was read to be still as it was read.
+
 =head1 THE OUTPUT IS READ-ONLY
 
 Applying a graft copies only what it must.  The output shares with the input

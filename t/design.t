@@ -986,6 +986,143 @@ subtest 'numbers and dates at their edges' => sub {
     is "@warned", '', '... without a warning';
 };
 
+subtest 'JSON is written back as it was read' => sub {
+    require JGraft::JSON;
+    # The text after a run: of what it left, if it failed.
+    my $edit = sub ($text, @actions) {
+        my $doc = JGraft::JSON->parse($text);
+        my $r   = graft(@actions)->run($doc->data);
+        $doc->write($r->ok ? $r->output : $r->partial);
+    };
+    my $text = join "\n", '{', '  "name": "caf\u00e9",', '  "price": 1e1, "qty" : -0,  "big": 12345678901234567890123,',
+        qq(  "tags": [ "a",\t"b\\/c" , 1.50 ],), '  "dup": 1, "nested": { "z": [1, 2.0, 3], "y": null }, "dup": 2,',
+        qq{  "bad": "x\xffy\xc3(",}, '  "text": "line one\nline tw\u006f\nline three\n"', '}', '';
+    my $doc = JGraft::JSON->parse($text);
+    is $doc->write, $text, 'a text that is read and written is the same text';
+    is $edit->($text, [ MATCH => { price => 10 } ]), $text, 'and so it is after a graft that changes nothing';
+    is show([ keys %{ $doc->data } ]), '["name","price","qty","big","tags","dup","nested","bad","text"]', 'properties are in the order written';
+    is $doc->data->{dup}, 2, 'a property written twice has the value given last';
+    is length $doc->data->{bad}, 5, 'a byte that is not UTF-8 is one character';
+
+    # What is written differs from what was read only where the data does.
+    my $changes = sub ($name, $from, $to, @actions) {
+        index($text, $from) >= 0 or die "the text has no '$from'";
+        is $edit->($text, @actions), $text =~ s/\Q$from\E/$to/r, $name;
+    };
+    $changes->('a value changed', '1e1,', '11,', [ COPY => 11, 'price' ]);
+    $changes->('a property added, as its neighbours are laid out', qq("\n}), qq(",\n  "added": "new"\n}), [ COPY => 'new', 'added' ]);
+    $changes->('one removed', ' "qty" : -0, ', '', [ MOVE => 'qty', undef ]);
+    $changes->('one renamed, where it was', '"qty" :', '"quantity" :', [ MOVE => 'qty', 'quantity' ]);
+    $changes->('an element put in', qq("a",\t), qq("a",\t"in",\t), [ SPLICE => [ 'NODE', 'tags', 1 ], 0, 'in' ]);
+    $changes->('an element taken out', ' , 1.50 ]', ' ]', [ SPLICE => [ 'NODE', 'tags', 2 ], 1 ]);
+    $changes->('a change deep inside', '2.0', '5', [ COPY => 5, [ 'NODE', 'nested', 'z', 1 ] ]);
+    $changes->('the value of a property written twice', '"dup": 2', '"dup": 3', [ COPY => 3, 'dup' ]);
+    $changes->('one line of a string', 'line tw\u006f', 'LINE 2', [ ATSPLIT => 'text', "\n", [ COPY => 'LINE 2', 1 ] ]);
+    $changes->('a string with bytes that are not UTF-8, added to', "\xc3(", "\xc3(!", [ COPY => [ CONCAT => [ 'NODE', 'bad' ], '!' ], 'bad' ]);
+    $changes->('a value written over with its equal', '1e1', '1e1', [ COPY => 10, 'price' ]);
+    is $edit->($text, [ MOVE => 'dup', undef ]), $text =~ s/"dup": 1, //r =~ s/, "dup": 2//r, 'a property written twice is removed twice';
+    is $edit->($text, [ COPY => 11, 'price' ], [ MATCH => 0 ]), $text =~ s/1e1/11/r, 'after a failure, the text of what was left';
+
+    # The order of properties is what the graft made of it.
+    is $edit->('{"b":1,"a":2}', [ COPY => 1, 'z', 2, 'c', 3, 'a' ]), '{"b":1,"a":3,"z":1,"c":2}', 'new properties come last, in the order they were added';
+    is $edit->('{"b":1,"a":2,"c":3}', [ MOVE => 'b', [ 'STASH', 's' ] ], [ MOVE => [ 'STASH', 's' ], 'b' ]), '{"a":2,"c":3,"b":1}',
+        'one taken away and put back comes last';
+    is $edit->('{"b":1, "a" : 2,"c":3}', [ MOVE => 'a', 'A' ]), '{"b":1, "A" : 2,"c":3}', 'one renamed stays where it was';
+    is $edit->('{"b":1,"a":2}', [ MOVE => 'a', 't', 'b', 'a', 't', 'b' ]), '{"a":1,"b":2}', 'two that exchange names exchange them where they are';
+    is $edit->('{"b":1,"a":2,"c":3}', [ MOVE => 'a', 'c' ]), '{"b":1,"c":2}', 'a name that is taken keeps its own place';
+    is $edit->('{"x":1}', [ COPY => 1, [ 'NODE', 'p', 'z' ], 2, [ 'NODE', 'p', 'a' ] ]), '{"x":1,"p":{"z":1,"a":2}}', 'an object made on the way keeps order too';
+    is $edit->('{"x":1}', [ COPY => [ MKOBJ => 'z', [ 'NODE', 'x' ], 'a', 2 ], 'o' ]), '{"x":1,"o":{"z":1,"a":2}}', 'MKOBJ gives the order of its arguments';
+    my $ordered = JGraft::JSON->parse('["JGRAFT", {"v": 1}, ["COPY", {"z": 1, "a": ["NODE", "x"]}, "o"]]')->data;
+    my $target  = JGraft::JSON->parse('{"x": 1e1}');
+    is $target->write(JGraft->new($ordered)->apply($target->data)), '{"x": 1e1,"o": {"z":1,"a":1e1}}',
+        'an object written in a graft that was itself read from text has the order written there';
+
+    is $edit->('{"x":1}', [ COPY => [ MKOBJ => 'z', 1, 'a', 2 ], 'o' ]), '{"x":1,"o":{"z":1,"a":2}}', '... when they are all constants, too';
+    is $edit->('{"b": 1, "a": 2}', [ COPY => [ CASTDATE => '2024-02-29' ], [ 'NODE', 'when' ] ], [ COPY => { z => [ CASTDATE => '2024-03-01' ], a => 1 }, 'o' ]),
+        '{"b": 1, "a": 2, "when": "2024-02-29", "o": {"a":1,"z":"2024-03-01"}}', 'dates on their way out do not disturb it';
+    my $undone = JGraft::JSON->parse('{"b": 1.0, "a": [1, 2]}');
+    my $run    = graft([ MOVE => 'b', 'c' ], [ SPLICE => [ 'NODE', 'a', 0 ], 1 ])->run($undone->data);
+    is $undone->write(JGraft->new($run->undo)->apply($run->output)), '{"a": [1, 2], "b": 1}',
+        'an undo graft applies to such a document as to any other (though what it puts back, it writes anew)';
+
+    # A value that moves takes its spelling with it.
+    is $edit->('{"x":1.50,"y":[]}', [ MOVE => 'x', [ 'NODE', 'y', 0 ] ]), '{"y":[1.50]}', 'a number moved';
+    is $edit->('{"x":"\u0041\/","y":[]}', [ MOVE => 'x', [ 'STASH', 's' ] ], [ MOVE => [ 'STASH', 's' ], [ 'NODE', 'y', 0 ] ]), '{"y":["\u0041\/"]}',
+        'a string moved by way of the stash';
+    is $edit->('{"x":1.50,"y":[]}', [ COPY => [ 'NODE', 'x' ], [ 'NODE', 'y', 0 ], [ 'NODE', 'x' ], 'z' ]), '{"x":1.50,"y":[1.50],"z":1.50}', 'one copied by reference';
+    is $edit->('[1.0, 2.00, "\u0041"]', [ SPLICE => 0, 0, [ 'NODE', 2 ], [ 'NODE', 1 ] ]), '["\u0041", 2.00, 1.0, 2.00, "\u0041"]', 'elements spliced in by reference';
+    is $edit->('{"a":[1.0, 2e0, "x", 3.0]}', [ COPY => [ FILTER => ['NUM'], [ 'NODE', 'a' ] ], 'a' ]), '{"a":[1.0,2e0,3.0]}', 'what FILTER lets through';
+    is $edit->('{"a":[1.0, 2e0, "\u0041"]}', [ COPY => [ CONCAT => [ SLICE => [ 'NODE', 'a' ], 1 ], [ 'NODE', 'a' ] ], 'b' ]),
+        '{"a":[1.0, 2e0, "\u0041"],"b":[2e0,"\u0041",1.0,2e0,"\u0041"]}', 'what SLICE and CONCAT pass on';
+    is $edit->('{"x":1.0}', [ COPY => { z => [ 'NODE', 'x' ], a => 2 }, 'o' ]), '{"x":1.0,"o":{"a":2,"z":1.0}}', 'a member of an object that is built';
+    is $edit->('{"a": {"k": [1.0, 2]}}', [ MOVE => 'a', 'b' ], [ COPY => 3, [ 'NODE', 'b', 'k', 1 ] ]), '{"b": {"k": [1.0, 3]}}',
+        'and what is moved and then changed keeps the rest of itself';
+    is $edit->('{"a":1.0}', [ COPY => [ ADD => [ 'NODE', 'a' ], 1 ], 'a' ]), '{"a":2}', 'a value that is worked out is written plainly';
+    my ($one, $two) = map { JGraft::JSON->parse($_) } '{"from": [1.50, "\u0041"]}', '{"to": []}';
+    is $two->write(graft([ COPY => [ 'TEMP', 'other', 'from', 0 ], [ 'NODE', 'to', 0 ], [ 'TEMP', 'other', 'from', 1 ], [ 'NODE', 'to', 1 ] ])
+        ->apply($two->data, temp => { other => $one->data })), '{"to": [1.50,"\u0041"]}', 'even from one text to another';
+
+    # Of a string that has changed, the parts that have not are as they were.
+    is $edit->('{"t":"caf\u00e9 au lait\nsecond\/line"}', [ ATSPLIT => 't', ' ', [ COPY => 'AU', 1 ] ]), '{"t":"caf\u00e9 AU lait\nsecond\/line"}',
+        'a word within a line';
+    is $edit->('{"t":"\u0041bc"}', [ COPY => [ CONCAT => '<', [ 'NODE', 't' ], '>' ], 't' ]), '{"t":"<\u0041bc>"}', 'a string added to at both ends';
+    is $edit->('{"t":"\u0041\nb\nc\/c\nd"}', [ ATSPLIT => 't', "\n", [ SPLICE => 1, 1 ], [ SPLICE => 2, 0, 'new' ] ]), '{"t":"\u0041\nc\/c\nnew\nd"}',
+        'lines taken out and put in';
+    is $edit->('["\ud83d\ude00 \ud800 x"]', [ COPY => [ CONCAT => [ 'NODE', 0 ], '!' ], 0 ]), '["\ud83d\ude00 \ud800 x!"]', 'escapes for one character and for half of one';
+    is JGraft::JSON->encode("\x{1F600} \x{D800} \x{e9}\n\"\x01" . chr 0x1100FF), qq("\xF0\x9F\x98\x80 \\ud800 \xC3\xA9\\n\\"\\u0001\xFF"),
+        'what is written anew is UTF-8, with escapes only where JSON needs them';
+
+    # Containers that are emptied, or were empty; and documents that are not containers.
+    is $edit->('{"a":[ ],"b":{ }}', [ COPY => 1, [ 'NODE', 'a', 0 ], 2, [ 'NODE', 'b', 'k' ] ]), '{"a":[1],"b":{"k":2}}', 'empty containers filled';
+    is $edit->('{"a":[ 1 ],"b":{ "k": 1 }}', [ SPLICE => [ 'NODE', 'a', 0 ], 1 ], [ MOVE => [ 'NODE', 'b', 'k' ], undef ]), '{"a":[],"b":{}}', 'and full ones emptied';
+    is $edit->(" 1e1\n", [ MATCH => 10 ]), " 1e1\n", 'a document that is one number';
+    is $edit->(" 1e1\n", [ COPY => [ ADD => ['NODE'], 1 ], ['NODE'] ]), " 11\n", '... changed';
+    is $edit->(' [1.0] ', [ COPY => { was => ['NODE'] }, ['NODE'] ]), ' {"was":[1.0]} ', 'a document replaced by one that holds it';
+
+    # What cannot be read is refused, with the place.
+    for ([ '{"a":1,}' => 'expected the name of a property at byte 7' ], [ '[1 2]' => 'expected , or ] at byte 3' ], [ '"\q"' => 'an escape that means nothing' ],
+         [ '{"a":1} x' => 'something after the value at byte 8' ], [ '' => 'expected a value at byte 0' ]) {
+        my ($bad, $why) = @$_;
+        ok !eval { JGraft::JSON->parse($bad); 1 } && $@ =~ /\Q$why\E/, "'$bad' is not JSON: $why";
+    }
+
+    # Random texts, laid out at random, and a random change to each.
+    srand 9;
+    my @space  = ('', '', ' ', "\n  ", "\t");
+    my $sp     = sub { $space[ rand @space ] };
+    my @scalar = ('1', '1.0', '1e0', '-0', '1e1', '0.5', '"a"', '"\u0061"', '"b\/c"', '"line\none\n"', '"\ud83d\ude00"', qq("x\xff"), 'true', 'null', '""');
+    my $random;
+    $random = sub ($depth) {
+        my $kind = rand;
+        return $scalar[ rand @scalar ] if $depth > 2 || $kind < .5;
+        return '[' . $sp->() . join($sp->() . ',' . $sp->(), map { $random->($depth + 1) } 1 .. rand 5) . $sp->() . ']' if $kind < .75;
+        return '{' . $sp->() . join($sp->() . ',' . $sp->(), map { '"' . ('a' .. 'f', 'a')[ rand 7 ] . '"' . $sp->() . ':' . $sp->() . $random->($depth + 1) } 1 .. rand 5) . $sp->() . '}';
+    };
+    my %count = (identical => 0, written => 0, wrong => 0);
+    for (1 .. 2000) {
+        my $source = $sp->() . $random->(0) . $sp->();
+        my $read   = JGraft::JSON->parse($source);
+        $count{identical}++ if $read->write eq $source;
+        my ($at, @path) = ($read->data);
+        while ((ref $at eq 'ARRAY' || ref $at eq 'HASH') && rand() < .7) {
+            my @key = ref $at eq 'ARRAY' ? 0 .. $#$at : keys %$at or last;
+            push @path, ref $at eq 'ARRAY' ? 0 + $key[ rand @key ] : $key[ rand @key ];
+            $at = ref $at eq 'ARRAY' ? $at->[ $path[-1] ] : $at->{ $path[-1] };
+        }
+        next unless ref $read->data eq 'ARRAY' || ref $read->data eq 'HASH';
+        my $new    = (7, 'new', [ [ 1, 'x' ] ], { k => 1 }, undef)[ rand 5 ];
+        my $action = ([ COPY => $new, [ NODE => @path, 'zz' ] ], [ COPY => $new, [ NODE => @path ] ], [ MOVE => [ NODE => @path ], 'moved' ],
+            [ MOVE => [ NODE => @path ], undef ], [ SPLICE => [ NODE => @path, 0 ], 0, 'in' ], [ MOVE => [ NODE => @path ], [ NODE => @path[ 0 .. $#path - 1 ], 'renamed' ] ],
+            [ COPY => [ NODE => @path ], 'copy' ])[ rand 7 ];
+        my $r    = graft($action)->run($read->data);
+        my $left = $r->ok ? $r->output : $r->partial;
+        $count{written}++;
+        $count{wrong}++ unless eval { show(JGraft::JSON->parse($read->write($left))->data) eq show($left) };
+    }
+    is $count{identical}, 2000, 'every one of 2,000 random texts is written as it was read';
+    is $count{wrong}, 0, "and after a random change each says what the run left ($count{written} of them)";
+};
+
 subtest 'the public interface' => sub {
     my @seen;
     my $g = graft([ RAISE => 'warn', 'careful', ['NODE'] ], [ MATCH => 1 ], [ COPY => 2, ['NODE'] ]);

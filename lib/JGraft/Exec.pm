@@ -13,6 +13,8 @@ use builtin qw(refaddr);
 no warnings qw(experimental::builtin recursion);
 use JGraft::Util;
 use JGraft::Error;
+use JGraft::Ordered;
+use JGraft::Source;
 
 use constant INF => 9**9**9;
 
@@ -30,6 +32,9 @@ sub new ($class, $input, %opt) {
         quiet => 0, logs => [], opt => \%opt,
         site => {},                     # the action that is running: { where, action }, as in an error
         piece => undef,                 # inside ATSPLIT: code that says where a piece is (see `locus`)
+        # Is the document one that JGraft::JSON read?  Then where each value came from in its
+        # text is kept up as values move (see JGraft::Source), and new objects keep their order.
+        src => ref $input && JGraft::Source::sheet($input) ? 1 : 0,
         folding => 0,                   # set by the compiler, when evaluating a constant expression
     }, $class;
 }
@@ -55,7 +60,10 @@ sub export ($x, $v) {
         ref $old or next;
         my $new = $x->export($old);
         next if ref $new && refaddr($new) == refaddr($old);
-        $copy //= $array ? [@$v] : {%$v};
+        if (!$copy) {
+            $copy = $array ? [@$v] : JGraft::Ordered::copy($v);
+            JGraft::Source::cloned($v, $copy) if $x->{src};
+        }
         $array ? ($copy->[$k] = $new) : ($copy->{$k} = $new);
     }
     return $copy // $v;
@@ -121,7 +129,7 @@ sub charge_obj ($x, $props = 0) {
 
 # Account for the property $name, about to be set in $object.
 sub charge_prop ($x, $object, $name) {
-    exists $object->{$name} || keys %$object < $x->{prop_per_obj} or $x->limit('prop_per_obj');
+    exists $object->{$name} || scalar(%$object) < $x->{prop_per_obj} or $x->limit('prop_per_obj');
 }
 
 #---------------------------------------------------------------------------
@@ -186,7 +194,8 @@ sub walk ($x, $v, @keys) {
 
 sub clone ($x, $c) {
     my $hash  = ref $c eq 'HASH';
-    my $new   = $hash ? {%$c} : [@$c];
+    my $new   = $hash ? JGraft::Ordered::copy($c) : [@$c];
+    JGraft::Source::cloned($c, $new) if $x->{src};
     my $owned = $x->{owned};
     delete @$owned{ map { refaddr $_ } grep { ref } $hash ? values %$c : @$c } if %$owned;
     $owned->{ refaddr $new } = $new;        # holding it keeps the address from being reused
@@ -195,7 +204,7 @@ sub clone ($x, $c) {
         $copy->{split} = { %{ $side->{split} }, m => [ @{ $side->{split}{m} } ] } if $side->{split};
         $copy->{pend}  = delete $side->{pend} if $side->{pend};
     }
-    $x->charge(scalar($hash ? keys %$new : @$new), sizeof($new));
+    $x->charge(scalar($hash ? %$new : @$new), sizeof($new));
     return $new;
 }
 
@@ -209,7 +218,7 @@ sub own ($x, $v, $k) {
 # ones, and return the container that keys[$n] indexes.
 sub own_path ($x, $slot, $keys, $n) {
     if (ref $$slot eq 'JGraft::Missing') {      # the document itself, moved away: it is made anew, as anything else would be
-        $$slot = is_idx($keys->[0]) ? [] : {};
+        $$slot = is_idx($keys->[0]) ? [] : $x->object;
         $x->{owned}{ refaddr $$slot } = $$slot;
         $x->charge_obj;
     }
@@ -219,11 +228,12 @@ sub own_path ($x, $slot, $keys, $n) {
         my $k     = $array ? $x->index_for($c, $keys->[$i], 1) : $keys->[$i];
         my $child = $array ? ($k < @$c ? $c->[$k] : $MISSING) : exists $c->{$k} ? $c->{$k} : $MISSING;
         if (ref $child eq 'JGraft::Missing') {      # absent, or an element whose removal is pending
-            $child = is_idx($keys->[ $i + 1 ]) ? [] : {};
+            $child = is_idx($keys->[ $i + 1 ]) ? [] : $x->object;
             $x->{owned}{ refaddr $child } = $child;
             $x->charge_obj;
             $x->charge_prop($c, $k) unless $array;
             $array ? ($c->[$k] = $child) : ($c->{$k} = $child);
+            JGraft::Source::set($c, $k) if $x->{src};
             $x->arrived($c, $k) if $array;
         }
         else {
@@ -235,13 +245,18 @@ sub own_path ($x, $slot, $keys, $n) {
     return $c;
 }
 
+# A new, empty object: one that keeps its properties in order, if the
+# document's own objects do.
+sub object ($x) { $x->{src} ? JGraft::Ordered::hash() : {} }
+
 # The root slot and full key list for a path in namespace $ns.
 sub slot ($x, $ns, $keys) {
     return $ns eq 'node' ? (\$x->{root}, [ @{ $x->{at} }, @$keys ]) : (\$x->{$ns}, $keys);
 }
 
-# Assign $v at a path (COPY).  $meta is what $v carries from a SPLIT array.
-sub put ($x, $ns, $keys, $v, $meta = undef) {
+# Assign $v at a path (COPY).  $meta is what $v carries from a SPLIT array,
+# and $tok where it came from in a text.
+sub put ($x, $ns, $keys, $v, $meta = undef, $tok = undef) {
     my ($slot, $k) = $x->slot($ns, $keys);
     if (!@$k) {
         $$slot = $v;                # the root of the node namespace
@@ -251,11 +266,13 @@ sub put ($x, $ns, $keys, $v, $meta = undef) {
         if (ref $c eq 'HASH') {
             $x->charge_prop($c, $k->[-1]);
             $c->{ $k->[-1] } = $v;
+            JGraft::Source::set($c, $k->[-1], $tok) if $x->{src};
         }
         else {
             my $i      = $x->index_for($c, $k->[-1], 1);
             my $append = $i == @$c;
             $c->[$i] = $v;
+            JGraft::Source::set($c, $i, $tok) if $x->{src};
             $x->arrived($c, $i, $meta) if $append;
         }
     }
@@ -263,7 +280,7 @@ sub put ($x, $ns, $keys, $v, $meta = undef) {
 }
 
 # Replace $count elements at the array element a path names (SPLICE).
-sub splice_at ($x, $ns, $keys, $count, $new, $metas) {
+sub splice_at ($x, $ns, $keys, $count, $new, $metas, $toks = []) {
     my ($slot, $k) = $x->slot($ns, $keys);
     # (an element at or below the current node: not the node itself, though it be one in its parent)
     @$keys && is_idx($keys->[-1]) or $x->fail_target('SPLICE needs an element of an array');
@@ -275,6 +292,7 @@ sub splice_at ($x, $ns, $keys, $count, $new, $metas) {
     $n >= 0 && $n <= $rest or $x->fail_target('SPLICE count out of range');
     $x->charge(scalar @$new, 8 * @$new);
     my $old = @$c;
+    JGraft::Source::spliced($c, $old, $i, $n, map { $toks->[$_] } 0 .. $#$new) if $x->{src};
     splice @$c, $i, $n, @$new;
     my ($first) = grep { $_ } @$metas;
     my @only    = $x->split_of($c) ? ($i, $i + $#$new) : ();
@@ -302,11 +320,12 @@ sub refresh ($x) {
 # deletion; insertions between elements are queued.  Both are carried out
 # when the action ends, so indices stay stable while it runs.
 
-# Detach and return the value at a path, with any SPLIT metadata it carries.
+# Detach and return the value at a path, with any SPLIT metadata it carries
+# and where it came from in a text.
 sub take ($x, $ns, $keys) {
     my ($slot, $k) = $x->slot($ns, $keys);
     my @k = $x->locate($$slot, @$k);                # it must exist
-    my ($v, $meta);
+    my ($v, $meta, $tok);
     if (!@k) {
         ref $$slot eq 'JGraft::Missing' and $x->fail_target('path does not exist');     # moved away already
         ($v, $$slot) = ($$slot, $MISSING);
@@ -314,10 +333,14 @@ sub take ($x, $ns, $keys) {
     else {
         my $c = $x->own_path($slot, \@k, $#k);
         my $i = $k[-1];
+        $tok = JGraft::Source::token($c, $i) if $x->{src};
         if (ref $c eq 'HASH') {
+            # where it was among the properties, in case it is only being renamed (see `give`)
+            $x->{vacated} = [ refaddr $c, JGraft::Ordered::place($c, $i) ] if @$keys && JGraft::Ordered::is($c);
             # the current node keeps its place, to be filled before the action ends
             $v = @$keys ? delete $c->{$i} : $c->{$i};
             $c->{$i} = $MISSING unless @$keys;
+            JGraft::Source::unset($c, $i) if $x->{src} && @$keys;
         }
         else {
             ($v, $meta) = ($c->[$i], $x->elem_meta($c, $i));
@@ -327,11 +350,11 @@ sub take ($x, $ns, $keys) {
         }
     }
     $x->refresh if $ns eq 'node';
-    return ($v, $meta);
+    return ($v, $meta, $tok);
 }
 
 # Attach a value at a path.
-sub give ($x, $ns, $keys, $v, $meta) {
+sub give ($x, $ns, $keys, $v, $meta, $tok = undef) {
     my ($slot, $k) = $x->slot($ns, $keys);
     if (!@$k) {
         $$slot = $v;
@@ -341,17 +364,22 @@ sub give ($x, $ns, $keys, $v, $meta) {
         my $i = $k->[-1];
         if (ref $c eq 'HASH') {
             $x->charge_prop($c, $i);
+            my $renamed = !exists $c->{$i} && $x->{vacated} && $x->{vacated}[0] == refaddr $c;
             $c->{$i} = $v;
+            # a property taken from this object by the same pair has only changed its name: it stays where it was
+            JGraft::Ordered::place($c, $i, $x->{vacated}[1]) if $renamed;
+            JGraft::Source::set($c, $i, $tok) if $x->{src};
         }
         elsif (defined $i && $i != int $i) {        # a half index: insert between elements, later
             $i += @$c if $i < -0.5;
             $i >= -0.5 && $i < @$c or $x->fail_target('array index out of range');
-            push @{ $x->pend($c)->{ins}{$i} }, [ $v, $meta ];
+            push @{ $x->pend($c)->{ins}{$i} }, [ $v, $meta, $tok ];
         }
         else {
             $i = $x->index_for($c, $i, 1);
             my $new = $i == @$c || ref $c->[$i] eq 'JGraft::Missing';
             $c->[$i] = $v;
+            JGraft::Source::set($c, $i, $tok) if $x->{src};
             $x->arrived($c, $i, $meta) if $new;
         }
     }
@@ -363,16 +391,18 @@ sub finish_move ($x) {
     for my $side (grep { $_->{pend} } values %{ $x->{side} }) {
         my ($a, $pend) = ($side->{a}, delete $side->{pend});
         my $m = $side->{split} ? $side->{split}{m} : [];
-        my @entry = map { @$_ } @{ $pend->{ins}{-0.5} // [] };       # value, metadata, ...
+        my $t = $x->{src} && JGraft::Source::tokens($a) || [];
+        my @entry = @{ $pend->{ins}{-0.5} // [] };                  # each [ value, metadata, token ]
         for my $i (0 .. $#$a) {
-            push @entry, $a->[$i], $m->[$i] && [ $side->{split}{origin}, @{ $m->[$i] } ] unless $pend->{del}{$i};
-            push @entry, map { @$_ } @{ $pend->{ins}{ $i + 0.5 } // [] };
+            push @entry, [ $a->[$i], $m->[$i] && [ $side->{split}{origin}, @{ $m->[$i] } ], $t->[$i] ] unless $pend->{del}{$i};
+            push @entry, @{ $pend->{ins}{ $i + 0.5 } // [] };
         }
-        @$a = @entry[ grep { $_ % 2 == 0 } 0 .. $#entry ];
+        @$a = map { $_->[0] } @entry;
+        JGraft::Source::rebuilt($a, map { $_->[2] } @entry) if $x->{src};
         # An array that came of a SPLIT keeps to it: what arrives from another is not let in.
         $side->{split} = $side->{split} ? { origin => $side->{split}{origin}, m => [] } : undef;
         delete $side->{split} unless $side->{split};
-        $x->set_meta($a, $_, $entry[ 2 * $_ + 1 ]) for 0 .. $#$a;
+        $x->set_meta($a, $_, $entry[$_][1]) for 0 .. $#$a;
         $x->settle($a);
     }
 }
