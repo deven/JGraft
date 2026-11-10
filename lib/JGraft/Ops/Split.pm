@@ -35,7 +35,9 @@ sub spec ($c, $ctx, $s) {
         if ($row && $row->{kind} eq 'match') {      # it is matched against the characters of the string
             my $n = $c->binding(['node'],
                 sub { $c->match({ scope => $ctx->{scope}, regex => 1, seq => 1, top => 1 }, $o{$name}) });
-            my $regex = $name =~ /trim/ && $n->{run} && native(@{ $n->{run} }) || trap($n);
+            my $regex = $name =~ /trim/ && $n->{run} && native(@{ $n->{run} })
+                     || $name eq 'sep' && separator($n)
+                     || trap($n);
             $pattern{$name} = sub { $regex };
             $tails = $n->{tails} if $name eq 'rtrim';
         }
@@ -72,6 +74,14 @@ sub native ($chars, $lo, $hi) {
     return eval { no warnings; +{ front => qr/^[$class]{$lo,$most}/, back => qr/^[$class]+/, lo => $lo, hi => $hi } };
 }
 
+# A separator can be found by Perl if what its regex matches first at a
+# place is the longest match there, as the specification requires, and is
+# never empty.  That is so for a choice of strings and single characters.
+sub separator ($n) {
+    ($n->{fixed} // ($n->{longest} && $n->{least})) or return;
+    return eval { no warnings; qr/$n->{re}/ };
+}
+
 # Where the longest match of a pattern at $p ends, within the first $len
 # characters of the subject; undef if it does not match.
 sub longest ($x, $pattern, $subject, $p, $len) {
@@ -92,11 +102,20 @@ sub split_string ($x, $plan, $s) {
     $x->charge($len, 16 + $len);
     my (@part, @sep);
     my ($start, $q, $carried) = (0, 0, '');     # start of the element; where a separator is sought
-    return [] if !$len && defined longest($x, $sep, \$s, 0, 0);     # no characters to tell apart
-    my $literal = !ref $sep && length $sep;                         # which can simply be searched for
+    my $perl = ref $sep eq 'Regexp';                                # which Perl can search for,
+    my $literal = !ref $sep && length $sep;                         # or simply look up
+    return [] if !$len && !$perl && defined longest($x, $sep, \$s, 0, 0);       # no characters to tell apart
     while ($q <= $len) {
-        if ($literal) { $q = index $s, $sep, $q; last if $q < 0 }
-        my $end = longest($x, $sep, \$s, $q, $len);
+        my $end;
+        if ($perl) {
+            pos($s) = $q;
+            $s =~ /$sep/g or last;
+            ($q, $end) = ($-[0], $+[0]);
+        }
+        else {
+            if ($literal) { $q = index $s, $sep, $q; last if $q < 0 }
+            $end = longest($x, $sep, \$s, $q, $len);
+        }
         # an empty separator counts only between two characters of an element
         if (defined $end && ($end > $q || $q > $start && $q < $len)
             && (!defined $element || spans($x, $element, \$s, $start, $q))) {

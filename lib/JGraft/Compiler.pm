@@ -442,9 +442,34 @@ sub char_matcher ($c, $ctx, $v) {
     my $n = is_str($lit) ? length $lit : 1;
     # `chars`: the characters it matches, where that is known: a list of ranges of code points
     my $chars = $n == 1 ? [ [ (char_code(undef, $lit)) x 2 ] ] : undef;
-    return { seq => 1, one => $n == 1, chars => $chars, code => is_str($lit)
+    my $re    = join '', map { sprintf '\\x{%X}', $_ } is_str($lit) ? map { ord } split //, $lit : $lit;
+    return { seq => 1, one => $n == 1, chars => $chars, re => $re, fixed => $n, code => is_str($lit)
         ? sub { substr(${ $_[1] }, $_[2], $n) eq $lit ? $_[2] + $n : () }
         : sub { $_[2] < $_[3] && ord(substr ${ $_[1] }, $_[2], 1) == $lit ? $_[2] + 1 : () } };
+}
+
+# Patterns as Perl regexes
+#
+# Matching the characters of a string is what Perl's regexes are for, and
+# they do it far faster than closures called for each character.  But a regex
+# answers a narrower question than a pattern here: it finds one match, the
+# first that its own rules lead it to, where the specification may want the
+# longest, or all the places a match could end.  So a node says only what is
+# certain about it, and each use takes what it can rely on:
+#
+#   re        a regex that matches, at a place, just the strings the node does.
+#             It can answer whether there is a match at all (STR).
+#   fixed     every string it matches is this long
+#   longest   what `re` matches first at a place is the longest the node can
+#   least     and the shortest it can is this long
+#   chars     it matches one character, from this set (ranges of code points)
+#
+# To keep Perl's work in proportion to the text, the only repetition written
+# into a regex is of a single character.
+
+# A set of characters as a regex.
+sub re_set ($chars) {
+    return @$chars ? '[' . join('', map { sprintf '\\x{%X}-\\x{%X}', @$_ } @$chars) . ']' : '(?!)';
 }
 
 sub char_code ($x, $v) {

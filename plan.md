@@ -1075,10 +1075,27 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   Plain values now go first, then patterns by how much is written in them,
   then by name, so the time is steady and usually the lower one. The spec
   leaves the order open.
-- **Native regexes only for trimming** (§11.4 proposed translating whole
-  patterns). Elsewhere there are exact, general shortcuts: `index` for
-  literal separators, and a run loop in REP when its body matches exactly one
-  element. A trim pattern that is a run of characters from one known set
+- **A pattern is charged for each place it is tried from** (§9), not for
+  each place it matched from. As first written, `possible` charged after
+  each step, by the number of positions that survived it, so an unanchored
+  STR that failed at 100,000 starting places cost nothing and no `ops` limit
+  could stop it.
+- **Native regexes where they are certain to agree** (§11.4 proposed
+  translating whole patterns, for existence only). A node in regex context
+  now says what is certain about it as a Perl regex: `re`, a regex matching
+  at a place just the strings the node matches (characters, strings, CHARS,
+  SEQ, ANY, NONE, START, END, and REP with fixed limits over one character
+  or any); and, where it is so, that the regex's first match at a place is
+  the longest (`fixed`, `longest`, `least`). Each use takes what it can rely
+  on. STR asking only whether there is a match needs just `re`. A separator
+  needs the longest match, never empty: a choice of strings and single
+  characters, written longest first, or a run of at least one. Trims are
+  below. The only repetition ever written into a regex is of a single
+  character, so Perl's backtracking stays polynomial where the closures'
+  successor sets are; and STR does not ask Perl at all when operations are
+  being counted, since Perl does not count. Elsewhere there are exact,
+  general shortcuts: `index` for literal separators, and a run loop in REP
+  when its body matches exactly one element. A trim pattern that is a run of characters from one known set
   (`[REP, lo, hi, c]` with fixed limits, where c is a character or a CHARS
   that refers to no other set) is handed to Perl: the set is worked out as
   ranges when the graft is compiled, the left trim is one anchored match, and

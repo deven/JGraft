@@ -28,6 +28,7 @@ for my $exact (0, 1) {
             # In a sequence the spec is tested from here, however far it
             # reaches, and then exactly one element is consumed.
             my ($test, $resolve) = @n{qw(code resolve)};
+            delete @n{qw(re fixed longest least chars run tails)};     # which were true of the spec, not of this
             return { %n, code => sub { $_[2] < $_[3] && (() = &$test) ? $_[2] + 1 : () },
                 resolve => sub ($x, $s, $from, $to, $len) {
                     my @end = do { local $x->{capturing} = 0; $test->($x, $s, $from, $len) };
@@ -71,8 +72,13 @@ defop STR => 8, 'match', 'X?', sub ($c, $ctx, @regex) {
     return { code => sub { is_str($_[1]) } } unless @regex;
     my $item = $c->match({ %$ctx, exact => 0, regex => 1, seq => 1, top => 1 }, $regex[0]);
     my $run  = JGraft::Seq::runner([$item], 1);
+    # Whether there is a match at all is a question Perl can be asked, if
+    # the pattern can be written as a regex and no captures are wanted.  It
+    # is not asked when operations are being counted: Perl does not count.
+    my $perl = !$item->{caps} && defined $item->{re} ? eval { no warnings; qr/$item->{re}/ } : undef;
     return { throws => 1, caps => $item->{caps}, code => sub {
         return 0 unless is_str($_[1]);
+        return $_[1] =~ $perl ? 1 : 0 if $perl && $_[0]{ops} == INF;
         my $len = length $_[1];
         $run->($_[0], \$_[1], $len, [ 0 .. $len ], undef);      # not anchored: may start anywhere
     } };
@@ -104,9 +110,11 @@ my $alternative = sub ($c, $ctx, @spec) { map { $c->match({ %$ctx, cap => 0, top
 my $alternatives = sub ($c, $ctx, @spec) { map { trap($_) } $alternative->($c, $ctx, @spec) };
 
 defop NONE => 3, 'match', 'X*', sub ($c, $ctx, @spec) {
-    my @try = $alternatives->($c, $ctx, @spec);
+    my @kid = $alternative->($c, $ctx, @spec);
+    my @try = map { trap($_) } @kid;
     return { code => sub { $_->(@_) and return 0 for @try; 1 } } unless $ctx->{seq};
-    return { seq => 1, code => sub { (() = $_->(@_)) and return for @try; $_[2] } };
+    my $re = (grep { !defined $_->{re} } @kid) ? undef : @kid ? '(?!' . join('|', map { $_->{re} } @kid) . ')' : '';
+    return { seq => 1, re => $re, code => sub { (() = $_->(@_)) and return for @try; $_[2] } };
 }, seq => 1, blind => 1;
 
 defop ANY => 4, 'match', 'X+', sub ($c, $ctx, @spec) {
@@ -117,7 +125,13 @@ defop ANY => 4, 'match', 'X+', sub ($c, $ctx, @spec) {
     # characters that each could be are the characters this could be
     my $one   = !grep { !$_->{one} } @kid;
     my $chars = (grep { !$_->{chars} } @kid) ? undef : [ map { @{ $_->{chars} } } @kid ];
-    return { seq => 1, one => $one, chars => $chars, code => sub {
+    # As a regex, alternatives of known lengths are put longest first, so
+    # that the first of them to match is the longest that does.
+    my $sized = !grep { !defined $_->{fixed} } @kid;
+    my @by    = $sized ? sort { $b->{fixed} <=> $a->{fixed} } @kid : @kid;
+    my $re    = (grep { !defined $_->{re} } @kid) ? undef : '(?:' . join('|', map { $_->{re} } @by) . ')';
+    my %size  = $sized ? (longest => 1, least => $by[-1]{fixed}, fixed => $by[0]{fixed} == $by[-1]{fixed} ? $by[0]{fixed} : undef) : ();
+    return { seq => 1, one => $one, chars => $chars, re => $re, %size, code => sub {
         my @end = map { $_->(@_) } @try;
         return @end if @end < 2;
         my %seen;
@@ -195,7 +209,8 @@ sub sequence ($c, $ctx, @spec) {
         @at;
     }, @kid);
     my $run = JGraft::Seq::runner(\@kid);
-    return { %$n, seq => 1, resolve => sub ($x, $s, $from, $to, $len) { $run->($x, $s, $len, [$from], $to) } };
+    my $re  = (grep { !defined $_->{re} } @kid) ? undef : join '', map { $_->{re} } @kid;
+    return { %$n, seq => 1, re => $re, resolve => sub ($x, $s, $from, $to, $len) { $run->($x, $s, $len, [$from], $to) } };
 }
 
 defop SEQ => 13, 'match', 'X*', \&sequence, seq => 1;
@@ -238,7 +253,11 @@ defop REP => 16, 'match', 'V?V?X?', sub ($c, $ctx, @arg) {
     # `tails`: every tail of a match is itself a match (a run with no minimum)
     # `run`: it is from $lo to $hi characters of one known set
     my $run = @fixed && $kid && $kid->{chars} ? [ $kid->{chars}, @fixed ] : undef;
-    return { seq => 1, throws => !@fixed, tails => @fixed && !$fixed[0] && (!$kid || $single), run => $run, code => sub {
+    # as a regex: a run of any characters, or of those in one set, which Perl makes as long as it can
+    my $unit = !$kid ? '(?s:.)' : $kid->{chars} ? JGraft::Compiler::re_set($kid->{chars}) : undef;
+    my %re   = @fixed && $unit
+        ? (re => "$unit\{$fixed[0]," . ($fixed[1] == INF ? '' : $fixed[1]) . '}', longest => 1, least => $fixed[0]) : ();
+    return { seq => 1, throws => !@fixed, tails => @fixed && !$fixed[0] && (!$kid || $single), run => $run, %re, code => sub {
         my ($x, $s, $p, $len) = @_;
         my ($lo, $hi) = @fixed ? @fixed : $limits->($min ? &$min : 0, $max ? &$max : -1)
             or $x->fail_operand('invalid REP bounds');
@@ -266,11 +285,11 @@ defop REP => 16, 'match', 'V?V?X?', sub ($c, $ctx, @arg) {
 
 # Zero-width tests of where the current node sits in its array.
 defop START => 17, 'match', '', sub ($c, $ctx) {
-    +{ zero => 1, code => sub { ref $_[3] && ref $_[3] ne 'HASH' && $_[2] == 0 } };
+    +{ zero => 1, re => '\A', code => sub { ref $_[3] && ref $_[3] ne 'HASH' && $_[2] == 0 } };
 };
 
 defop END => 18, 'match', '', sub ($c, $ctx) {
-    +{ zero => 1, code => sub {
+    +{ zero => 1, re => '\z', code => sub {
         my $r = ref $_[3];
         $r eq 'ARRAY' ? $_[2] == @{ $_[3] } : $r eq 'SCALAR' && $_[2] == length ${ $_[3] };
     } };
@@ -319,7 +338,8 @@ defop CHARS => 19, 'match', 'X*', sub ($c, $ctx, @spec) {
     }
     my $chars = (grep { @$_ == 2 } @rule) ? undef : \@set;
     @rule = reverse @rule;      # the last rule that mentions a character decides
-    return { chars => $chars, throws => !!(grep { @$_ == 2 } @rule), code => sub {
+    my %re = $chars ? (re => JGraft::Compiler::re_set($chars), fixed => 1) : ();
+    return { chars => $chars, %re, throws => !!(grep { @$_ == 2 } @rule), code => sub {
         my $cp = created_as_number($_[1]) ? $_[1] : is_str($_[1]) && length $_[1] == 1 ? ord $_[1] : return 0;
         for my $rule (@rule) {
             return $rule->[0] if @$rule == 2 ? $rule->[1]->(@_) : $rule->[1] <= $cp && $cp <= $rule->[2];

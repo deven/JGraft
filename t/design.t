@@ -741,6 +741,104 @@ subtest 'trimming is quick' => sub {
     }
 };
 
+subtest 'Perl matches the characters of strings where it can' => sub {
+    my ($T, $F) = (JSON::PP::true, JSON::PP::false);
+    my $c    = JGraft::Compiler->new;
+    my $node = sub ($pattern) { $c->match({ scope => { exprs => {}, cells => {} }, regex => 1, seq => 1, top => 1 }, $pattern) };
+    my $re   = sub ($pattern) { $node->($pattern)->{re} // 'none' };
+
+    # A pattern has a regex only if the regex matches just what the pattern does.
+    is $re->($_->[1]), $_->[2], "as a regex: $_->[0]" for
+        [ 'a string'                       => 'ab',                                  '\x{61}\x{62}' ],
+        [ 'a set'                          => [ CHARS => '0', '9' ],                 '[\x{30}-\x{39}]' ],
+        [ 'a set with nothing in it'       => ['CHARS'],                             '(?!)' ],
+        [ 'a run of a set'                 => [ REP => 1, -1, [ CHARS => '0', '9' ] ], '[\x{30}-\x{39}]{1,}' ],
+        [ 'a run of anything'              => [ REP => 2, 3 ],                       '(?s:.){2,3}' ],
+        [ 'a sequence, and the ends'       => [ SEQ => ['START'], 'a', ['END'] ],    '\A\x{61}\z' ],
+        [ 'a choice, longest first'        => [ ANY => "\n", "\r\n" ],              '(?:\x{D}\x{A}|\x{A})' ],
+        [ 'a refusal'                      => [ NONE => 'a', 'b' ],                  '(?!\x{61}|\x{62})' ];
+    is $re->($_->[1]), 'none', "but there is none for $_->[0]" for
+        [ 'a run of more than single characters' => [ REP => 0, -1, 'ab' ] ],
+        [ 'a run with limits that depend on the data' => [ REP => 0, ['NODE'], 'a' ] ],
+        [ 'ALL, which is not a meeting of matches' => [ ALL => 'a', [ CHARS => 'a', 'z' ] ] ],
+        [ 'a character that depends on the data' => [ SEQ => 'a', [ 'TEMP', 'c' ] ] ],
+        [ 'one element tested by a pattern of its own' => [ SEQ => [ IS => [ REP => 0, -1, 'a' ] ] ] ];
+
+    # STR, asking only whether there is a match, puts the question to Perl.
+    my $found = sub ($pattern, $text, @opt) {
+        my $r = graft([ COPY => [ STR => $pattern ], ['NODE'] ])->run($text, @opt);
+        $r->ok ? ($r->output ? 'yes' : 'no') : $r->error->code;
+    };
+    my $number = [ SEQ => 'needle ', [ REP => 1, -1, [ CHARS => '0', '9' ] ], ' end', ['END'] ];
+    my $hay    = ('lorem ipsum dolor sit amet ' x 400) . 'needle 42 end';
+    is $found->($number, $hay),        'yes', 'a match is found';
+    is $found->($number, $hay . '.'),  'no',  'or not';
+    is $found->($number, $hay, limits => { ops => 1e9 }),  'yes',            'as it is when operations are counted,';
+    is $found->($number, $hay, limits => { ops => 1000 }), 'RESOURCE_LIMIT', 'which Perl is then not asked, so that the count is kept';
+    is show(graft([ COPY => [ CAPTURE => [ STR => [ SEQMAX => 'n', [ REP => 1, -1, [ CHARS => '0', '9' ] ] ] ] ], ['NODE'] ])
+        ->apply('xa42')), '{"n":{"len":2,"lim":4,"ofs":2,"path":[]}}', 'nor is it asked when captures are wanted';
+
+    # A separator is found by Perl when its first match at a place is surely the longest, and not empty.
+    my $by_perl = sub ($pattern) { JGraft::Ops::Split::separator($node->($pattern)) ? 'Perl' : 'pattern' };
+    is $by_perl->($_->[1]), 'Perl', "Perl finds a separator that is $_->[0]" for
+        [ 'a choice of strings'            => [ ANY => "\n", "\r\n" ] ],
+        [ 'a choice of strings and sets'   => [ ANY => ', ', [ CHARS => ';', '|' ], ',' ] ],
+        [ 'a run of one or more'           => [ REP => 1, -1, ' ' ] ];
+    is $by_perl->($_->[1]), 'pattern', "but not one that is $_->[0]" for
+        [ 'a sequence'                     => [ SEQ => [ REP => 0, -1, ' ' ], ',' ] ],
+        [ 'a choice that may be empty'     => [ ANY => ',', '' ] ],
+        [ 'a run that may be empty'        => [ REP => 0, -1, ' ' ] ];
+    my $crlf = { sep => [ ANY => "\n", "\r\n" ], default => "\n" };
+    is show(graft([ COPY => [ SPLIT => $crlf ], [ 'STASH', 's' ] ],
+        [ COPY => { pieces => [ 'STASH', 's' ], joined => [ JOIN => $crlf, [ 'STASH', 's' ] ] }, ['NODE'] ])->apply("a\r\nb\nc")),
+        '{"joined":"a\\r\\nb\\nc","pieces":["a","b","c"]}', 'the longer of two that match is the separator, and each is kept for the join';
+
+    # Whoever does the matching, the answers are the same.
+    no warnings qw(surrogate nonchar utf8);
+    srand 3;
+    my @letters = ('a', 'b', 'c', ' ', "\n", "\x{e9}", "\x{1F600}", chr 0xD800);
+    my $pick    = sub { $letters[ rand @letters ] };
+    my $text    = sub ($n) { join '', map { $letters[ rand(rand() < .7 ? 3 : @letters) ] } 1 .. rand $n };
+    my $pattern;
+    $pattern = sub ($depth) {
+        my $k = rand;
+        return $pick->()                                                 if $k < .2 || $depth > 3;
+        return $text->(4)                                                if $k < .3;
+        return [ CHARS => $F, $pick->(), $T, 'c' ]                       if $k < .4;
+        return [ ('START', 'END')[ rand 2 ] ]                            if $k < .5;
+        return [ REP => int rand 3, (-1, 0, 2)[ rand 3 ], (rand() < .2 ? () : rand() < .5 ? $pick->() : [ CHARS => 'a', 'b' ]) ] if $k < .64;
+        return [ SEQ => map { $pattern->($depth + 1) } 1 .. rand 4 ]     if $k < .8;
+        return [ ANY => map { $pattern->($depth + 1) } 1 .. 1 + rand 3 ] if $k < .9;
+        return [ NONE => map { $pattern->($depth + 1) } 1 .. rand 3 ]    if $k < .96;
+        return [ ALL => $pattern->($depth + 1), $pattern->($depth + 1) ];
+    };
+    my ($differ, $asked) = (0, 0);
+    for (1 .. 1500) {
+        my $p = $pattern->(0);
+        $asked++ if $re->($p) ne 'none';
+        my $s = $text->(12);
+        $differ++ if $found->($p, $s) ne $found->($p, $s, limits => { ops => 1e12 });
+    }
+    is $differ, 0, "STR gives the same answer either way, for 1,500 patterns ($asked of them put to Perl)";
+    my $separator = \&JGraft::Ops::Split::separator;
+    $differ = 0;
+    for (1 .. 1500) {
+        my @alt  = map { rand() < .6 ? $text->(3) : rand() < .5 ? $pick->() : [ CHARS => 'a', 'b' ] } 1 .. 1 + rand 4;
+        my %spec = (sep => [ ANY => @alt ], default => ',', (rand() < .3 ? (keep => (qw(< > @))[ rand 3 ]) : ()),
+            (rand() < .2 ? (element => [ REP => 0, -1, [ CHARS => 'a', 'c' ] ]) : ()));
+        my $s = $text->(16);
+        my @out;
+        for my $perl (1, 0) {
+            no warnings 'redefine';
+            local *JGraft::Ops::Split::separator = sub { undef } unless $perl;
+            push @out, eval { show(graft([ COPY => [ SPLIT => \%spec ], [ 'STASH', 's' ] ],
+                [ COPY => { pieces => [ 'STASH', 's' ], joined => [ JOIN => \%spec, [ 'STASH', 's' ] ] }, ['NODE'] ])->run($s)->output) } // "died: $@";
+        }
+        $differ++ if $out[0] ne $out[1];
+    }
+    is $differ, 0, 'and SPLIT gives the same pieces either way, for 1,500 separators';
+};
+
 subtest 'the public interface' => sub {
     my @seen;
     my $g = graft([ RAISE => 'warn', 'careful', ['NODE'] ], [ MATCH => 1 ], [ COPY => 2, ['NODE'] ]);
