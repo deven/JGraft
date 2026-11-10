@@ -820,7 +820,9 @@ the behaviour the conformance tests currently assert.
    Suite is consistent with: the error propagates to the nearest ANY / NONE
    argument, else fails the whole match state. → Say so. As written,
    `[REP, 0, -1, <erroring body>]` could mean "matches zero times" or "match
-   fails"; no test covers it.
+   fails". (Corrected after implementing: `14-rep` does cover this — a failing
+   body ends the repetition and earlier counts stand, so REP's body is a third
+   trap site. See §17.)
 8. **ALL capture merging (1596–1598).** "Nearest" is ambiguous, and the spec's
    own example (successors 1, 3, 7; output 2) is a tie between 1 and 3. Suite:
    the **greatest successor not beyond** the output position. → Reword.
@@ -898,8 +900,80 @@ the behaviour the conformance tests currently assert.
 
 ---
 
-## After approval
+## 17. Addendum: after implementing
 
-This file is the design document. Tell me where it should live (for example
-alongside the Perl sources once they are restored) and I will copy it there
-unchanged.
+The implementation is in `lib/` with tests in `t/`. It passes every
+conformance case in both validation modes. This section records where it
+departs from the plan above, and what the suite taught that the spec does not
+say.
+
+### Departures from the plan
+
+Each of these made the code smaller; none changes behaviour the suite can see.
+
+- **No constant folding (§5.5 step 5).** Literal data is still recognised at
+  compile time (for patterns), but computed constants are evaluated each run.
+  Folding would have hidden work from the `mem` and `ops` limits.
+- **Literal containers are rebuilt per evaluation**, not shared. Sharing them
+  would let a caller who edits one run's output corrupt the compiled graft.
+- **`depth` counts EXPR nesting only** (§9). Static nesting is bounded by the
+  graft, so there is no per-node depth and no per-action check.
+- **Dates are exported once, when the output is produced** (§7.2), not at each
+  store into the node namespace.
+- **Fewer modules** (§3): no `JGraft::Result` file (it is three accessors in
+  `JGraft.pm`); operations are in `Ops::Action`, `Match`, `Fn`, `Math`,
+  `Split`.
+- **Options not built** (§2): `forbid_proto`, `allow_inf`, and a `partial`
+  field (after a failure, `output` is the tree as it stood). `where` is the
+  name of the action, not an index path.
+- **No native-regex translation** (§11.4). Instead three exact, general
+  shortcuts: `index` for literal separators, a run loop in REP when its body
+  matches exactly one element, and working back from the end for a right-trim
+  that is such a run.
+- **LOCAL with a computed `null` name inside a regex** keeps regex context in
+  its result expression (the two-variant scheme of §11.4 was not built).
+- **`lit` instead of a `plain()` pre-scan** (§5.4): a matcher that compares
+  with a constant says so, and a pattern made only of those collapses to one
+  `match_lit` — decided bottom-up, so deep patterns compile in linear time.
+
+### More that the suite decides and the spec does not say
+
+22. **REP's body is trapped** (see item 7): `[SEQ, [REP,0,1,[NODE,"absent"]], 1]`
+    matches `[1]`.
+23. **One-argument HAS / IS in a sequence** (1491–1493) tests its spec *as a
+    sequence from the current position*, however far that reaches, and then
+    consumes exactly one element: `[SEQ, [IS, [SEQ,1,2]], 2]` matches `[1,2]`.
+    The text only says the successor is the next position.
+24. **SPLIT with a separator that can be empty** (2229–2236): an empty match
+    does not count at the end of the string, and an empty string yields `[]`
+    rather than `[""]`. Both follow from "every boundary between characters"
+    but neither is stated, and the `/a*/` example suggests otherwise for the
+    final element.
+25. **ATSPLIT evaluates `split_spec` with the selected string as the current
+    node** (1016–1033), not the node the action started at.
+26. **MKOBJ with a wrong number of arguments is `INVALID_TARGET`** even though
+    the count is static; the suite does not allow `INVALID_GRAFT` there. Other
+    arity errors are `INVALID_GRAFT`.
+27. **A missing name inside CHARS is a failed probe** (1907–1910 says
+    `INVALID_OPERAND`), whereas elsewhere the suite allows a missing literal
+    EXPR name to be `INVALID_GRAFT`. → Pick one.
+28. **In a SLICE configuration object an explicit `null` position is an
+    error**, though an absent one takes a default (2056–2065).
+29. **ARRAY's skipped prefix must exist**: during a MOVE, an element pending
+    deletion in the skipped range (or, under IS, after the matched items)
+    makes the match fail (1641–1651 implies it via the REP equivalence).
+30. **An array literal containing a direct reference keeps that element's
+    SPLIT metadata** (`[[ [NODE] ]]` inside REDUCE over a split array). The
+    spec's "construction of new arrays counts as an insert" covers it, but only
+    just.
+31. **`[IF]` and `[IF, action]` are valid** (a no-op, and an unconditional
+    else); 1090–1091 shows only the longer forms.
+32. **CASTNUM must not turn a nonzero string into 0** (`"1e-400"`); 2463–2464
+    speaks only of numbers "outside the range".
+
+### For anyone running the suite from another JSON library
+
+Two things in `conformance/*.json` trip decoders: lone surrogate escapes
+(`JSON::PP` and `Cpanel::JSON::XS` both refuse them), and integers longer than
+the machine word (`JSON::PP` returns them as strings). `t/conformance.t` works
+around both; see `load`.
