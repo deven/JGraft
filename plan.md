@@ -839,8 +839,15 @@ the behaviour the conformance tests currently assert.
     appear only in `conformance/README.md` 22–28 with one-line glosses, yet
     cases require e.g. `ops: 500` to trip on a single CONCAT of ~1 000
     elements — i.e. per-element counting. → Add a short normative model: what
-    one "op" minimally covers, and that depth counts expression nesting
-    including EXPR expansion.
+    one "op" minimally covers, and that `depth` is the number of `EXPR`
+    calls in progress at once. (Revised after implementing. This entry first
+    recommended counting all expression nesting, through EXPR expansion.
+    Counting calls is the better rule: only EXPR can recurse, nesting written
+    out in a graft is bounded by the graft, a count of calls does not change
+    when an expression is moved into a definition, and it agrees with the
+    suite's own gloss, "maximum recursion depth of any expression". Every
+    case in the suite that sets `depth` is EXPR recursion, so the suite
+    passes under either rule and the spec has to choose.)
 12. **TEMP lifetime (212–216).** "For the duration of one action" does not say
     whether sub-actions of AT / MATCH / IF share it. Suite: each COPY / MOVE
     starts empty. → State that every action execution starts with an empty
@@ -963,8 +970,11 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   set of keys is not protected, because locking a Perl hash also makes it an
   error to read a key it lacks; that case is left to the documentation in
   `JGraft.pm`.
-- **`depth` counts EXPR nesting only** (§9). Static nesting is bounded by the
-  graft, so there is no per-node depth and no per-action check.
+- **`depth` counts EXPR nesting only** (§9): the number of EXPR calls in
+  progress at once. Static nesting is bounded by the graft, so there is no
+  per-node depth and no per-action check. This is now the definition
+  recommended for the spec (§16 item 11), not just a shortcut. A graft
+  written more deeply than the limit, without EXPR, is therefore accepted.
 - **Dates are replaced where they leave the engine** (§7.2): when an action
   stores a value into the document, or puts one in the log. Instead of the
   planned count of dates made during the run, which says only that a date
