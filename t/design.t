@@ -675,6 +675,67 @@ subtest 'a run can be undone' => sub {
         'and is a date again';
 };
 
+subtest 'trimming is quick' => sub {
+    # A trim that is a run of characters from one set is found by Perl's own matcher.
+    my $c    = JGraft::Compiler->new;
+    my $kind = sub ($pattern) {
+        my $n = $c->match({ scope => { exprs => { ws => [ CHARS => " \t" ] }, cells => {} }, regex => 1, seq => 1, top => 1 }, $pattern);
+        $n->{run} && JGraft::Ops::Split::native(@{ $n->{run} }) ? 'Perl' : 'pattern';
+    };
+    my $ws = [ expr => [ ws => [ CHARS => " \t" ] ] ];      # a set, to be referred to by name
+    my ($T, $F) = (JSON::PP::true, JSON::PP::false);
+    is $kind->($_->[1]), 'Perl', "Perl is given $_->[0]" for
+        [ 'a run of one character'           => [ REP => 0, -1, ' ' ] ],
+        [ 'one given by its code point'      => [ REP => 0, -1, 32 ] ],
+        [ 'a run of a set, with limits'      => [ REP => 1, 3, [ CHARS => " \t" ] ] ],
+        [ 'a set made by taking away'        => [ REP => 0, -1, [ CHARS => $F, 'a', 'z', $T, 'q' ] ] ],
+        [ 'a choice of single characters'    => [ REP => 0, -1, [ ANY => ' ', "\t", [ CHARS => '0', '9' ] ] ] ];
+    is $kind->($_->[1]), 'pattern', "but not $_->[0]" for
+        [ 'a set that refers to another'     => [ REP => 0, -1, [ CHARS => [ EXPR => 'ws' ] ] ] ],
+        [ 'a choice that is not of single characters' => [ REP => 0, -1, [ ANY => ' ', "\t\t" ] ] ],
+        [ 'a run inside something else'      => [ SEQ => [ REP => 0, -1, ' ' ] ] ],
+        [ 'a run whose limits depend on the data' => [ REP => 0, [ 'NODE' ], ' ' ] ],
+        [ 'a run of nothing'                 => [ REP => 0, -1, ['CHARS'] ] ];
+
+    # Whoever does it, the result is the same.
+    my $native = \&JGraft::Ops::Split::native;
+    my $both   = sub ($spec, $text) {
+        my $g = sub { show(graft([ COPY => [ SPLIT => $spec ], [ 'STASH', 's' ] ],
+            [ COPY => { pieces => [ 'STASH', 's' ], joined => [ JOIN => $spec, [ 'STASH', 's' ] ] }, ['NODE'] ])->apply($text)) };
+        no warnings 'redefine';
+        my $by_perl = $g->();
+        local *JGraft::Ops::Split::native = sub { undef };
+        return ($by_perl, $g->());
+    };
+    my ($by_perl, $by_pattern) = $both->({ sep => ',', trim => [ REP => 0, -1, ' ' ] }, '  a b ,c,   ,  ,d   ');
+    is $by_perl, '{"joined":"  a b ,c,   ,  ,d   ","pieces":["a b","c","","","d"]}', 'pieces are trimmed, and joined as they were';
+    is $by_perl, $by_pattern, 'as they are when Perl is not asked';
+    is show(graft([ ATSPLIT => 't', { sep => ',', trim => [ REP => 0, -1, ' ' ] }, [ COPY => { was => [ 'NODE', 0 ] }, [ 'STASH', 'o' ] ] ],
+        [ COPY => [ 'STASH', 'o' ], 'o' ])->apply({ t => ' a , b ' })), '{"o":{"was":"a"},"t":" a , b "}',
+        'and an object can be built while trimmings are being kept (it used to crash)';
+    srand 5;
+    my @chars = (' ', "\t", 'a', '-', "\x{e9}", "\x{1F600}");
+    my $differ = 0;
+    for (1 .. 400) {
+        my $body = (' ', '-', 32, [ CHARS => " \t" ], [ CHARS => $F, 'a', 'z' ], [ CHARS => 'a', "\x{e9}", $F, 'b' ])[ rand 6 ];
+        my $run  = [ REP => @{ ([ 0, -1 ], [ 1, -1 ], [ 0, 2 ], [ 2, 3 ], [ 0, 0 ])[ rand 5 ] }, $body ];
+        my %spec = (sep => ',', (rand() < .5 ? (trim => $run) : (map { rand() < .7 ? ($_ => $run) : () } qw(ltrim rtrim))));
+        my $text = join ',', map { join '', map { $chars[ rand @chars ] } 1 .. rand 9 } 1 .. 1 + rand 4;
+        my ($a, $b) = $both->(\%spec, $text);
+        $differ++ if $a ne $b;
+    }
+    is $differ, 0, 'for any run, limits and text';
+
+    # A trim that Perl cannot be given still costs in proportion to what it trims.
+    my $long = 'x' . ' ' x 2000;
+    for ([ 'by Perl' => ' ' ], [ 'by the pattern' => [ CHARS => [ EXPR => 'ws' ] ] ]) {
+        my ($who, $body) = @$_;
+        my $r = JGraft->new([ JGRAFT => { @$ws }, [ COPY => [ SPLIT => { sep => ',', rtrim => [ REP => 0, -1, $body ] } ], ['NODE'] ] ])
+            ->run($long, limits => { ops => 12_000 });
+        is show($r->output), '["x"]', "2,000 trailing characters are trimmed $who with about as many steps, not their square";
+    }
+};
+
 subtest 'the public interface' => sub {
     my @seen;
     my $g = graft([ RAISE => 'warn', 'careful', ['NODE'] ], [ MATCH => 1 ], [ COPY => 2, ['NODE'] ]);

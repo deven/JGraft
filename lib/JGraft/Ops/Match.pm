@@ -100,9 +100,8 @@ defop BOOL => 10, 'match', '', sub ($c, $ctx) {
 # and IS they are `blind`: only what they combine looks at the node.
 
 # Children of ANY and NONE are trapped individually, and cannot capture.
-my $alternatives = sub ($c, $ctx, @spec) {
-    map { trap($c->match({ %$ctx, cap => 0, top => 0 }, $_)) } @spec;
-};
+my $alternative = sub ($c, $ctx, @spec) { map { $c->match({ %$ctx, cap => 0, top => 0 }, $_) } @spec };
+my $alternatives = sub ($c, $ctx, @spec) { map { trap($_) } $alternative->($c, $ctx, @spec) };
 
 defop NONE => 3, 'match', 'X*', sub ($c, $ctx, @spec) {
     my @try = $alternatives->($c, $ctx, @spec);
@@ -111,9 +110,14 @@ defop NONE => 3, 'match', 'X*', sub ($c, $ctx, @spec) {
 }, seq => 1, blind => 1;
 
 defop ANY => 4, 'match', 'X+', sub ($c, $ctx, @spec) {
-    my @try = $alternatives->($c, $ctx, @spec);
+    my @kid = $alternative->($c, $ctx, @spec);
+    my @try = map { trap($_) } @kid;
     return { code => sub { $_->(@_) and return 1 for @try; 0 } } unless $ctx->{seq};
-    return { seq => 1, code => sub {
+    # alternatives that each take one element take one between them, and
+    # characters that each could be are the characters this could be
+    my $one   = !grep { !$_->{one} } @kid;
+    my $chars = (grep { !$_->{chars} } @kid) ? undef : [ map { @{ $_->{chars} } } @kid ];
+    return { seq => 1, one => $one, chars => $chars, code => sub {
         my @end = map { $_->(@_) } @try;
         return @end if @end < 2;
         my %seen;
@@ -232,7 +236,9 @@ defop REP => 16, 'match', 'V?V?X?', sub ($c, $ctx, @arg) {
     my $body   = $kid && trap($kid);        # a failed probe ends the repetition
     my $single = $kid && $kid->{one};
     # `tails`: every tail of a match is itself a match (a run with no minimum)
-    return { seq => 1, throws => !@fixed, tails => @fixed && !$fixed[0] && (!$kid || $single), code => sub {
+    # `run`: it is from $lo to $hi characters of one known set
+    my $run = @fixed && $kid && $kid->{chars} ? [ $kid->{chars}, @fixed ] : undef;
+    return { seq => 1, throws => !@fixed, tails => @fixed && !$fixed[0] && (!$kid || $single), run => $run, code => sub {
         my ($x, $s, $p, $len) = @_;
         my ($lo, $hi) = @fixed ? @fixed : $limits->($min ? &$min : 0, $max ? &$max : -1)
             or $x->fail_operand('invalid REP bounds');
@@ -303,8 +309,17 @@ defop CHARS => 19, 'match', 'X*', sub ($c, $ctx, @spec) {
         }
         else { return $c->fault('invalid member of a character set') }
     }
+    # A set that refers to no other is known now, as ranges: each rule in
+    # turn takes its range out of what there is, and puts it back if it adds.
+    my @set = $full ? [ 0, 0x10FFFF ] : ();
+    for (grep { @$_ == 3 } @rule) {
+        my ($adds, $lo, $hi) = @$_;
+        @set = map { my ($a, $b) = @$_; $b < $lo || $a > $hi ? $_ : (($a < $lo ? [ $a, $lo - 1 ] : ()), ($b > $hi ? [ $hi + 1, $b ] : ())) } @set;
+        push @set, [ $lo, $hi ] if $adds;
+    }
+    my $chars = (grep { @$_ == 2 } @rule) ? undef : \@set;
     @rule = reverse @rule;      # the last rule that mentions a character decides
-    return { throws => !!(grep { @$_ == 2 } @rule), code => sub {
+    return { chars => $chars, throws => !!(grep { @$_ == 2 } @rule), code => sub {
         my $cp = created_as_number($_[1]) ? $_[1] : is_str($_[1]) && length $_[1] == 1 ? ord $_[1] : return 0;
         for my $rule (@rule) {
             return $rule->[0] if @$rule == 2 ? $rule->[1]->(@_) : $rule->[1] <= $cp && $cp <= $rule->[2];

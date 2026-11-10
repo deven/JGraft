@@ -35,7 +35,7 @@ sub spec ($c, $ctx, $s) {
         if ($row && $row->{kind} eq 'match') {      # it is matched against the characters of the string
             my $n = $c->binding(['node'],
                 sub { $c->match({ scope => $ctx->{scope}, regex => 1, seq => 1, top => 1 }, $o{$name}) });
-            my $regex = trap($n);
+            my $regex = $name =~ /trim/ && $n->{run} && native(@{ $n->{run} }) || trap($n);
             $pattern{$name} = sub { $regex };
             $tails = $n->{tails} if $name eq 'rtrim';
         }
@@ -59,6 +59,17 @@ sub spec ($c, $ctx, $s) {
         };
         \%plan;
     };
+}
+
+# A trimming is nearly always a run of characters from one set, such as
+# spaces.  Perl can find one of those far faster than the closures for the
+# pattern can, so it is given the job: `front` matches the run at the start
+# of a string, and `back` any run at all.  (Nothing is returned if Perl will
+# not have the set or the limits, and the pattern is then used as it is.)
+sub native ($chars, $lo, $hi) {
+    my $class = join '', map { sprintf '\\x{%X}-\\x{%X}', @$_ } @$chars;
+    my $most  = $hi == 9**9**9 ? '' : $hi;
+    return eval { no warnings; +{ front => qr/^[$class]{$lo,$most}/, back => qr/^[$class]+/, lo => $lo, hi => $hi } };
 }
 
 # Where the longest match of a pattern at $p ends, within the first $len
@@ -104,25 +115,37 @@ sub split_string ($x, $plan, $s) {
     my ($ltrim, $rtrim) = @$plan{qw(ltrim rtrim)};
     my @m = map { [ (ref $sep && !$keep ? $sep[$_] : undef), undef, undef ] } 0 .. $#part;
     if (defined $ltrim || defined $rtrim) {
-        for my $i (0 .. $#part) {
-            my $text = $part[$i];
-            if (defined $ltrim and my $cut = longest($x, $ltrim, \$text, 0, length $text)) {
-                $m[$i][1] = substr $text, 0, $cut, '';
-            }
+        # where Perl does the trimming: its patterns, and the count of what it trims, to be charged for
+        my ($front, $back) = map { ref eq 'HASH' ? $_ : undef } $ltrim, $rtrim;
+        my ($at_front, $at_back, $lo, $hi) = ($front && $front->{front}, $back && @$back{qw(back lo hi)});
+        my ($found, $i) = (0, -1);
+        for my $text (@part) {      # each piece, where it lies
+            $i++;
+            my $lead = $at_front       ? ($text =~ $at_front ? $+[0] : 0)
+                     : defined $ltrim  ? longest($x, $ltrim, \$text, 0, length $text)
+                     :                   0;
+            $m[$i][1] = substr $text, 0, $lead, '' if $lead;
             # the right trimming is the longest match that ends where the text does
             my $n   = length $text;
             my $cut = $n;
-            if (ref $rtrim && $plan->{tails}) {     # a run of characters: work back from the end
-                $cut-- while $cut && spans($x, $rtrim, \$text, $cut - 1, $n);
+            if ($at_back) {                         # the run at the end is the run at the start, seen backwards
+                my $run = reverse($text) =~ $at_back ? $+[0] : 0;
+                $run  = $hi if $run > $hi;
+                $cut -= $run if $run >= $lo;
+            }
+            elsif (ref $rtrim && $plan->{tails}) {  # a run of characters: work back from the end, one at a time,
+                $cut-- while $cut && spans($x, $rtrim, \$text, $cut - 1, $cut);
+                $cut++ until $cut == $n || spans($x, $rtrim, \$text, $cut, $n);    # and no further than its limit allows
             }
             elsif (defined $rtrim) {
                 my @begin = ref $rtrim ? 0 .. $n - 1 : grep { $_ >= 0 } $n - length $rtrim;
                 $cut = (first { spans($x, $rtrim, \$text, $_, $n) } @begin) // $n;
             }
             $m[$i][2] = substr $text, $cut, $n - $cut, '' if $cut < $n;
-            $part[$i] = $text;
+            $found += ($at_front ? $lead : 0) + ($at_back ? $n - $cut : 0);
             @{ $m[$i] }[ 1, 2 ] = () if $plan->{discard};
         }
+        $x->charge($found);
     }
     $x->charge(scalar @part, 16 + 8 * @part);
     $x->charge_obj;

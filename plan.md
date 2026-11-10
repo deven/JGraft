@@ -1068,10 +1068,21 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   before passing the error on. All of this looking is done by `aside`, with
   limits off and failures ignored, so that it can never change which error a
   run reports.
-- **No native-regex translation** (§11.4). Instead three exact, general
-  shortcuts: `index` for literal separators, a run loop in REP when its body
-  matches exactly one element, and working back from the end for a right-trim
-  that is such a run.
+- **Native regexes only for trimming** (§11.4 proposed translating whole
+  patterns). Elsewhere there are exact, general shortcuts: `index` for
+  literal separators, and a run loop in REP when its body matches exactly one
+  element. A trim pattern that is a run of characters from one known set
+  (`[REP, lo, hi, c]` with fixed limits, where c is a character or a CHARS
+  that refers to no other set) is handed to Perl: the set is worked out as
+  ranges when the graft is compiled, the left trim is one anchored match, and
+  the right trim is the same match on the piece reversed. Reversal was
+  chosen over `s/[set]+$//` by measurement: the two tie on short lines, but
+  the end-anchored form tries every run of the set inside the line, and was
+  4x slower on 400-character lines and 60x slower with long runs inside.
+  Other trim patterns keep the closures, where the right trim now steps back
+  a character at a time and so is linear (it was quadratic in the length of
+  what it trimmed, which the first version's "working back from the end"
+  did not avoid).
 - **LOCAL with a computed `null` name inside a regex** keeps regex context in
   its result expression (the two-variant scheme of §11.4 was not built).
 - **`lit` instead of a `plain()` pre-scan** (§5.4): a matcher that compares

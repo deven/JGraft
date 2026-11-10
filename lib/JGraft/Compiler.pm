@@ -292,7 +292,7 @@ sub construct ($c, $ctx, $s) {
         my $x = $_[0];
         $x->charge_obj($hash ? scalar @code : 0);
         my $new = $make->(map { $_->(@_) } @code);
-        if (%{ $x->{side} }) {      # elements referred to directly keep their SPLIT metadata
+        if (@meta && %{ $x->{side} }) {     # elements referred to directly keep their SPLIT metadata
             $meta[$_] and $x->set_meta($new, $_, $meta[$_]->(@_)) for 0 .. $#meta;
             $x->settle($new);
         }
@@ -440,7 +440,9 @@ sub char_matcher ($c, $ctx, $v) {
     return { code => do { my $cp = char_code(undef, $lit); sub { created_as_number($_[1]) && $_[1] == $cp } } }
         unless $ctx->{seq};
     my $n = is_str($lit) ? length $lit : 1;
-    return { seq => 1, one => $n == 1, code => is_str($lit)
+    # `chars`: the characters it matches, where that is known: a list of ranges of code points
+    my $chars = $n == 1 ? [ [ (char_code(undef, $lit)) x 2 ] ] : undef;
+    return { seq => 1, one => $n == 1, chars => $chars, code => is_str($lit)
         ? sub { substr(${ $_[1] }, $_[2], $n) eq $lit ? $_[2] + $n : () }
         : sub { $_[2] < $_[3] && ord(substr ${ $_[1] }, $_[2], 1) == $lit ? $_[2] + 1 : () } };
 }
