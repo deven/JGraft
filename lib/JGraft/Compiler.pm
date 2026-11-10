@@ -503,7 +503,11 @@ sub object ($c, $ctx, $s) {
     my %kid   = map { $_ => $c->match($ctx, $s->{$_}) } keys %$s;
     return $c->matcher($ctx, konst({ map { $_ => $kid{$_}{lit} } keys %kid }))
         unless grep { !exists $_->{lit} } values %kid;
-    my @test  = map { [ $_, keyed($kid{$_}) ] } keys %kid;
+    # No order is laid down for trying the members, and the first to fail
+    # ends the match.  So the cheapest go first: plain values, and then the
+    # patterns with the least written in them.
+    my %cost  = map { $_ => exists $kid{$_}{lit} ? 0 : weight($s->{$_}) } keys %kid;
+    my @test  = map { [ $_, keyed($kid{$_}) ] } sort { $cost{$a} <=> $cost{$b} || $a cmp $b } keys %kid;
     return node(sub {
         my ($x, $n) = @_;
         return 0 unless ref $n eq 'HASH';
@@ -516,6 +520,13 @@ sub object ($c, $ctx, $s) {
         }
         return !$exact || $present == keys %$n;
     }, values %kid);
+}
+
+# How much there is in a pattern: the arrays and objects written in it.
+sub weight ($s) {
+    my $weight = ref $s eq 'ARRAY' ? 1 : ref $s eq 'HASH' ? 1 : return 0;
+    $weight += weight($_) for ref $s eq 'ARRAY' ? @$s : values %$s;
+    return $weight;
 }
 
 # An array pattern.  Items are matched one per element, unless one of them is

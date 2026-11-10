@@ -1068,6 +1068,13 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   before passing the error on. All of this looking is done by `aside`, with
   limits off and failures ignored, so that it can never change which error a
   run reports.
+- **Object patterns try their cheapest members first** (§5.4 gave no order).
+  The first implementation tried them in the order Perl's hash gave, which
+  changes from one process to the next: the same FILTER over 50,000 records
+  took 155 ms or 285 ms depending on which of its two members came first.
+  Plain values now go first, then patterns by how much is written in them,
+  then by name, so the time is steady and usually the lower one. The spec
+  leaves the order open.
 - **Native regexes only for trimming** (§11.4 proposed translating whole
   patterns). Elsewhere there are exact, general shortcuts: `index` for
   literal separators, and a run loop in REP when its body matches exactly one

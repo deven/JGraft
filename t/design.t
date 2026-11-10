@@ -92,6 +92,11 @@ subtest 'compile-time decisions' => sub {
     ok $c->match($ctx, { a => [ ALL => 'a', ['NODE', 'x'] ] })->{throws}, 'a pattern that reads the data does';
     ok !$c->match($ctx, [ ANY => 'a', ['NODE', 'x'] ])->{throws},    'ANY has already trapped its alternatives';
     ok exists $c->match($ctx, { a => [ [ 1, { b => undef } ] ] })->{lit}, 'pure data collapses to one comparison';
+    my $costly = [ IS => [ LENGTH => [ CONCAT => ['NODE'], ['NODE'] ] ], 2000 ];        # 2,000 operations to find out
+    my $choose = graft([ COPY => [ CASE => { a => $costly, b => [ NUM => 5 ], c => 1 }, 'y', 'n' ], ['NODE'] ]);
+    is $choose->run({ a => [ 1 .. 1000 ], b => 5, c => 0 }, limits => { ops => 100 })->output, 'n',
+        'the members of an object pattern are tried cheapest first: a plain value';
+    is $choose->run({ a => [ 1 .. 1000 ], b => 4, c => 1 }, limits => { ops => 100 })->output, 'n', 'then the patterns with least in them';
     is scalar JGraft->new([ JGRAFT => {}, [ COPY => ['NOPE'], 'a' ] ], strict => 0)->faults, 1, 'faults are collected';
     ok !eval { JGraft->new([ JGRAFT => {}, [ COPY => ['NOPE'], 'a' ] ]) }, 'and thrown at once when strict';
     is $@->code, 'INVALID_GRAFT', 'as INVALID_GRAFT';
