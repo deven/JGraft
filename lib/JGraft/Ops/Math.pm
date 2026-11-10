@@ -5,8 +5,8 @@ package JGraft::Ops::Math;
 use v5.36;
 use builtin qw(created_as_number);
 no warnings qw(experimental::builtin recursion);
-use POSIX qw(floor);
-use List::Util qw(min);
+use POSIX qw(floor fmod);
+use List::Util qw(min max);
 use JGraft::Util;
 use JGraft::Date;
 use JGraft::Compiler qw(defop);
@@ -21,6 +21,18 @@ sub number ($x, $n) {
     $n == $n          or $x->fail_target('the result is not a number');
     abs($n) != INF    or $x->fail(UNSUPPORTED_GRAFT => 'number out of range');
     return $n;
+}
+
+# Is this number held as an integer, exactly?  (One that is whole, but held
+# as a float too large to be exact, is not.)
+sub exact ($n) { "$n" =~ /\A-?[0-9]+\z/ }
+
+# The widest integers there are, as digits: for a number given as digits to
+# be compared with.
+my %WIDEST = ('' => '18446744073709551615', '-' => '9223372036854775808');
+sub fits ($sign, $digits) {
+    my $widest = $WIDEST{$sign};
+    return length $digits < length $widest || length $digits == length $widest && $digits le $widest;
 }
 
 #---------------------------------------------------------------------------
@@ -112,9 +124,9 @@ for ([ ADD => 74, 0, sub { $_[0] + $_[1] } ], [ MUL => 76, 1, sub { $_[0] * $_[1
             my $result = $identity;
             for my $n (@n) {
                 created_as_number($n) or $x->fail_target("$op needs numbers");
-                $result = $combine->($result, $n);
+                $result = number($x, $combine->($result, $n));      # checked at each step: what overflows cannot be undone
             }
-            number($x, $result);
+            $result;
         };
     };
 }
@@ -122,12 +134,26 @@ for ([ ADD => 74, 0, sub { $_[0] + $_[1] } ], [ MUL => 76, 1, sub { $_[0] * $_[1
 my %BINARY = (
     SUB => [ 75, sub ($x, $a, $b) { $a - $b } ],
     DIV => [ 77, sub ($x, $a, $b) { $b == 0 ? $x->fail_target('division by zero') : $a / $b } ],
-    # the result takes the sign of the divisor
-    MOD => [ 78, sub ($x, $a, $b) { $b == 0 ? $x->fail_target('division by zero') : $a - $b * floor($a / $b) } ],
+    # The result takes the sign of the divisor.  Perl's % does that, exactly,
+    # for integers; fmod is exact for the rest, but takes the other sign.
+    MOD => [ 78, sub ($x, $a, $b) {
+        $b == 0 and $x->fail_target('division by zero');
+        return $a % $b if exact($a) && exact($b);
+        my $r = fmod($a, $b);
+        return $r && ($r < 0 xor $b < 0) ? $r + $b : $r;
+    } ],
     POW => [ 79, sub ($x, $base, $power) {
         $base >= 0 && ($base > 0 || $power >= 0) or $x->fail_target('POW of an invalid base or exponent');
-        my $r = $base**$power;      # exact for integers while the result fits
+        my $r = $base**$power;
         $r != 0 || $base == 0 or $x->fail(UNSUPPORTED_GRAFT => 'number out of range');
+        # A power of integers is to be exact if an integer can hold it.  Perl
+        # makes it so up to 2**53; from there to the widest integer, it is
+        # worked out again in whole numbers.
+        if ($r >= 2**53 && $r < 2**64 && exact($base) && exact($power)) {
+            require Math::BigInt;
+            my $digits = Math::BigInt->new("$base")->bpow("$power")->bstr;
+            return 0 + $digits if fits('', $digits);
+        }
         return $r;
     } ],
     LOG => [ 80, sub ($x, $base, $n) {
@@ -154,6 +180,7 @@ sub round ($x, $o, $v) {
     $o = { shift => $o } if is_int($o);
     ref $o eq 'HASH' && !grep { !/^(?:mode|at|shift|as)$/ } keys %$o or $x->fail_operand('invalid ROUND options');
     !exists $o->{$_} || is_int($o->{$_}) or $x->fail_operand("ROUND $_ must be an integer") for qw(at shift);
+    abs($o->{$_} // 0) < 1e15 or $x->fail(UNSUPPORTED_GRAFT => 'exponent out of range') for qw(at shift);
     my $mode = exists $o->{mode} ? choice($x, \%MODE, $o->{mode}) : 1;
     my $as   = exists $o->{as}   ? choice($x, \%AS,   $o->{as})   : created_as_number($v) ? 0 : 2;
     my $at   = $o->{at} // 0;
@@ -189,7 +216,8 @@ sub round ($x, $o, $v) {
     my $zero = $digits !~ /[1-9]/;
 
     if ($as == 0) {         # a number, in whatever form holds it
-        my $n = number($x, 0 + ($e >= 0 && length($digits) + $e <= 18 ? $sign . $digits . '0' x $e : "$sign${digits}e$e"));
+        my $whole = $e >= 0 && length($digits) + $e <= 20 ? $digits . '0' x $e : undef;      # kept exact if an integer can hold it
+        my $n     = number($x, 0 + (defined $whole && fits($sign, $whole) ? "$sign$whole" : "$sign${digits}e$e"));
         $n != 0 || $zero or $x->fail(UNSUPPORTED_GRAFT => 'number out of range');
         return $n;
     }
@@ -199,17 +227,15 @@ sub round ($x, $o, $v) {
             $digits = -$e < length $digits ? substr $digits, 0, $e : '0';
         }
         elsif (!$zero) {
-            length($digits) + $e <= 19 or $x->fail(UNSUPPORTED_GRAFT => 'integer out of range');
+            length($digits) + $e <= 20 or $x->fail(UNSUPPORTED_GRAFT => 'integer out of range');
             $digits .= '0' x $e;
         }
-        my $limit = $sign ? '9223372036854775808' : '9223372036854775807';
-        length $digits < 19 || length $digits == 19 && $digits le $limit
-            or $x->fail(UNSUPPORTED_GRAFT => 'integer out of range');
+        fits($sign, $digits) or $x->fail(UNSUPPORTED_GRAFT => 'integer out of range');
         return 0 + "$sign$digits";
     }
     if ($as == 2) {         # plain decimal digits, with exactly $at of them after the point
         my $places = $at > 0 ? $at : 0;
-        $x->charge(0, 16 + length($digits) + $e + $places);
+        $x->charge(0, 16 + max($places + 1, $zero ? 0 : length($digits) + $e + $places));
         $digits = $zero ? '0' x ($places + 1) : $digits . '0' x ($e + $places);
         $digits = '0' x ($places + 1 - length $digits) . $digits if length $digits <= $places;
         substr $digits, -$places, 0, '.' if $places;
@@ -221,6 +247,7 @@ sub round ($x, $o, $v) {
     my $last = $known > -$at ? $known : -$at;
     $digits = $last - $e < length $digits ? substr $digits, 0, length($digits) - ($last - $e) : '0' if $last > $e;
     if ($last < 0) {
+        $x->charge(0, 16 + max(1 - $last, length $digits));
         $digits = '0' x (1 - $last - length $digits) . $digits if length $digits <= -$last;
         substr $digits, $last, 0, '.';
         return $sign . $digits;

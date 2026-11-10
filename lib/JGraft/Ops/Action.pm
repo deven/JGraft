@@ -176,7 +176,7 @@ defop MOVE => 6, 'action', '(XX)+', sub ($c, $ctx, @arg) {
                 next unless $dst;
                 eval { $x->give($dst->{ns}, \@to, $leaving ? $x->outgoing($v) : $v, $meta); 1 } or do {
                     my $error = $@;
-                    $x->give($src->{ns}, \@from, $v, $meta) if $src;    # a failed pair leaves no trace
+                    $x->give($src->{ns}, \@from, $v, $meta) if $src;    # a failed pair takes nothing away
                     die $error;
                 };
             }
@@ -201,6 +201,7 @@ defop SPLICE => 7, 'action', 'PVV*', sub ($c, $ctx, $path, $count, @new) {
     my @carried = map { carried($_) } @new;
     my @leaving = map { leaving($_, $path) } @new;
     return sub ($x) {
+        local $x->{temp} = $x->{temp};
         my @k = $keys->($x->env);
         my $n = $howmany->($x->env);
         !defined $n || is_int($n) or $x->fail_operand('SPLICE count must be an integer');

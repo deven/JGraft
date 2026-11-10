@@ -839,6 +839,72 @@ subtest 'Perl matches the characters of strings where it can' => sub {
     is $differ, 0, 'and SPLIT gives the same pieces either way, for 1,500 separators';
 };
 
+subtest 'numbers and dates at their edges' => sub {
+    # Each operand is read from the document, so that the run does the work.
+    my $of = sub ($expr, $in, @opt) {
+        my $r = graft([ COPY => $expr, ['NODE'] ])->run($in, @opt);
+        $r->ok ? show($r->output) : $r->error->code;
+    };
+    my $two = sub ($op) { [ $op, [ 'NODE', 0 ], [ 'NODE', 1 ] ] };
+
+    is $of->($two->('MOD'), $_->[0]), $_->[1], "MOD of @{ $_->[0] }" for
+        [ [ 9007199254740995,     3 ]          => '2' ],              # a quotient no float can hold
+        [ [ 9223372036854775807,  10 ]         => '7' ],
+        [ [ -1000000000000000001, 1000000000 ] => '999999999' ],
+        [ [ 1e22, 3 ]                          => '1' ],
+        [ [ -7,   3 ]                          => '2' ],              # the sign is the divisor's
+        [ [ 7,    -3 ]                         => '-2' ],
+        [ [ -7.5, 2 ]                          => '0.5' ],
+        [ [ 7.5,  -2 ]                         => '-0.5' ];
+    isnt $of->($two->('MOD'), [ 1e308, 1e-308 ]), 'UNSUPPORTED_GRAFT', 'MOD does not overflow on the way to a small answer';
+
+    is $of->([ CASTSTR => $two->('POW') ], $_->[0]), $_->[1], "POW of @{ $_->[0] } is exact" for
+        [ [ 3,  34 ] => '"16677181699666569"' ],                      # past 2**53
+        [ [ 7,  22 ] => '"3909821048582988049"' ],
+        [ [ 2,  62 ] => '"4611686018427387904"' ],
+        [ [ 10, 19 ] => '"10000000000000000000"' ],
+        [ [ 2,  10 ] => '"1024"' ];
+    is $of->([ MUL => [ 'NODE', 0 ], [ 'NODE', 1 ], [ 'NODE', 2 ] ], [ 1e200, 1e200, 0 ]), 'UNSUPPORTED_GRAFT',
+        'a product that overflows on the way is out of range, whatever comes after';
+    is $of->([ ADD => [ 'NODE', 0 ], [ 'NODE', 1 ], [ 'NODE', 2 ] ], [ 1e308, 1e308, -1e308 ]), 'UNSUPPORTED_GRAFT', 'and so is a sum';
+
+    is $of->([ ROUND => { shift => 1e20 }, ['NODE'] ], 5), 'UNSUPPORTED_GRAFT', 'ROUND refuses a shift too large to count with';
+    is $of->([ ROUND => { as => 'INT' } ], 18446744073709551615), '18446744073709551615', 'ROUND gives the widest integer as an integer';
+    is $of->([ ROUND => { as => 'INT' } ], '18446744073709551616'), 'UNSUPPORTED_GRAFT', 'and refuses one wider';
+    is $of->([ CASTSTR => ['ROUND'] ], 9223372036854775807), '"9223372036854775807"', 'an integer rounded to an integer is unchanged';
+    is $of->([ LENGTH => [ ROUND => { as => $_, at => 3e7 }, ['NODE'] ] ], '1e-30000001', limits => { mem => 1000 }), 'RESOURCE_LIMIT',
+        "ROUND as $_ is charged for the zeros it writes" for qw(STR SIG);
+
+    my $date = sub ($v) { $of->([ CASTSTR => [ CASTDATE => ['NODE'] ] ], $v) };
+    is $date->('2024-01-01T10:20:00.00001234'),  '"2024-01-01 10:20:00.00001234"', 'small fractions of a second are written out';
+    is $date->('2024-01-01T10:20:00.0000001'),   '"2024-01-01 10:20:00.0000001"',  'however small';
+    is $date->('2024-01-01T10:20:30.5Z'),        '"2024-01-01T10:20:30.5Z"',       'and others as before';
+    is $date->('-0044-03-15'),                   '"-0044-03-15"',                  'a year before zero keeps its four digits';
+    is $date->($date->('-0044-03-15') =~ s/"//gr), '"-0044-03-15"',                '... and can be read back';
+    is $date->("2024-01-01T10:20:3\x{661}"),      'INVALID_TARGET',                 'only the digits 0 to 9 are digits';
+    is $date->({ year => 1e300 }),               'INVALID_TARGET',                 'a year too large to count days from is no date';
+
+    my @keep  = (date_export => sub ($d) { $d });
+    my $dated = graft([ COPY => [ CASTDATE => '2024-01-01T10:00:00+01:00' ], 0 ])->apply([0], @keep);
+    my $r     = graft([ COPY => [ CASTDATE => '2024-01-01T09:00:00Z' ], 0 ])->run($dated, @keep);
+    is JGraft->new($r->undo)->apply($r->output, @keep)->[0]->str, '2024-01-01T10:00:00+0100',
+        'undo puts back a timestamp that was replaced by the same moment in another zone';
+    $dated = graft([ COPY => [ CASTDATE => '2024-01-01T10:20:00.00001234' ], 0 ])->apply([0], @keep);
+    $r     = graft([ COPY => 1, 0 ])->run($dated, @keep);
+    is JGraft->new($r->undo)->apply($r->output, @keep)->[0]->str, '2024-01-01 10:20:00.00001234', 'and one with a small fraction of a second';
+
+    my $deep = my $at = {};
+    $at = $at->{d} = {} for 1 .. 150;
+    $at->{v} = 1;
+    my @warned;
+    {
+        local $SIG{__WARN__} = sub { push @warned, @_ };
+        my $run = graft([ COPY => 2, [ 'NODE', ('d') x 150, 'v' ] ])->run($deep);
+        is show(JGraft->new($run->undo)->apply($run->output)), show($deep), 'undo reaches 150 levels down';
+    }
+    is "@warned", '', '... without a warning';
+};
+
 subtest 'the public interface' => sub {
     my @seen;
     my $g = graft([ RAISE => 'warn', 'careful', ['NODE'] ], [ MATCH => 1 ], [ COPY => 2, ['NODE'] ]);
@@ -865,6 +931,11 @@ subtest 'the public interface' => sub {
     is show($dates->apply({}, date_export => sub ($d) { $d->prop('year') })), '{"when":{"on":2024}}', 'or as asked';
 
     is graft()->struct->[0], 'JGRAFT', 'struct returns the graft';
+    ok !eval { graft([ RAISE => 'info', 'x' ])->run(1, on_raise => sub { die { mine => 1 } }); 1 } && ref $@ eq 'HASH' && $@->{mine},
+        "an exception of the caller's own passes through, whatever it is";
+    my $spliced = graft([ SPLICE => [ 'TEMP', 't', 0 ], 1 ], [ COPY => 5, [ 'TEMP', 'z' ] ], [ COPY => [ 'TEMP', 'z' ], ['NODE'] ])
+        ->run(0, temp => { t => [ 1, 2, 3 ] });
+    is $spliced->error && $spliced->error->code, 'INVALID_TARGET', 'TEMP is new for each action, after a SPLICE as after any other';
     is graft()->run(1, limits => { ops => 0 })->ok, 1, 'limits only count real work';
     is JGraft->new([ JGRAFT => { expr => [ loop => [ EXPR => 'loop' ] ] }, [ COPY => [ EXPR => 'loop' ], ['NODE'] ] ])
         ->run(1, limits => { depth => 50 })->error->code, 'RESOURCE_LIMIT', 'runaway recursion is stopped';

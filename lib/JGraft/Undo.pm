@@ -8,6 +8,7 @@ package JGraft::Undo;
 # the very same array or object, nothing happened, and nothing is looked at.
 
 use v5.36;
+no warnings qw(recursion);
 use Scalar::Util qw(refaddr);
 use JGraft::Util;
 
@@ -68,6 +69,8 @@ sub nested ($a, $b) { ref $a eq ref $b && (ref $a eq 'ARRAY' || ref $a eq 'HASH'
 sub alike ($a, $b) {
     return 1 if ref $a && ref $b && refaddr $a == refaddr $b;
     return 0 if grep { ref eq 'ARRAY' || ref eq 'HASH' } $a, $b;
+    # dates are alike only if written alike: the same moment in another zone is another value
+    return ref $b eq 'JGraft::Date' && $a->str eq $b->str if ref $a eq 'JGraft::Date';
     return match_lit($a, $b, 1);
 }
 
@@ -78,6 +81,7 @@ sub key ($v) {
          : $t == T_BOOL ? ($v ? 'true' : 'false')
          : $t == T_NUM  ? sprintf('%s %.17g', $v, $v)      # as an integer shows itself, and as a float does
          : $t == T_STR  ? "'$v"
+         : ref $v eq 'JGraft::Date' ? 'date ' . $v->str
          :                '@' . refaddr $v;
 }
 

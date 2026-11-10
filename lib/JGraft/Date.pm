@@ -17,6 +17,7 @@ my @DAYS    = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31);
 # Build from fields; how many are given decides the type.  Undef if invalid.
 sub new ($class, @f) {
     my ($y, $m, $d, $h, $min, $s, $tz) = @f = map { $_ + 0 } @f;
+    return undef unless abs($y) < 1e9;      # as far as days and minutes can be counted exactly
     my $leap = $y % 4 == 0 && ($y % 100 != 0 || $y % 400 == 0);
     return undef unless $m >= 1 && $m <= 12 && $d >= 1 && $d <= $DAYS[ $m - 1 ] + ($m == 2 && $leap ? 1 : 0);
     return undef if @f > 3 && !($h >= 0 && $h <= 23 && $min >= 0 && $min <= 59 && $s >= 0 && $s < 61);
@@ -40,11 +41,11 @@ sub cast ($v) {
         \A (?| ([-+]?\d{4,}) - (\d\d) - (\d\d) | (\d{4}) (\d\d) (\d\d) )
         (?: [T ] (\d\d) :? (\d\d) :? (\d\d) (?: [.,] (\d+) )?
             ( Z | [-+\x{2212}] \d\d (?: :? \d\d )? )? )? \z
-    }x or return undef;
+    }xa or return undef;        # /a: only the digits 0 to 9
     return __PACKAGE__->new($y, $m, $d) unless defined $h;
     $s .= '.' . substr $fraction, 0, 12 if defined $fraction;     # truncated, never rounded up
     return __PACKAGE__->new($y, $m, $d, $h, $min, $s) unless defined $zone;
-    my ($sign, $zh, $zm) = $zone eq 'Z' ? ('+', 0, 0) : $zone =~ /^(.)(\d\d):?(\d\d)?/;
+    my ($sign, $zh, $zm) = $zone eq 'Z' ? ('+', 0, 0) : $zone =~ /^(.)(\d\d):?(\d\d)?/a;
     my $offset = $zh * 60 + ($zm // 0);
     return undef if $zh > 23 || ($zm // 0) > 59 || $sign ne '+' && !$offset;    # "-00:00" is not a zone
     return __PACKAGE__->new($y, $m, $d, $h, $min, $s, $sign eq '+' ? $offset : -$offset);
@@ -78,10 +79,11 @@ sub _instant ($y, $m, $d, $h, $min, $s, $tz) {
 # CASTSTR, and the default form in which a date leaves the engine.
 sub str ($d) {
     my ($type, $y, $m, $day, $h, $min, $s, $tz) = @$d;
-    my $date = sprintf '%04d-%02d-%02d', $y, $m, $day;
+    my $date = sprintf '%s%04d-%02d-%02d', ($y < 0 ? '-' : ''), abs $y, $m, $day;
     return $date if $type == T_DATE;
-    my ($whole, $fraction) = split /\./, "$s";
-    my $time = sprintf '%02d:%02d:%02d%s', $h, $min, $whole, defined $fraction ? ".$fraction" : '';
+    # seconds to the twelve places that are kept when a string is read, without the zeros that end them
+    my ($whole, $fraction) = sprintf('%.12f', $s) =~ /^(\d+)\.(\d*?)0*$/a;
+    my $time = sprintf '%02d:%02d:%02d%s', $h, $min, $whole, length $fraction ? ".$fraction" : '';
     return "$date $time" if $type == T_DATETIME;
     return "${date}T$time" . ($tz ? sprintf('%s%02d%02d', $tz < 0 ? '-' : '+', abs($tz) / 60, abs($tz) % 60) : 'Z');
 }

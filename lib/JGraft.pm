@@ -5,6 +5,7 @@ use JGraft::Error;
 use JGraft::Compiler;
 use JGraft::Exec;
 use JGraft::Undo;
+use Scalar::Util qw(blessed);
 
 our $VERSION = '0.01';
 
@@ -31,7 +32,7 @@ sub run ($self, $input, %opt) {
     return bless { ok => 1, output => $x->{root}, logs => $x->{logs}, input => $input }, 'JGraft::Result'
         if eval { $self->{code}->($x); 1 };
     my $error = $@;
-    die $error unless ref $error && $error->isa('JGraft::Error');
+    die $error unless blessed $error && $error->isa('JGraft::Error');
     # The error takes with it what the run left behind, for a caller of
     # `apply`.  It is a copy that does: a fault is the same error in every run.
     my %left = (partial => $x->{root}, logs => $x->{logs}, input => $input);
@@ -155,9 +156,10 @@ that were added.
 
 In an array, it finds the least change there can be between the two (the
 fewest elements to remove and to put back), and makes that with C<SPLICE>.
-Elements that are the same before and after are left alone, wherever they
-have moved to.  An array or object that stands where one stood is taken to
-have changed inside, and is undone inside.
+Elements that are the same before and after, and in the same order, are left
+alone however far they have shifted; one that has changed its place among
+the others is removed and put back.  An array or object that stands where
+one stood is taken to have changed inside, and is undone inside.
 
 =item *
 
@@ -210,7 +212,8 @@ So treat the output as read-only.  To change it, change a deep copy
 
 Perl enforces part of this.  In data that came from the graft, arrays, their
 elements, and the values of an object's properties are marked read-only, and
-changing one dies with C<Modification of a read-only value attempted>.
+assigning to one, or adding to or taking from such an array, dies with
+C<Modification of a read-only value attempted>.
 
 The rest it cannot enforce, and getting it wrong fails silently:
 
@@ -220,7 +223,8 @@ The rest it cannot enforce, and getting it wrong fails silently:
 
 Adding or deleting a property of an object that came from the graft changes
 what the graft produces from then on.  (Perl can lock a hash's keys, but then
-reading a key it lacks is an error too.)
+reading a key it lacks is an error too.)  So does setting the length of one
+of its arrays directly (C<$#array = ...>), which Perl lets through.
 
 =item *
 

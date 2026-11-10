@@ -60,7 +60,7 @@ sub match_lit ($v, $p, $exact) {
         exists $v->{$_} && match_lit($v->{$_}, $p->{$_}, $exact) or return 0 for keys %$p;
         return 1;
     }
-    return $t <= T_TIMESTAMP ? $v->cmp($p) == 0 : 0;
+    return $t >= T_DATE && $t <= T_TIMESTAMP ? $v->cmp($p) == 0 : 0;
 }
 
 # Shallow size estimate, in bytes, for the `mem` limit.
