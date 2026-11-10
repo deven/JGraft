@@ -1001,9 +1001,12 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   reads the stash, TEMP or constants, or is the result of LOCAL, MAP, REDUCE
   or a common expression). Only such values are examined, and only in a graft
   that uses CASTDATE at all. Nothing ever walks the document.
-- **Fewer modules** (§3): no `JGraft::Result` file (it is three accessors in
-  `JGraft.pm`); operations are in `Ops::Action`, `Match`, `Fn`, `Math`,
-  `Split`.
+- **Fewer modules** (§3): no `JGraft::Result` file (it is a handful of
+  accessors in `JGraft.pm`); operations are in five files, `Ops::Action`,
+  `Match`, `Fn`, `Math` and `Split`, where the plan listed eight. The layout
+  was only ever this plan's: the spec says nothing about how an
+  implementation is organised. One module has since been added,
+  `JGraft::Undo`.
 - **Options not built** (§2): `forbid_proto` and `allow_inf`. The spec makes
   both optional; the first matters only to grafts that must also run on old
   JavaScript engines, and the second needs every numeric operation to say
