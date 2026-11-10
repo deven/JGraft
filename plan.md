@@ -923,8 +923,23 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   though its inner expression alone does not. A match expression that reads
   nothing, not even the node it is matched against (`[IS, 5, 5]`, or any
   combination of such by ANY, ALL, NONE and WITH), is decided the same way
-  wherever it appears in a pattern. Anything that fails is left to raise its
-  error in the run that reaches it.
+  wherever it appears in a pattern.
+  Operands that default to the current node are declared in the table
+  (argument letter `N`), which is how `[POW, 2]` is known to read the node.
+- **An expression that always fails is found by folding it**, and what
+  happens depends on how it fails, following the spec's distinction ("Action
+  Overview"). `INVALID_OPERAND` means it was given something it can never
+  accept (`[SLICE, "abc", "x"]`): that is a fault, `INVALID_GRAFT`, even
+  inside a match, where the spec allows this upgrade when the parameter is
+  "intrinsically invalid". `INVALID_TARGET` (`[DIV, 1, 0]`) must not be
+  upgraded: the expression may be guarded, be one alternative in a match, or
+  be meant to fail. It is folded to a node that raises the same error again,
+  so a run behaves as before but does not repeat the work, and the graft
+  gets a warning (`$graft->warnings`) naming the innermost expression that
+  fails. Enclosing expressions are told apart from it because, while
+  folding, the node re-raises the very same error object. Failures the graft
+  asks for (FAIL, a CASE with no default) are marked `meant` and give no
+  warning.
 - **Folding is governed by limits given to `new`**, not by a built-in budget.
   Evaluating constants is work done by `new`, so `new` takes the same
   `limits` as `run`, as one allowance for the whole graft; without them
@@ -933,8 +948,6 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   never fails for this reason. A caller who does not trust a graft gives
   limits to both. (The plan had a fixed budget of 10 000 operations and
   64 KiB per expression.)
-  Operands that default to the current node are declared in the table
-  (argument letter `N`), which is how `[POW, 2]` is known to read the node.
 - **Named constants are constants.** A `const` definition whose value is
   known when the graft is compiled is recorded in its lexical scope, and
   `[CONST, name, ...]` then reads nothing from the run. A common expression

@@ -56,12 +56,12 @@ defop CASE => 66, 'fn', '(TV)+V?', sub ($c, $ctx, @arg) {
     push @case, [ map { $_->{code} } splice @arg, 0, 2 ] while @arg;
     return sub {
         $_->[0]->(@_) and return $_->[1]->(@_) for @case;
-        $else ? &$else : $_[0]->fail_target('no CASE applies');
+        $else ? &$else : $_[0]->fail_target('no CASE applies', 1);
     };
 };
 
 defop FAIL => 67, 'fn', '', sub ($c, $ctx) {
-    sub { $_[0]->fail_target('FAIL') };
+    sub { $_[0]->fail_target('FAIL', 1) };
 };
 
 defop CURPROP => 56, 'fn', '', sub ($c, $ctx) {

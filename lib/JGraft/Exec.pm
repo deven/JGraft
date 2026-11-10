@@ -27,6 +27,7 @@ sub new ($class, $input, %opt) {
         owned => {}, side => {}, moving => 0,
         dates => $opt{dates} // \0,     # whether the graft is one that makes dates
         quiet => 0, where => undef, logs => [], opt => \%opt,
+        folding => 0,                   # set by the compiler, when evaluating a constant expression
     }, $class;
 }
 
@@ -67,10 +68,10 @@ sub fail ($x, $code, $message) {
 }
 
 # The two recoverable errors.  Under a match they are routine, so they cost
-# nothing to raise there.
-sub fail_target ($x, $message) {
-    die $x->{quiet} ? $PROBE{INVALID_TARGET}
-        : JGraft::Error->new(code => 'INVALID_TARGET', message => $message, where => $x->{where}, soft => 1);
+# nothing to raise there.  A failure is `meant` if the graft asks for it.
+sub fail_target ($x, $message, $meant = 0) {
+    die $x->{quiet} ? $PROBE{INVALID_TARGET} : JGraft::Error->new(
+        code => 'INVALID_TARGET', message => $message, where => $x->{where}, soft => 1, meant => $meant);
 }
 
 sub fail_operand ($x, $message) {

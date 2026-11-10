@@ -13,13 +13,14 @@ our $VERSION = '0.01';
 # evaluating the graft's constant expressions (see the documentation below).
 sub new ($class, $struct, %opt) {
     my $strict = delete $opt{strict} // 1;
-    my ($code, $faults, $dates) = JGraft::Compiler->compile($struct, %opt);
+    my ($code, $faults, $dates, $warnings) = JGraft::Compiler->compile($struct, %opt);
     die $faults->[0] if $strict && @$faults;
-    return bless { struct => $struct, code => $code, faults => $faults, dates => $dates }, $class;
+    return bless { struct => $struct, code => $code, faults => $faults, dates => $dates, warnings => $warnings }, $class;
 }
 
-sub struct ($self) { $self->{struct} }
-sub faults ($self) { @{ $self->{faults} } }
+sub struct   ($self) { $self->{struct} }
+sub faults   ($self) { @{ $self->{faults} } }
+sub warnings ($self) { @{ $self->{warnings} } }
 
 # Apply the graft.  Never dies for JGraft errors; returns a JGraft::Result.
 # The input is not modified.  The output shares structure with it and with
@@ -122,6 +123,45 @@ allowance for the whole graft.
 So if a graft is not trusted, give limits to both.  Limits given to C<run>
 alone do not cover an expensive constant, which C<new> will already have
 computed.
+
+=head1 FAULTS AND WARNINGS
+
+C<new> checks the graft, and with C<strict> (the default) dies with the
+first fault it finds: a L<JGraft::Error> whose code is C<INVALID_GRAFT> or
+C<UNSUPPORTED_GRAFT>.  With C<< strict => 0 >> a fault is raised only by a
+run that reaches the faulty part, and C<< $graft->faults >> lists them all.
+
+Evaluating the expressions that do not depend on the data also shows which
+of them always fail, and there are two kinds:
+
+=over
+
+=item *
+
+One that fails with C<INVALID_OPERAND> was given something it can never
+accept, such as C<["SLICE", "abc", "x"]>.  That is a mistake in the graft,
+so it is a fault, wherever the expression is: even in a match, which would
+otherwise take the failure to mean "does not match".
+
+=item *
+
+One that fails with C<INVALID_TARGET>, such as C<["DIV", 1, 0]>, is not a
+fault.  The graft may be valid all the same: the expression may be in a
+branch that is not taken, or be one alternative in a match.  It behaves as
+it always did, and C<< $graft->warnings >> has a warning for it.
+
+=back
+
+    warn "$_\n" for $graft->warnings;       # INVALID_TARGET: division by zero
+
+A warning is the L<JGraft::Error> that the expression raises.  Its C<expr>
+is the expression: the same array that is in the structure given to C<new>,
+and the innermost one that fails.  (A fault of the first kind has an C<expr>
+too.)  Nothing is said about a failure that the graft asks for, with
+C<FAIL> or with a C<CASE> that has no default.
+
+Only what C<new> evaluates is checked in this way, so its C<limits> can
+leave an expression unexamined.
 
 =head1 OPTIONS
 

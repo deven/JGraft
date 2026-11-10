@@ -234,6 +234,59 @@ subtest 'constant folding' => sub {
         'a folded date is still a date inside, and a string outside';
 };
 
+subtest 'what always fails is found when the graft is compiled' => sub {
+    my $warned = sub (@actions) { join ' | ', map { $_->code . ' ' . show($_->expr) } graft(@actions)->warnings };
+    my $div    = [ DIV => 1, 0 ];
+
+    # INVALID_TARGET may be what the graft is for, so it is only worth a warning.
+    is $warned->([ COPY => { a => [ ADD => 1, $div ] }, 'x' ]), 'INVALID_TARGET ["DIV",1,0]',
+        'the innermost expression that fails is reported, once';
+    my ($warning) = graft([ COPY => $div, 'x' ])->warnings;
+    ok $warning->expr == $div, 'as the very expression in the graft';
+    like "$warning", qr/^INVALID_TARGET: division by zero/, 'with the error it would raise';
+    is $warned->([ COPY => $div, 'a', [ DIV => 2, 0 ], 'b' ]), 'INVALID_TARGET ["DIV",1,0] | INVALID_TARGET ["DIV",2,0]',
+        'each such expression has its own';
+    is $warned->([ IF => [ ANY => [ IS => $div, 1 ], 5 ], [ COPY => 1, 'a' ] ]), 'INVALID_TARGET ["DIV",1,0]',
+        'even where a match will take it for a failed probe';
+    is $warned->([ MATCH => { a => [ IS => [ SUB => 1, 1 ], [ NUM => $div ] ] } ]), 'INVALID_TARGET ["DIV",1,0]',
+        'or it is part of a pattern';
+    my $twice = JGraft->new([ JGRAFT => { expr => [ bad => $div ] }, [ COPY => [ EXPR => 'bad' ], 'a', [ ADD => 1, [ EXPR => 'bad' ] ], 'b' ] ]);
+    is scalar $twice->warnings, 1, 'a common expression is reported once, however often it is used';
+    my $outer = [ DIV => [ CASE => [ ANY => [ IS => $div, 1 ] ], 1, 2 ], 0 ];
+    is $warned->([ COPY => $outer, 'a' ]), 'INVALID_TARGET ["DIV",1,0] | INVALID_TARGET ' . show($outer),
+        'an expression that fails on its own account is reported too';
+    is $warned->([ COPY => ['FAIL'], 'a', [ CASE => [ IS => 1, 2 ], 3 ], 'b', [ ADD => 1, ['FAIL'] ], 'c' ]), '',
+        'but not a failure that the graft asks for';
+    is $warned->([ COPY => [ DIV => 1, ['NODE'] ], 'a' ]), '', 'nor one that depends on the data';
+
+    my $r = graft([ IF => ['NUM'], [ COPY => $div, ['NODE'] ] ])->run('x');
+    ok $r->ok, 'the graft is still valid, and works where the expression is not reached';
+    $r = graft([ COPY => [ ADD => 1, $div ], 'a' ])->run({});
+    is "@{[ $r->error ]}", 'INVALID_TARGET: division by zero in COPY', 'and fails as it always did where it is';
+    is show(graft([ COPY => [ FILTER => [ ANY => [ IS => $div ], ['NUM'] ], ['NODE'] ], ['NODE'] ])->apply([ 1, 'a', 2 ])),
+        '[1,2]', 'or does not match';
+
+    # INVALID_OPERAND means an expression was given what it can never accept: the graft is wrong.
+    my $slice  = [ SLICE => 'abc', 'x' ];
+    my @faulty = (
+        [ 'in a value'                          => [ COPY => { a => [ CONCAT => 'a', $slice ] }, 'x' ] ],
+        [ 'in a match, where it would be a failed probe' => [ IF => [ ANY => [ IS => $slice, 1 ], 5 ], [ COPY => 1, 'a' ] ] ],
+        [ 'in a branch that a run may not take' => [ IF => ['NUM'], [ COPY => $slice, ['NODE'] ] ] ],
+    );
+    for (@faulty) {
+        my ($where, $action) = @$_;
+        ok !eval { graft($action) }, "an expression that is always invalid is a fault $where";
+        is $@->code, 'INVALID_GRAFT', '... INVALID_GRAFT';
+        ok $@->expr == $slice, '... naming the expression';
+        my $lazy = JGraft->new([ JGRAFT => {}, $action ], strict => 0);
+        is scalar $lazy->faults, 1, '... reported once';
+    }
+    my $lazy = JGraft->new([ JGRAFT => {}, $faulty[2][1] ], strict => 0);
+    ok $lazy->run('x')->ok, 'when not strict, it is a fault only in a run that reaches it';
+    is $lazy->run(1)->error->code, 'INVALID_GRAFT', 'and INVALID_GRAFT then';
+    ok eval { graft([ COPY => [ SLICE => 'abc', ['NODE'] ], 'a' ]) }, 'what depends on the data is no fault';
+};
+
 subtest 'dates are replaced where they leave the engine' => sub {
     my $on = [ CASTDATE => '2024-02-29' ];
     is show(graft([ COPY => $on, 'd', [ LENGTH => [ 'NODE', 'd' ] ], 'n' ])->apply({})), '{"d":"2024-02-29","n":10}',

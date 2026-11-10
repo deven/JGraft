@@ -101,18 +101,19 @@ sub row ($table, $s) {
 }
 
 sub compile ($class, $struct, %opt) {
-    my $c    = bless { max_version => 1, %opt, faults => [], dates => 0, limits => { %{ $opt{limits} // {} } } }, $class;
+    my $c = bless { max_version => 1, %opt, faults => [], warnings => [], dates => 0,
+        limits => { %{ $opt{limits} // {} } } }, $class;
     my $root = row(\%ACTION, $struct);
     my $code = $root && $root->{name} eq 'JGRAFT'
         ? $c->action({ scope => { exprs => {}, cells => {}, known => {} } }, $struct)
         : $c->fault('a graft must be a JGRAFT action')->{code};
     # `dates` is by reference: parts of a graft are compiled when first used
-    return ($code, $c->{faults}, \$c->{dates});
+    return ($code, $c->{faults}, \$c->{dates}, $c->{warnings});
 }
 
 # Record a defect in the graft.  The node returned raises it when reached.
-sub fault ($c, $message, $code = 'INVALID_GRAFT') {
-    my $error = JGraft::Error->new(code => $code, message => $message);
+sub fault ($c, $message, $code = 'INVALID_GRAFT', %more) {
+    my $error = JGraft::Error->new(code => $code, message => $message, %more);
     push @{ $c->{faults} }, $error;
     my $die = sub { die $error };
     return { code => $die, keys => $die, ns => 'node', poison => 1 };
@@ -201,17 +202,43 @@ sub reading ($c, $compile, @bound) {
 
 sub binding ($c, $bound, $compile) { ($c->reading($compile, @$bound))[0] }
 
-# Evaluate now, and return a constant node.  Returns nothing for whatever
-# fails, or would exceed what the limits still allow: that will behave as it
-# should when a run reaches it.  Nor for a SPLIT, whose result is more than
+# Evaluate now the expression $s, compiled as $n, which reads nothing.  What
+# comes of it now would come of it in every run, so this returns a node to
+# stand for $n:
+#
+#   a value            a constant.
+#   INVALID_OPERAND    a fault.  The expression was given something it could
+#                      never accept, which makes the graft wrong, wherever
+#                      the expression is and whether or not a run reaches it.
+#   INVALID_TARGET     a node that raises it again.  This is no fault: it may
+#                      be what the graft is for, or be one alternative in a
+#                      match.  But unless it was asked for, as by [FAIL], it
+#                      is worth a warning.
+#
+# $n itself is returned if evaluating it would exceed what the limits still
+# allow, leaving that to a run; and for a SPLIT, whose result is more than
 # its value.
-sub fold ($c, $ctx, $code) {
+sub fold ($c, $ctx, $s, $n) {
     my $x = JGraft::Exec->new(undef, limits => $c->{limits});
-    @$x{qw(quiet const)} = (1, $ctx->{scope}{known} // {});
+    @$x{qw(folding const)} = (1, $ctx->{scope}{known} // {});
     my $v;
-    my $done = eval { $v = $code->($x, $MISSING, undef, undef); 1 };
+    my $done  = eval { $v = $n->{code}->($x, $MISSING, undef, undef); 1 };
+    my $error = $@;
     $c->{limits}{$_} = $x->{$_} for qw(ops mem new_obj);        # what is left, for the rest of the graft
-    return $done && !%{ $x->{side} } ? konst($v) : undef;
+    return %{ $x->{side} } ? $n : konst($v) if $done;
+    return $n unless ref $error eq 'JGraft::Error' && $error->{soft};
+    return $c->fault("an expression always fails: $error->{message}", 'INVALID_GRAFT', expr => $s)
+        if $error->code eq 'INVALID_OPERAND';
+    # An expression around this one will be evaluated in its turn, and may
+    # fail only because this one does.  So that this can be told, it is the
+    # very same error that is raised then; and it is the innermost expression
+    # that is reported.
+    if (!$error->{expr}) {
+        $error->{expr} = $s;
+        push @{ $c->{warnings} }, $error unless $error->{meant};
+    }
+    my ($message, $meant) = @$error{qw(message meant)};
+    return { %$n, code => sub { die $error if $_[0]{folding}; $_[0]->fail_target($message, $meant) } };
 }
 
 sub action ($c, $ctx, $s) {
@@ -227,8 +254,7 @@ sub value ($c, $ctx, $s) {
     return konst($s) if ref $s ne 'ARRAY' && ref $s ne 'HASH';
     $ctx = { scope => $ctx->{scope}, regex => $ctx->{regex}, v => 1 } unless $ctx->{v};
     my ($n, $read) = $c->reading(sub { $c->_value($ctx, $s) });
-    return $n if $n->{const} || $n->{poison} || %$read;
-    return $c->fold($ctx, $n->{code}) // $n;
+    return $n->{const} || $n->{poison} || %$read ? $n : $c->fold($ctx, $s, $n);
 }
 
 sub _value ($c, $ctx, $s) {
@@ -356,7 +382,13 @@ sub _match ($c, $ctx, $s) {
         return $c->matcher($ctx, $c->value($ctx, $s))                # a function's result, used as a pattern
             unless $row->{kind} eq 'match' || $row->{name} eq 'EXPR';
         my ($n, $read) = $c->reading(sub { $c->build($row->{seq} ? $ctx : $one, $row, $s) });
-        return %$read || $n->{seq} || $n->{caps} || $n->{poison} ? $n : $c->decided($ctx, $n);
+        return $n if %$read || $n->{seq} || $n->{caps} || $n->{poison};
+        # A match that reads nothing, not even the node it is matched
+        # against, has one answer.
+        my $known = $c->fold($ctx, $s, $n);
+        return $known unless $known->{const};
+        my $yes = $known->{value} ? 1 : 0;
+        return { zero => $n->{zero}, code => sub { $yes } };
     }
     return $c->matcher($ctx, konst($s)) if ref $s ne 'ARRAY' && ref $s ne 'HASH';
     return $c->fault('only characters can be matched in a string') if $ctx->{regex};
@@ -364,15 +396,6 @@ sub _match ($c, $ctx, $s) {
     return $c->object($one, $s) if ref $s eq 'HASH';
     return $c->array($one, $s->[0]) if @$s == 1 && ref $s->[0] eq 'ARRAY';
     return $c->fault(@$s ? 'unknown expression' : 'an empty array is not an expression');
-}
-
-# A match that reads nothing, not even the node it is matched against, has one
-# answer.  Find it now, unless finding it fails, which is left for a run to do.
-sub decided ($c, $ctx, $n) {
-    my $test  = $n->{code};
-    my $known = $c->fold($ctx, sub { &$test ? $TRUE : $FALSE }) or return $n;
-    my $yes   = $known->{value} ? 1 : 0;
-    return { zero => $n->{zero}, code => sub { $yes } };
 }
 
 # Match the node against whatever value $v produces.  A node that compares
