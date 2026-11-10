@@ -39,7 +39,7 @@ defop LOCAL => 51, 'fn', 'X+', sub ($c, $ctx, @arg) {
         }
         $result->($x, @env);
     };
-};
+}, dated => 1;      # the result is an expression of its own
 
 # [CASE, spec, value, ..., else?]
 defop CASE => 66, 'fn', '(TV)+V?', sub ($c, $ctx, @arg) {
@@ -125,7 +125,7 @@ defop MAP => 61, 'fn', 'XN?', sub ($c, $ctx, $each, $of) {
         my $a = $elements->($x, &$get, 'MAP');
         $inherit->($x, [ map { $f->($x, $a->[$_], $_, $a) } 0 .. $#$a ], $a, 0 .. $#$a);
     };
-};
+}, dated => 1;      # the elements come from an expression of its own
 
 # [CONCAT, a, b, ...]: all strings, or all arrays.
 defop CONCAT => 58, 'fn', 'V+', sub ($c, $ctx, @arg) {
@@ -256,6 +256,6 @@ defop REDUCE => 59, 'fn', 'XXVN?', sub ($c, $ctx, $each, $name, $initial, $of) {
         }
         $acc;
     };
-};
+}, dated => 1;      # the result comes from an expression of its own
 
 1;

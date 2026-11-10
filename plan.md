@@ -926,12 +926,17 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   their elements and the values of objects are marked read-only. An object's
   set of keys is not protected, because locking a Perl hash also makes it an
   error to read a key it lacks; that case is left to the documentation in
-  `JGraft.pm`. A constant that contains dates tells the run so when it is
-  used, because dates are exported only from runs that hold some.
+  `JGraft.pm`.
 - **`depth` counts EXPR nesting only** (§9). Static nesting is bounded by the
   graft, so there is no per-node depth and no per-action check.
-- **Dates are exported once, when the output is produced** (§7.2), not at each
-  store into the node namespace.
+- **Dates are replaced where they leave the engine** (§7.2): when an action
+  stores a value into the document, or puts one in the log. Instead of the
+  planned count of dates made during the run, which says only that a date
+  existed somewhere, the decision is made at compile time: every value
+  expression is marked `dated` if it could give a date (it contains CASTDATE,
+  reads the stash, TEMP or constants, or is the result of LOCAL, MAP, REDUCE
+  or a common expression). Only such values are examined, and only in a graft
+  that uses CASTDATE at all. Nothing ever walks the document.
 - **Fewer modules** (§3): no `JGraft::Result` file (it is three accessors in
   `JGraft.pm`); operations are in `Ops::Action`, `Match`, `Fn`, `Math`,
   `Split`.

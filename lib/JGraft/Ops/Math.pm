@@ -51,18 +51,17 @@ my %CAST = (
              : $x->fail_target('cannot be cast to a string');
     } ],
     CASTDATE => [ 71, sub ($x, $v) {
-        my $date = JGraft::Date::cast($v) // $x->fail_target('cannot be cast to a date');
-        $x->{dates}++;
-        return $date;
+        return JGraft::Date::cast($v) // $x->fail_target('cannot be cast to a date');
     } ],
 );
 
 for my $op (sort keys %CAST) {
     my ($id, $cast) = @{ $CAST{$op} };
     defop $op, $id, 'fn', 'N?', sub ($c, $ctx, $of) {
+        $c->{dates} = 1 if $op eq 'CASTDATE';       # the only source of dates: see JGraft::Exec::outgoing
         my $get = $of->{code};
         sub { $cast->($_[0], &$get) };
-    }, pure => 1;
+    }, pure => 1, dated => $op eq 'CASTDATE';
 }
 
 # [DATE]: would CASTDATE accept the current node?

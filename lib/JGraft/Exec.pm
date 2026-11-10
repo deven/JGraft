@@ -24,7 +24,8 @@ sub new ($class, $input, %opt) {
         caps => {}, path => [], capturing => 0,          # capture pass
         (map { $_ => $limit->{$_} // INF } qw(ops mem new_obj prop_per_obj)),
         depth => 0, max_depth => $limit->{depth} // 512,
-        owned => {}, side => {}, dates => 0, moving => 0,
+        owned => {}, side => {}, moving => 0,
+        dates => $opt{dates} // \0,     # whether the graft is one that makes dates
         quiet => 0, where => undef, logs => [], opt => \%opt,
     }, $class;
 }
@@ -32,19 +33,27 @@ sub new ($class, $input, %opt) {
 # Argument list for evaluating an expression at action level.
 sub env ($x) { ($x, @$x{qw(node nkey nparent)}) }
 
-sub output ($x) { $x->{dates} ? $x->export($x->{root}) : $x->{root} }
+# Dates exist only inside the engine.  A value on its way out of it, into the
+# document or the log, comes through here to have its dates replaced.  Nothing
+# is looked at unless the graft is one that makes dates.
+sub outgoing ($x, $v) { ref $v && ${ $x->{dates} } ? $x->export($v) : $v }
 
-# Dates never leave the engine: replace them, copying only what contains one.
+# $v with its dates replaced, copying only the arrays and objects that held one.
 sub export ($x, $v) {
     my $r = ref $v;
     return ($x->{opt}{date_export} // \&JGraft::Date::str)->($v) if $r eq 'JGraft::Date';
-    return $v unless $r eq 'ARRAY' || $r eq 'HASH';
-    my @old = $r eq 'ARRAY' ? @$v : values %$v;
-    my @new = map { $x->export($_) } @old;
-    return $v unless grep { ref $old[$_] && refaddr($old[$_]) != (ref $new[$_] ? refaddr $new[$_] : 0) } 0 .. $#old;
-    return \@new if $r eq 'ARRAY';
-    my %h; @h{ keys %$v } = @new;
-    return \%h;
+    my $array = $r eq 'ARRAY';
+    return $v unless $array || $r eq 'HASH';
+    my $copy;
+    for my $k ($array ? 0 .. $#$v : keys %$v) {
+        my $old = $array ? $v->[$k] : $v->{$k};
+        ref $old or next;
+        my $new = $x->export($old);
+        next if ref $new && refaddr($new) == refaddr($old);
+        $copy //= $array ? [@$v] : {%$v};
+        $array ? ($copy->[$k] = $new) : ($copy->{$k} = $new);
+    }
+    return $copy // $v;
 }
 
 #---------------------------------------------------------------------------

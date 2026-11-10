@@ -17,6 +17,7 @@ package JGraft::Compiler;
 #   const, value   the value is known now
 #   lit            (match) it compares the node with this constant
 #   throws         it may raise a recoverable error
+#   dated          (value) the value may be a date, or hold one
 #   seq            the code is a sequence closure ...
 #   one, zero      ... that consumes exactly one element / none
 #   caps, resolve  it may record captures; code that extracts them (sequences)
@@ -50,39 +51,40 @@ our (%EXPR, %ACTION);    # operation tables, keyed by both name and ID
 # the compiler, the context and the compiled arguments, and returns a node or
 # just its code.  Flags: `safe` (cannot raise a recoverable error of its own),
 # `seq` (the builder handles sequence context itself), `pure` (the result
-# depends on nothing but the arguments, so constants can be folded).
+# depends on nothing but the arguments, so constants can be folded), `dated`
+# (the result may hold a date that did not come from a V or N argument).
 sub defop ($name, $id, $kind, $args, $build, %flag) {
     my $table = $kind eq 'action' ? \%ACTION : \%EXPR;
     $table->{$name} = $table->{$id} = { name => $name, kind => $kind, args => $args, build => $build, %flag };
 }
 
 # A node for a value that is known now.  Every evaluation, in every run, is
-# handed the same value, so it must never change; and a run is told of any
-# dates it is given.
+# handed the same value, so it must never change.
 sub konst ($v) {
-    my $dates = freeze($v);
-    return { const => 1, value => $v, code => $dates ? sub { $_[0]{dates} += $dates; $v } : sub { $v } };
+    my $dated = freeze($v);
+    return { const => 1, value => $v, dated => $dated, code => sub { $v } };
 }
 
-# Protect a constant from change as far as Perl allows, and count the dates
-# in it.  Arrays, their elements and the values of objects become read-only.
-# An object cannot be kept from gaining or losing properties without also
-# making it an error to read one it lacks, so that is left to the caller.
+# Protect a constant from change as far as Perl allows, and report whether
+# there is a date in it.  Arrays, their elements and the values of objects
+# become read-only.  An object cannot be kept from gaining or losing
+# properties without also making it an error to read one it lacks, so that
+# is left to the caller.
 sub freeze ($v) {
     my $r = ref $v;
-    return $r eq 'JGraft::Date' ? 1 : 0 unless $r eq 'ARRAY' || $r eq 'HASH';
+    return $r eq 'JGraft::Date' unless $r eq 'ARRAY' || $r eq 'HASH';
     Internals::SvREADONLY(@$v, 1) if $r eq 'ARRAY';
-    my $dates = 0;
+    my $dated = 0;
     for ($r eq 'ARRAY' ? @$v : values %$v) {
-        $dates += freeze($_);
+        $dated = 1 if freeze($_);
         Internals::SvREADONLY($_, 1);
     }
-    return $dates;
+    return $dated;
 }
 
 # A node for $code whose flags are inherited from the nodes it calls.
 sub node ($code, @kids) {
-    return { code => $code, map { my $f = $_; ($f => !!grep { $_->{$f} } @kids) } qw(throws caps) };
+    return { code => $code, map { my $f = $_; ($f => !!grep { $_->{$f} } @kids) } qw(throws caps dated) };
 }
 
 # The table row an array names, if it is an operation.
@@ -95,12 +97,13 @@ sub row ($table, $s) {
 }
 
 sub compile ($class, $struct, %opt) {
-    my $c    = bless { max_version => 1, %opt, faults => [] }, $class;
+    my $c    = bless { max_version => 1, %opt, faults => [], dates => 0 }, $class;
     my $root = row(\%ACTION, $struct);
     my $code = $root && $root->{name} eq 'JGRAFT'
         ? $c->action({ scope => { exprs => {}, cells => {} } }, $struct)
         : $c->fault('a graft must be a JGRAFT action')->{code};
-    return ($code, $c->{faults});
+    # `dates` is by reference: parts of a graft are compiled when first used
+    return ($code, $c->{faults}, \$c->{dates});
 }
 
 # Record a defect in the graft.  The node returned raises it when reached.
@@ -155,7 +158,11 @@ sub build ($c, $ctx, $row, $s) {
     my $n = $row->{build}->($c, $ctx, @arg);
     return $n unless ref $n eq 'CODE';      # a builder that returns a whole node sets its own flags
     my $known = $row->{pure} && !(grep { !$_->{const} } @kid) && fold($n);
-    return $known || { code => $n, throws => !$row->{safe} || !!grep { $_->{throws} } @kid };
+    return $known || {
+        code   => $n,
+        throws => !$row->{safe} || !!(grep { $_->{throws} } @kid),
+        dated  => $row->{dated} || !!(grep { $_->{dated} } @kid),
+    };
 }
 
 # Constant folding: evaluate now what depends on nothing but the graft, and
@@ -264,7 +271,8 @@ sub reader ($c, $ctx, $s) {
     my ($ns, $keys) = @$p{qw(ns keys)};
     return {
         %$p,
-        code => $ns eq 'node'
+        dated => $ns eq 'stash' || $ns eq 'temp' || $ns eq 'const',     # where a date can be kept
+        code  => $ns eq 'node'
             ? sub { my ($x, $v) = @_; $v = $x->step($v, $_) for &$keys; $x->escape($v) }
             : sub { my $x = $_[0]; my $v = $x->{$ns}; $v = $x->step($v, $_) for &$keys; $x->escape($v) },
         # the SPLIT metadata the value carries, if it is read straight from an array element
@@ -521,7 +529,7 @@ defop EXPR => -5, 'ref', 'V', sub ($c, $ctx, $name) {
     my $pref = $fixed && $ctx->{cap} && $ctx->{top}
         ? { SEQMAX => 'max', SEQMIN => 'min' }->{ $c->peek($ctx, $fixed->{def}) // '' } : undef;
     return {
-        throws => 1, seq => $ctx->{seq}, caps => $fixed && $ctx->{cap}, pref => $pref,
+        throws => 1, seq => $ctx->{seq}, caps => $fixed && $ctx->{cap}, pref => $pref, dated => 1,
         code   => sub {
             my $x  = $_[0];
             my $it = $fixed || $cell->(&$which) // $x->fail_operand('unknown common expression');

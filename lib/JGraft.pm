@@ -12,9 +12,9 @@ our $VERSION = '0.01';
 # the faulty part of the graft is reached.
 sub new ($class, $struct, %opt) {
     my $strict = delete $opt{strict} // 1;
-    my ($code, $faults) = JGraft::Compiler->compile($struct, %opt);
+    my ($code, $faults, $dates) = JGraft::Compiler->compile($struct, %opt);
     die $faults->[0] if $strict && @$faults;
-    return bless { struct => $struct, code => $code, faults => $faults }, $class;
+    return bless { struct => $struct, code => $code, faults => $faults, dates => $dates }, $class;
 }
 
 sub struct ($self) { $self->{struct} }
@@ -24,13 +24,13 @@ sub faults ($self) { @{ $self->{faults} } }
 # The input is not modified.  The output shares structure with it and with
 # the graft, and is to be treated as read-only (see the documentation below).
 sub run ($self, $input, %opt) {
-    my $x = JGraft::Exec->new($input, %opt);
+    my $x = JGraft::Exec->new($input, %opt, dates => $self->{dates});
     my $error;
     eval { $self->{code}->($x); 1 } or do {
         $error = $@;
         die $error unless ref $error && $error->isa('JGraft::Error');
     };
-    return bless { ok => !$error, error => $error, output => $x->output, logs => $x->{logs} },
+    return bless { ok => !$error, error => $error, output => $x->{root}, logs => $x->{logs} },
         'JGraft::Result';
 }
 

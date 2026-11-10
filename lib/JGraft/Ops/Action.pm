@@ -55,7 +55,7 @@ defop RAISE => 0, 'action', 'XVV?', sub ($c, $ctx, $level, $message, $data = und
     return sub ($x) {
         my $record = { level => $level + 0, message => $text->($x->env) };
         $printable->($record->{message}) or $x->fail_target('RAISE message must be a printable string');
-        $record->{data} = $extra->($x->env) if $extra;
+        $record->{data} = $x->outgoing($extra->($x->env)) if $extra;      # the log is outside the engine too
         push @{ $x->{logs} }, $record;
         $x->{opt}{on_raise}->($record) if $x->{opt}{on_raise};
         $x->fail(NO_MATCH => $record->{message}) if $level == 2;
@@ -121,19 +121,25 @@ sub target ($c, $path) {
 # Code giving the SPLIT metadata that a value brings with it (see `reader`).
 sub carried ($value) { $value->{meta} // sub { undef } }
 
+# Is a value that goes from $from to $to one whose dates must be replaced?
+# Only if it is leaving the engine (the document is outside it), and is the
+# value of an expression that could give a date at all.
+sub leaving ($from, $to) { $to->{ns} eq 'node' && $from->{dated} }
+
 # ['COPY', value, path, ...]
 defop COPY => 5, 'action', '(VP)+', sub ($c, $ctx, @arg) {
     my @pair;
     while (my ($value, $path) = splice @arg, 0, 2) {
-        push @pair, [ $value->{code}, carried($value), @{ target($c, $path) }{qw(ns keys)} ];
+        $path = target($c, $path);
+        push @pair, [ $value->{code}, carried($value), leaving($value, $path), @$path{qw(ns keys)} ];
     }
     return sub ($x) {
         local $x->{temp} = $x->{temp};      # TEMP lasts for one action
         for (@pair) {
-            my ($value, $carried, $ns, $keys) = @$_;
-            my $v = $value->($x->env);
+            my ($value, $carried, $leaving, $ns, $keys) = @$_;
+            my $v    = $value->($x->env);
             my $meta = $carried->($x->env);
-            $x->put($ns, [ $keys->($x->env) ], $v, $meta);
+            $x->put($ns, [ $keys->($x->env) ], $leaving ? $x->outgoing($v) : $v, $meta);
         }
     };
 };
@@ -142,19 +148,21 @@ defop COPY => 5, 'action', '(VP)+', sub ($c, $ctx, @arg) {
 defop MOVE => 6, 'action', '(XX)+', sub ($c, $ctx, @arg) {
     my @pair;
     while (my ($from, $to) = splice @arg, 0, 2) {
-        push @pair, [ map { defined $_->[0] ? target($c, $c->path($ctx, @$_)) : undef } [ $from, 0 ], [ $to, 1 ] ];
+        my ($src, $dst) = map { defined $_->[0] ? target($c, $c->path($ctx, @$_)) : undef } [ $from, 0 ], [ $to, 1 ];
+        # what moves into the document from another namespace may hold dates
+        push @pair, [ $src, $dst, $src && $dst && $dst->{ns} eq 'node' && $src->{ns} ne 'node' ];
     }
     return sub ($x) {
         local $x->{temp} = $x->{temp};
         $x->{moving}++;
         my $ok = eval {
             for (@pair) {
-                my ($src, $dst) = @$_;
+                my ($src, $dst, $leaving) = @$_;
                 my @from = $src ? $src->{keys}->($x->env) : ();
                 my @to   = $dst ? $dst->{keys}->($x->env) : ();
                 my ($v, $meta) = $src ? $x->take($src->{ns}, \@from) : ();
                 next unless $dst;
-                eval { $x->give($dst->{ns}, \@to, $v, $meta); 1 } or do {
+                eval { $x->give($dst->{ns}, \@to, $leaving ? $x->outgoing($v) : $v, $meta); 1 } or do {
                     my $error = $@;
                     $x->give($src->{ns}, \@from, $v, $meta) if $src;    # a failed pair leaves no trace
                     die $error;
@@ -177,11 +185,15 @@ defop SPLICE => 7, 'action', 'PVV*', sub ($c, $ctx, $path, $count, @new) {
     my ($ns, $keys, $howmany) = (@$path{qw(ns keys)}, $count->{code});
     my @value   = map { $_->{code} } @new;
     my @carried = map { carried($_) } @new;
+    my @leaving = map { leaving($_, $path) } @new;
     return sub ($x) {
         my @k = $keys->($x->env);
         my $n = $howmany->($x->env);
         !defined $n || is_int($n) or $x->fail_operand('SPLICE count must be an integer');
-        $x->splice_at($ns, \@k, $n, [ map { $_->($x->env) } @value ], [ map { $_->($x->env) } @carried ]);
+        my @v = map { $_->($x->env) } @value;
+        my @m = map { $_->($x->env) } @carried;
+        $leaving[$_] and $v[$_] = $x->outgoing($v[$_]) for 0 .. $#v;
+        $x->splice_at($ns, \@k, $n, \@v, \@m);
     };
 };
 

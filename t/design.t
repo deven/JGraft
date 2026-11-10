@@ -130,6 +130,59 @@ subtest 'constant folding' => sub {
         'a folded date is still a date inside, and a string outside';
 };
 
+subtest 'dates are replaced where they leave the engine' => sub {
+    my $on = [ CASTDATE => '2024-02-29' ];
+    is show(graft([ COPY => $on, 'd', [ LENGTH => [ 'NODE', 'd' ] ], 'n' ])->apply({})), '{"d":"2024-02-29","n":10}',
+        'a date stored in the document is a string from then on';
+    is show(graft([ COPY => $on, [ 'STASH', 'd' ], [ 'STASH', 'd', 'year' ], 'y' ])->apply({})), '{"y":2024}',
+        'but stays a date in the stash';
+    is show(graft([ COPY => { at => [ [ 1, $on ] ] }, [ 'STASH', 's' ] ], [ MOVE => [ 'STASH', 's' ], 'moved' ],
+        [ SPLICE => [ 'NODE', 'moved', 'at', 0 ], 1, { on => $on } ])->apply({})),
+        '{"moved":{"at":[{"on":"2024-02-29"},"2024-02-29"]}}', 'whichever action brings it, and however deep it lies';
+    is show(JGraft->new([ JGRAFT => { expr => [ day => [ CASTDATE => [ 'NODE', 'd' ] ] ] },
+        [ COPY => { when => [ EXPR => 'day' ] }, 'out' ] ])->apply({ d => '2024-02-29' })->{out}),
+        '{"when":"2024-02-29"}', 'even one made by an expression that is compiled only when first used';
+    is show(graft([ RAISE => 'info', 'see', { on => $on } ])->run({})->logs->[0]{data}), '{"on":"2024-02-29"}',
+        'and in the log';
+
+    # However a date reaches a stored value, it is found.
+    my %route = (
+        'an array built around it'  => [ [ $on ] ],
+        'an object built around it' => [ MKOBJ => 'on', $on ],
+        'LOCAL'                     => [ LOCAL => 't', $on, [ [ [ 'TEMP', 't' ] ] ] ],
+        'LOCAL as the current node' => [ LOCAL => undef, $on, [ [ ['NODE'] ] ] ],
+        'MAP'                       => [ MAP => [ CASTDATE => ['NODE'] ], [ ['2024-02-29'] ] ],
+        'REDUCE'                    => [ REDUCE => [ CONCAT => [ 'TEMP', 'a' ], [ [ [ CASTDATE => ['NODE'] ] ] ] ], 'a', [ [] ], [ ['2024-02-29'] ] ],
+        'CASE'                      => [ CASE => 1, 'no', [ [ $on ] ] ],
+        'FILTER'                    => [ FILTER => ['EXISTS'], [ 'STASH', 'kept' ] ],
+        'SLICE'                     => [ SLICE => [ 'STASH', 'kept' ], 0 ],
+        'CONCAT'                    => [ CONCAT => [ [] ], [ 'STASH', 'kept' ] ],
+        'PROPS'                     => [ SLICE => [ PROPS => { on => $on }, 2 ], 1, 1 ],
+        'a constant'                => [ 'CONST', 'made' ],
+    );
+    for my $name (sort keys %route) {
+        my $got = JGraft->new([ JGRAFT => { const => [ made => [ [ $on ] ] ] },
+            [ COPY => [ [ $on ] ], [ 'STASH', 'kept' ] ], [ COPY => $route{$name}, 'out' ] ])->apply({})->{out};
+        like eval { show($got) } // "a raw date: $@", qr/^[\[{"on:]*"2024-02-29"[\]}]*$/, "by way of $name";
+    }
+
+    # Only values that could hold a date are examined, and never the document itself.
+    my $looked = 0;
+    my $export = \&JGraft::Exec::export;
+    no warnings 'redefine';
+    local *JGraft::Exec::export = sub { $looked++; goto &$export };
+    my $doc = { d => '2024-01-01', list => [ map { { id => $_ } } 1 .. 1000 ] };
+    my $out = graft([ COPY => [ LESS => [ CASTDATE => [ 'NODE', 'd' ] ], [ CASTDATE => '2024-06-15' ] ], 'old',
+        [ 'NODE', 'list' ], 'backup', [ SLICE => [ 'NODE', 'list' ], 1 ], 'rest' ])->apply($doc);
+    ok $out->{old} && @{ $out->{backup} } == 1000 && @{ $out->{rest} } == 999,
+        'a graft that compares dates, and copies parts of the document';
+    cmp_ok $looked, '<=', 1, 'looks only at the result of the comparison';
+    $looked = 0;
+    graft([ COPY => [ 'STASH', 'x' ], 'copy' ])->run($doc);
+    graft([ COPY => [ MAP => ['NODE'], [ 'NODE', 'list' ] ], 'copy' ])->apply($doc);
+    is $looked, 0, 'and a graft that makes no dates looks at nothing at all';
+};
+
 subtest 'the public interface' => sub {
     my @seen;
     my $g = graft([ RAISE => 'warn', 'careful', ['NODE'] ], [ MATCH => 1 ], [ COPY => 2, ['NODE'] ]);
