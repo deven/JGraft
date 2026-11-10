@@ -1072,6 +1072,45 @@ subtest 'JSON is written back as it was read' => sub {
     is JGraft::JSON->encode("\x{1F600} \x{D800} \x{e9}\n\"\x01" . chr 0x1100FF), qq("\xF0\x9F\x98\x80 \\ud800 \xC3\xA9\\n\\"\\u0001\xFF"),
         'what is written anew is UTF-8, with escapes only where JSON needs them';
 
+    # ... however long the string, and wherever in a line the changes are.
+    my $long   = join ' ', map { "w\\u006frd$_" } 1 .. 20_000;         # 240,000 characters in one line, an escape in every word
+    my $edited = $edit->(qq({"t":"$long"}), [ COPY => [ CONCAT => '<', [ SLICE => [ 'NODE', 't' ], 0, 100_000 ], '#', [ SLICE => [ 'NODE', 't' ], 100_001 ], '>' ], 't' ]);
+    is length($edited), length($long) + 10, 'three changes to a long line change three places in it';
+    is scalar(() = $edited =~ /\\u006f/g), 20_000, 'and every escape in the rest of it is still there';
+    # The comparison itself, against the textbook table for the longest common subsequence.
+    my $longest = sub ($a, $b) {
+        my @t = map { [ (0) x (length($b) + 1) ] } 0 .. length $a;
+        for my $i (1 .. length $a) {
+            for my $j (1 .. length $b) {
+                my ($up, $left) = ($t[ $i - 1 ][$j], $t[$i][ $j - 1 ]);
+                $t[$i][$j] = substr($a, $i - 1, 1) eq substr($b, $j - 1, 1) ? $t[ $i - 1 ][ $j - 1 ] + 1 : $up > $left ? $up : $left;
+            }
+        }
+        $t[-1][-1];
+    };
+    srand 4;
+    my @letter = ('a', 'b', "\n", "\x{e9}", "\x{1F600}", chr 0x1100FF);
+    my %bad    = (unsound => 0, 'not the least' => 0, agree => 0);
+    for (1 .. 1500) {
+        my $letters = 1 + int rand(rand() < .5 ? 2 : 6);
+        my $was     = join '', map { $letter[ rand $letters ] } 1 .. rand 14;
+        my $now     = rand() < .5 ? join('', map { $letter[ rand $letters ] } 1 .. rand 14) : $was;
+        if ($now eq $was) { rand() < .5 ? substr($now, rand(length($now) + 1), 1, '') : substr($now, rand(length($now) + 1), 0, $letter[ rand $letters ]) for 1 .. rand 4 }
+        my @part = JGraft::JSON::differences($now, $was);
+        my ($built, $done, $size) = ('', 0, 0);
+        for (@part) {
+            my ($i, $n, $j, $m) = @$_;
+            $built .= substr($was, $done, $j - $done) . substr($now, $i, $n);
+            ($done, $size) = ($j + $m, $size + $n + $m);
+        }
+        $bad{unsound}++ if $built . substr($was, $done) ne $now;
+        $bad{'not the least'}++ if $size != length($now) + length($was) - 2 * $longest->($now, $was);
+        my ($x, $y, $want) = (int rand(length($now) + 1), int rand(length($was) + 1), 0);
+        $want++ while $x + $want < length $now && $y + $want < length $was && substr($now, $x + $want, 1) eq substr($was, $y + $want, 1);
+        $bad{agree}++ if JGraft::JSON::agree($now, $x, $was, $y) != $want;
+    }
+    is show(\%bad), '{"agree":0,"not the least":0,"unsound":0}', 'two strings are compared soundly, and for the least change between them';
+
     # Containers that are emptied, or were empty; and documents that are not containers.
     is $edit->('{"a":[ ],"b":{ }}', [ COPY => 1, [ 'NODE', 'a', 0 ], 2, [ 'NODE', 'b', 'k' ] ]), '{"a":[1],"b":{"k":2}}', 'empty containers filled';
     is $edit->('{"a":[ 1 ],"b":{ "k": 1 }}', [ SPLICE => [ 'NODE', 'a', 0 ], 1 ], [ MOVE => [ 'NODE', 'b', 'k' ], undef ]), '{"a":[],"b":{}}', 'and full ones emptied';

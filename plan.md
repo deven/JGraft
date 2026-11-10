@@ -1239,8 +1239,16 @@ changed only where the data changed.
   was between them, a property keeps its key as written, and what is new is
   joined as the text joins things. A changed string is compared with what
   it was by the same line comparison that undo uses, then by common ends,
-  then (if short) by characters, and the unchanged runs are copied from the
-  old token byte for byte.
+  then for the least change between what is left, and the unchanged runs
+  are copied from the old token byte for byte. That last comparison is
+  Myers's algorithm again, but on the two strings as they are
+  (`JGraft::JSON::differences`): places are compared with `substr`, and a
+  run that is alike is crossed in leaps (`agree`), so no character is ever
+  a scalar of its own. The first version split the strings into arrays of
+  characters and used the array comparison, which cost 480 bytes and 3.4
+  microseconds a character and so had to be capped at 4,096 characters;
+  on the strings themselves a line of 1.2 million characters with three
+  changes takes 105 ms, and there is no cap.
 - **Checked by** every conformance case run again on a document read from
   text (same outcome, and what is written reads back as what the run left),
   20,000 random texts in random layouts written back identically, and some

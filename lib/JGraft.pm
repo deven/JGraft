@@ -244,7 +244,9 @@ in the graft) is written plainly.
 The parts of a string that a change to it left alone.  A changed string is
 compared with what it was, line by line and then within the lines that
 differ, and only what differs is written anew: an C<ATSPLIT> that changes
-one line of ten thousand rewrites that line.
+one line of ten thousand rewrites that line, and a change to one word of a
+long line rewrites that word.  (Where very much of a line has changed, the
+whole of the changed stretch is written anew.)
 
 =back
 

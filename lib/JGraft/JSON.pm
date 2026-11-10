@@ -291,8 +291,8 @@ sub between ($gap, $last, $m, $n, $join) {
 # A string that has changed, as text between quotes: the parts of it that
 # are as they were are copied from the token that it was read from, and
 # only the rest is written anew.  It is compared line by line; then, in each
-# stretch of lines that differs, by what begins and ends alike; and what is
-# left between, if it is short, character by character.
+# stretch of lines that differs, by what begins and ends alike, and what is
+# left between by the least change that makes one of the other.
 sub patched ($token, $was, $now) {
     my ($old, $new) = map { [ split /(?<=\n)/, $_ ] } $was, $now;
     my (@piece, @place);        # each piece: text, or [ from, to ] in characters of $was; and every such place
@@ -308,21 +308,19 @@ sub patched ($token, $was, $now) {
         $same->($oj);
         my $gone = join '', @$old[ $oj .. $oj + $m - 1 ];
         my $come = join '', @$new[ $ni .. $ni + $n - 1 ];
-        my ($head, $tail, $most) = (0, 0, length $gone < length $come ? length $gone : length $come);
-        $head++ while $head < $most && substr($gone, $head, 1) eq substr($come, $head, 1);
-        $tail++ while $tail < $most - $head && substr($gone, -1 - $tail, 1) eq substr($come, -1 - $tail, 1);
+        my $head  = agree($gone, 0, $come, 0);
+        my $tail  = agree($gone, length $gone, $come, length $come, 1);
+        my $least = (length $gone < length $come ? length $gone : length $come) - $head;
+        $tail = $least if $tail > $least;       # (the two ends are not to overlap)
         $keep->($at, $at + $head);
         my ($out, $in) = map { substr $_, $head, length($_) - $head - $tail } $gone, $come;
-        if (length $out && length $in && length($out) + length($in) <= 4096) {
-            my ($was_chars, $now_chars, $done) = ([ split //, $out ], [ split //, $in ], 0);
-            for my $part (JGraft::Undo::stretches($now_chars, $was_chars), [ scalar @$now_chars, 0, scalar @$was_chars, 0 ]) {
-                my ($ci, $cn, $cj, $cm) = @$part;
-                $keep->($at + $head + $done, $at + $head + $cj);
-                push @piece, quoted(join '', @$now_chars[ $ci .. $ci + $cn - 1 ]);
-                $done = $cj + $cm;
-            }
+        my ($base, $done) = ($at + $head, 0);
+        for my $part (differences($in, $out), [ length $in, 0, length $out, 0 ]) {
+            my ($ci, $cn, $cj, $cm) = @$part;
+            $keep->($base + $done, $base + $cj);
+            push @piece, quoted(substr $in, $ci, $cn);
+            $done = $cj + $cm;
         }
-        else { push @piece, quoted($in) }
         $keep->($at + length($gone) - $tail, $at + length $gone);
         $at += length $gone;
         $j = $oj + $m;
@@ -330,6 +328,76 @@ sub patched ($token, $was, $now) {
     my %byte;
     @byte{@place} = bytes_at(substr($token, 1, -1), @place);
     return join '', map { ref ? substr $token, 1 + $byte{ $_->[0] }, $byte{ $_->[1] } - $byte{ $_->[0] } : $_ } @piece;
+}
+
+# How many characters two strings have alike from these places on (or,
+# going $back, before them).  They are compared in leaps that grow while
+# they agree, and then shrink to find where they stop agreeing.
+sub agree ($a, $x, $b, $y, $back = 0) {
+    my $most = $back ? ($x < $y ? $x : $y) : (length($a) - $x < length($b) - $y ? length($a) - $x : length($b) - $y);
+    return 0 if $most < 1 || !$back && substr($a, $x, 1) ne substr($b, $y, 1);     # as is most often so
+    my ($n, $leap, $stopped) = (0, 16, 0);
+    while ($leap) {
+        my $alike = $leap <= $most - $n
+            && ($back ? substr($a, $x - $n - $leap, $leap) eq substr($b, $y - $n - $leap, $leap)
+                      : substr($a, $x + $n, $leap) eq substr($b, $y + $n, $leap));
+        if ($alike) { $n += $leap; $leap *= 2 unless $stopped }
+        else        { $stopped = 1; $leap >>= 1 }
+    }
+    return $n;
+}
+
+# Where two strings differ, in as few places as can be: a list of
+# [ i, n, j, m ], each saying that the n characters of $new at i stand where
+# the m of $old at j did, and everything outside these is alike.
+#
+# This is E. W. Myers's algorithm, as in JGraft::Undo, but on the strings
+# as they are: no character is ever a value of its own, and a run that is
+# alike is passed over at the speed Perl compares strings.  Each round
+# allows one more character to have come or gone; $far{k} is how far into
+# $new that gets along the diagonal k, where the place in $old is k less.
+# The search costs the square of the change, so it is given steps in
+# proportion to the length (one for each character and a few hundred more,
+# or fewer of a very long string), and past that the strings are taken to
+# differ throughout: by then the change is large, and little is lost.
+sub differences ($new, $old) {
+    my ($n, $m) = (length $new, length $old);
+    my $whole = [ 0, $n, 0, $m ];
+    return $n || $m ? $whole : () unless $n && $m;
+    my $steps = 500 + $n + $m;
+    $steps = 20_000 + ($n + $m) / 4 if $steps > 20_000 + ($n + $m) / 4;
+    my %far   = (1 => 0);
+    my @before;                 # the diagonals of the round before, as each round found them
+    for my $round (0 .. $n + $m) {
+        $before[$round] = pack 'l*', map { $far{ 2 * $_ - $round + 1 } // 0 } 0 .. $round - 1;
+        for (my $k = -$round; $k <= $round; $k += 2) {
+            --$steps >= 0 or return $whole;
+            my $down = $k == -$round || $k != $round && $far{ $k - 1 } < $far{ $k + 1 };
+            my $x    = $down ? $far{ $k + 1 } : $far{ $k - 1 } + 1;
+            $x += agree($new, $x, $old, $x - $k) if $x <= $n && $x - $k <= $m;
+            $far{$k} = $x;
+            next unless $x >= $n && $x - $k >= $m;
+            # Both are used up.  Go back through the rounds by the way that
+            # led here, noting the character that each one stepped over.
+            my ($y, @step) = ($x - $k);
+            for (my $r = $round; $r > 0; $r--) {
+                my @was  = unpack 'l*', $before[$r];        # diagonal d is at ($d + $r - 1) / 2
+                my $d    = $x - $y;
+                my $down = $d == -$r || $d != $r && $was[ ($d + $r - 2) / 2 ] < $was[ ($d + $r) / 2 ];
+                $d += $down ? 1 : -1;
+                $x = $was[ ($d + $r - 1) / 2 ];
+                $y = $x - $d;
+                push @step, [ $x, $y, !$down ];             # where it stood, and whether a new character came
+            }
+            my @part;
+            for (reverse @step) {
+                my ($i, $j, $came) = @$_;
+                push @part, [ $i, 0, $j, 0 ] unless @part && $part[-1][0] + $part[-1][1] == $i && $part[-1][2] + $part[-1][3] == $j;
+                $part[-1][ $came ? 1 : 3 ]++;
+            }
+            return @part;
+        }
+    }
 }
 
 # Where, in the bytes between the quotes of a string, the characters at
