@@ -888,6 +888,27 @@ subtest 'corners of moving, matching and counting' => sub {
     is $run->({ expr => [ num => ['NUM'] ] }, 5000000, [ $yes->([ WITH => 'n', 'num', [ CHARS => [ EXPR => [ 'TEMP', 'n' ] ] ] ]) ]), 'false',
         'CHARS takes only another set by a computed name';
 
+    # A sequence among the items of an array pattern does not change what the other items are.
+    my $in = sub ($data, @items) { $run->({}, $data, [ $yes->([ \@items ]) ]) };
+    is $in->([ 1, 2 ], [ NONE => 5 ], 2), 'true', 'NONE, as an item, is matched against one element';
+    is $in->([ 1, 2 ], [ NONE => 5 ], 2, ['SEQ']), 'true', '... and is still, beside a sequence';
+    is $in->([ 1, 2 ], [ NONE => 1 ], 2, ['SEQ']), 'false', '... which it has to match';
+    is $in->([ 1, 2, 3 ], [ ANY => 1, 7 ], [ SEQ => ['REP'] ]), 'true', 'ANY, as an item, is one element that is any of them';
+    is $in->([ 1, 2, 3 ], [ SEQ => ['REP'] ], [ ALL => ['NUM'], 3 ]), 'true', 'and ALL one element that is all of them';
+    is $in->([ 1, 2 ], [ SEQ => [ NONE => 5 ], 1, 2 ]), 'true', 'inside the sequence, NONE takes no element, as before';
+    is $in->([ 1, 2 ], [ SEQ => 1, 2 ], ['END']), 'true', 'an item is matched against the element that is not there at the end, as [END] is';
+    is $in->([ 1, 2 ], [ SEQ => 1 ], ['END']), 'false', '... but only there';
+    is $in->([1], 1, [ NONE => 5 ], ['SEQ']), 'true', 'what follows that can take no element, and may be a sequence of none';
+    is $in->([1], 1, [ NONE => 5 ], [ SEQ => ['REP'] ]), 'true', '... or of any number, which is none';
+    is $in->([1], 1, [ NONE => 5 ], [ NONE => 6 ], ['SEQ']), 'false', '... but not another item';
+    is $run->({}, [ 1, 2 ], [ [ MATCH => [ IS => [ [ [ SEQ => 1 ], 2 ] ] ] ] ]), '[1,2]', 'IS wants every element used';
+    is $run->({}, [ 1, 2, 3 ], [ [ MATCH => [ IS => [ [ [ SEQ => 1 ], 2 ] ] ] ] ]), 'NO_MATCH', '... and no more';
+    is $run->({}, [ 1, 2 ], [ [ MATCH => [ IS => [ [ [ SEQ => 1 ], 2, [ NONE => 5 ] ] ] ] ] ]), '[1,2]', '... the place past the end being none of them';
+    is $in->([ 1, 2 ], ['SEQ'], [ REP => 0, -1 ]), 'new: INVALID_GRAFT', 'REP belongs inside a sequence, not beside one';
+    is $in->([ 1, 2 ], ['SEQ'], [ ANY => [ SEQ => 1, 2 ], 3 ]), 'new: INVALID_GRAFT', 'and a sequence cannot begin inside an item that is not one';
+    is $run->({}, [ [ 9, 1 ], 5 ], [ [ MATCH => [ [ ['SEQ'], [ [ [ SEQMAX => 'x', 9 ], 1 ] ], 5 ] ], [ COPY => [ 'CAP', 'x', 'path' ], $N ] ] ]), '[0]',
+        'captures inside such an item are found where it matched';
+
     # characters and sets
     is join(' ', map { $run->({}, $_, [ $yes->([ CHARS => $F ]) ]) } 65, 65.5, -5, 1e10), 'true false false false', 'only a code point is a character';
     is join(' ', map { $run->({}, 'axb', [ [ COPY => [ SPLIT => { sep => 'x', element => [ SEQ => ['REP'], [ NONE => $_ ] ] } ], $N ] ]) } 'x', 120, [ CHARS => 'x' ]),
@@ -903,8 +924,8 @@ subtest 'corners of moving, matching and counting' => sub {
     is $run->({}, '  a,  b', [ [ COPY => [ SPLIT => { sep => ',', ltrim => [ REP => 0, 1e20, ' ' ], discard => $T } ], $N ] ]), '["a","b"]', 'nor into a trim';
 
     # limits and faults
-    is $run->({}, [1e19], [ [ MATCH => [ [ ['SEQ'], [ REP => $N ] ] ] ] ]), 'NO_MATCH', 'a count beyond any integer is only more than there are';
-    is $run->({}, [1], [ [ MATCH => [ [ ['SEQ'], [ REP => 3, 2 ] ] ] ] ]), 'new: INVALID_GRAFT', 'limits that are written wrongly are a fault';
+    is $run->({}, [1e19], [ [ MATCH => [ [ [ SEQ => [ REP => $N ] ] ] ] ] ]), 'NO_MATCH', 'a count beyond any integer is only more than there are';
+    is $run->({}, [1], [ [ MATCH => [ [ [ SEQ => [ REP => 3, 2 ] ] ] ] ] ]), 'new: INVALID_GRAFT', 'limits that are written wrongly are a fault';
     is $run->({}, {}, [ [ IF => [ 'NODE', 'go' ], [ COPY => 1, [ 'NODE', $T, [ 'NODE', 'k' ] ] ] ] ]), 'new: INVALID_GRAFT',
         'a path element that is written wrongly is a fault, though another beside it is computed';
     is $run->({}, { big => [ 1 .. 3000 ], list => [ 1 .. 300 ] }, [ [ COPY => [ 'NODE', 'big' ], [ 'STASH', 'big' ] ],

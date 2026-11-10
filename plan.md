@@ -874,11 +874,24 @@ the behaviour the conformance tests currently assert.
     unrelated `[SEQ]` item makes NONE zero-width and the match fails. No test
     covers a logical op beside a SEQ at top level. → Either confirm and
     document this prominently with an example, or make sequence mode explicit.
+    **Answered by the spec's author: a `[SEQ]` does not alter the items
+    beside it.** Only an item that is itself SEQ / SEQMAX / SEQMIN is in
+    sequence context; the others are what they would be with no sequence in
+    the array. The implementation now does this (§17), and the spec's
+    sentence at 405–410, "if sequence context is involved with any element
+    of the array, the array match is handled according to the rules
+    described in sequence matching", should be rewritten to say it: as it
+    stands it reads as putting the whole array in sequence context.
 15. **Element matchers at position == length in sequence context (422–424).**
     Positional matching lets an item match the nonexistent element at
     `length`; sequence context says an item "consumes one element" without
     saying it cannot do so there. → State that nothing consumes at `length`.
-    (Assumed here.)
+    (Assumed here, and still so *inside* a sequence. But by the author's
+    answer to item 14, an item beside a sequence is a positional item, and so
+    can be matched against the nonexistent element at `length`, once, as it
+    could with no sequence there. The suite relies on it:
+    `[[ [SEQ, ...], [END] ]]` in `11-seq-any`. The spec should say what may
+    follow such an item; here, only a sequence that takes no elements.)
 16. **Capture `path` after rebasing (1398–1400).** The text warns that SLICE
     on a capture does not work for matches against a temporary current node
     but never says what `path` then contains. → Define it as relative to the
@@ -1075,6 +1088,23 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   Plain values now go first, then patterns by how much is written in them,
   then by name, so the time is steady and usually the lower one. The spec
   leaves the order open.
+- **A sequence does not alter the items beside it** (§10, and spec item 14,
+  as its author has now settled it). §10 put every top-level item of an
+  array pattern into sequence context as soon as one of them was SEQ-family,
+  which is how the spec's text reads; so a NONE beside a `[SEQ]` took no
+  element, an ANY took as many as its alternatives did, and a REP could
+  stand at top level. Now only the items that begin a sequence (SEQ, SEQMAX,
+  SEQMIN, or a WITH or a named expression that leads to one) are compiled in
+  sequence context. Each other item is compiled exactly as in an array with
+  no sequence, and `Compiler::single` makes it an item of the sequence
+  engine that takes one place: an element, or once the place past the last
+  element, where it meets the element that does not exist (as `[END]` and
+  `[NONE, ...]` do in plain arrays). After that place nothing can follow
+  but a sequence of no elements. Under IS a last, unwritten item accepts
+  the end with or without that place used. Consequences: a REP at top level
+  beside a sequence is now a fault, as it is anywhere outside one, and so is
+  a SEQ inside a top-level ANY, ALL or NONE; write `[SEQ, [REP, ...]]`. One
+  case in the suite depended on the difference and still passes.
 - **A review of the whole, by readers who had not written it**, found some
   forty defects, each reproduced before it was fixed and pinned by a test
   (`t/design.t`, "corners of moving, matching and counting" and "numbers and

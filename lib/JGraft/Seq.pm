@@ -29,6 +29,7 @@ sub advance ($x, $item, $subject, $len, $at) {
     my ($lo, $hi) = @$any;
     my ($next, @to) = (0);
     for my $p (sort { $a <=> $b } @$at) {
+        push @to, $p and next if $p > $len && !$lo;     # past the end (see Compiler::single): none is all there can be
         my ($from, $upto) = ($p + $lo, min($len, $p + $hi));
         $from = $next if $from < $next;
         next if $from > $upto;

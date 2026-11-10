@@ -580,6 +580,21 @@ sub object ($c, $ctx, $s) {
     }, values %kid);
 }
 
+# An item of an array pattern that is not a sequence, as one of the items
+# of a pattern that has sequences in it.  It takes one place: an element, or
+# the place just past the last element, where it is matched against an
+# element that does not exist (as [NONE, ...] and [END] can be).  Nothing can
+# follow that place but what takes no element at all.
+sub single ($n) {
+    my $test = keyed($n);
+    my $at   = sub ($x, $s, $p, $len) { $p <= $len && $test->($x, $p < $len ? $s->[$p] : $MISSING, $p, $s) };
+    return {
+        %$n, seq => 1, one => 1, zero => 0,
+        code    => sub { &$at ? $_[2] + 1 : () },
+        resolve => $n->{caps} ? sub ($x, $s, $from, $to, $len) { $at->($x, $s, $from, $len) } : undef,
+    };
+}
+
 # How much there is in a pattern: the arrays and objects written in it.
 sub weight ($s) {
     my $weight = ref $s eq 'ARRAY' ? 1 : ref $s eq 'HASH' ? 1 : return 0;
@@ -601,7 +616,13 @@ sub array ($c, $ctx, $items, $from = undef) {
         return $ofs >= 0 && $ofs <= @$a && !$gone->($x, $a, 0, $ofs - 1) ? $ofs : undef;    # skipped elements must exist
     };
     if (grep { $c->begins_seq($ctx, $_) } @$items) {
-        my @kid = map { $c->match({ %$ctx, seq => 1, top => 1 }, $_) } @$items;
+        # Only the items that are sequences are in sequence context.  The
+        # others are what they would be without them: each is matched against
+        # one element, or against the one that is not there at the end.
+        my @kid = map { $c->begins_seq($ctx, $_) ? $c->match({ %$ctx, seq => 1, top => 1 }, $_) : single($c->match($ctx, $_)) } @$items;
+        # Under IS every element is to be used.  The place past the last of
+        # them may have been used too (see `single`), and is the end as well.
+        push @kid, { seq => 1, code => sub { $_[2] >= $_[3] ? $_[3] : () } } if $exact;
         my $run = JGraft::Seq::runner(\@kid);
         my $n   = node(sub {
             my ($x, $a) = @_;

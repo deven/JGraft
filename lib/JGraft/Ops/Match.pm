@@ -284,6 +284,7 @@ defop REP => 16, 'match', 'V?V?X?', sub ($c, $ctx, @arg) {
         my ($lo, $hi) = @fixed ? @fixed : $limits->($min ? &$min : 0, $max ? &$max : -1)
             or $x->fail_operand('invalid REP bounds');
         if (!$body) {                                               # any elements at all
+            return $lo ? () : $p if $p > $len;                      # past the end (see Compiler::single): none, at most
             return if $p + $lo > $len;                              # more than there are
             my $upto = min($len, $p + $hi);
             $x->charge($upto - $p - $lo + 1);
