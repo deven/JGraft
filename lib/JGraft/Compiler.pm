@@ -100,9 +100,14 @@ sub row ($table, $s) {
     return (created_as_number($op) xor $op eq $row->{name}) ? $row : undef;
 }
 
-sub compile ($class, $struct, %opt) {
-    my $c = bless { max_version => 1, %opt, faults => [], warnings => [], dates => 0,
+sub new ($class, %opt) {
+    return bless { max_version => 1, %opt, faults => [], warnings => [], dates => 0,
+        site   => {},       # the action being compiled: { where, action }, as in an error
         limits => { %{ $opt{limits} // {} } } }, $class;
+}
+
+sub compile ($class, $struct, %opt) {
+    my $c    = $class->new(%opt);
     my $root = row(\%ACTION, $struct);
     my $code = $root && $root->{name} eq 'JGRAFT'
         ? $c->action({ scope => { exprs => {}, cells => {}, known => {} } }, $struct)
@@ -113,7 +118,7 @@ sub compile ($class, $struct, %opt) {
 
 # Record a defect in the graft.  The node returned raises it when reached.
 sub fault ($c, $message, $code = 'INVALID_GRAFT', %more) {
-    my $error = JGraft::Error->new(code => $code, message => $message, %more);
+    my $error = JGraft::Error->new(code => $code, message => $message, %{ $c->{site} }, %more);
     push @{ $c->{faults} }, $error;
     my $die = sub { die $error };
     return { code => $die, keys => $die, ns => 'node', poison => 1 };
@@ -147,19 +152,20 @@ sub _fit ($token, $i, $n) {
 }
 
 sub build ($c, $ctx, $row, $s) {
-    my @raw   = @$s[ 1 .. $#$s ];
-    my $kinds = fit($row->{args}, scalar @raw)
+    my $kinds = fit($row->{args}, $#$s)
         // return $c->fault("wrong number of arguments to $row->{name}");
     $c->reads('node') if $kinds =~ /n/ || $row->{kind} eq 'match' && !$row->{blind};
     $c->reads($row->{reads}) if $row->{reads};
     my (@arg, @kid);
+    my $i = 0;                                  # index in $s of the argument being compiled
     for my $k (split //, $kinds) {
+        my $raw = $k eq 'n' ? undef : $s->[ ++$i ];
         push @arg, $k eq 'n'    ? $c->cur
-                 : $k =~ /[VN]/ ? $c->value($ctx, shift @raw)
-                 : $k eq 'T'    ? $c->root($ctx, shift @raw)
-                 : $k eq 'P'    ? $c->path($ctx, shift @raw)
-                 : $k eq 'A'    ? $c->action($ctx, shift @raw)
-                 :                shift @raw;
+                 : $k =~ /[VN]/ ? $c->value($ctx, $raw)
+                 : $k eq 'T'    ? $c->root($ctx, $raw)
+                 : $k eq 'P'    ? $c->path($ctx, $raw)
+                 : $k eq 'A'    ? $c->action($ctx, $raw, $i)
+                 :                $raw;
         push @kid, $arg[-1] if $k =~ /[VNnTP]/;
     }
     my $n = $row->{build}->($c, $ctx, @arg);
@@ -220,7 +226,7 @@ sub binding ($c, $bound, $compile) { ($c->reading($compile, @$bound))[0] }
 # its value.
 sub fold ($c, $ctx, $s, $n) {
     my $x = JGraft::Exec->new(undef, limits => $c->{limits});
-    @$x{qw(folding const)} = (1, $ctx->{scope}{known} // {});
+    @$x{qw(folding const site)} = (1, $ctx->{scope}{known} // {}, $c->{site});
     my $v;
     my $done  = eval { $v = $n->{code}->($x, $MISSING, undef, undef); 1 };
     my $error = $@;
@@ -241,10 +247,15 @@ sub fold ($c, $ctx, $s, $n) {
     return { %$n, code => sub { die $error if $_[0]{folding}; $_[0]->fail_target($message, $meant) } };
 }
 
-sub action ($c, $ctx, $s) {
-    my $row = row(\%ACTION, $s) or return $c->fault('unknown action')->{code};
-    my ($name, $code) = ($row->{name}, $c->build($ctx, $row, $s)->{code});
-    return sub { $_[0]{where} = $name; &$code };
+# Compile the action $s: the whole graft, or element $i of the action being
+# compiled.  Where it is in the graft is kept, as a JSON Pointer, for errors
+# to report: those found now, and those of a run while the action runs.
+sub action ($c, $ctx, $s, $i = undef) {
+    my $row = row(\%ACTION, $s);
+    local $c->{site} = { where => defined $i ? "$c->{site}{where}/$i" : '', action => $row && $row->{name} };
+    $row or return $c->fault('unknown action')->{code};
+    my ($site, $code) = ($c->{site}, $c->build($ctx, $row, $s)->{code});
+    return sub { local $_[0]{site} = $site; &$code };
 }
 
 #---------------------------------------------------------------------------
@@ -610,9 +621,11 @@ defop EXPR => -5, 'ref', 'V', sub ($c, $ctx, $name) {
     };
     my $fixed = $name->{const} && ($cell->($name->{value}) // return $c->fault('unknown common expression'));
     my $which = $c->here($ctx, $name->{code});
+    my $site  = $c->{site};
     # A definition is a value unless it is itself a match expression.  One
     # that is a constant can stand in place of every reference to it.
     my $compile = sub ($def) {
+        local $c->{site} = $site;       # this may be called by a run, long after
         my $row     = row(\%EXPR, $def);
         my $matches = !$ctx->{v} && $row && ($row->{kind} eq 'match' || $row->{name} eq 'EXPR');
         return $c->match($ctx, $def) if $matches;

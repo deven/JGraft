@@ -44,7 +44,7 @@ defop JGRAFT => -1, 'action', 'XX*', sub ($c, $ctx, $meta, @body) {
     # Common expressions are kept as written and compiled where they are used.
     $scope = { %$scope, cells => {}, exprs => { %{ $scope->{exprs} }, map { @$_ } @{ $declared{expr} } } }
         if $declared{expr};
-    my @action = map { $c->action({ scope => $scope }, $_) } @body;
+    my @action = map { $c->action({ scope => $scope }, $body[$_], $_ + 2) } 0 .. $#body;
     return sub ($x) {
         local $x->{const} = $x->{const};
         $x->{const} = { %{ $x->{const} }, $_->[0] => $_->[1]->($x->env) } for @const;
@@ -99,9 +99,11 @@ defop MATCH => 3, 'action', 'XA*', sub ($c, $ctx, $spec, @action) {
 
 # ['IF', spec, action, ..., else_action?]
 defop IF => 4, 'action', 'X*', sub ($c, $ctx, @arg) {
-    my $else = @arg % 2 ? $c->action($ctx, pop @arg) : undef;
-    my @case;
-    push @case, [ $c->root($ctx, shift @arg, 1)->{code}, $c->action($ctx, shift @arg) ] while @arg;
+    my (@case, $else);
+    for (my $i = 0; $i < @arg; $i += 2) {       # $arg[$i] is element $i + 1 of the action
+        if ($i == $#arg) { $else = $c->action($ctx, $arg[$i], $i + 1) }
+        else { push @case, [ $c->root($ctx, $arg[$i], 1)->{code}, $c->action($ctx, $arg[ $i + 1 ], $i + 2) ] }
+    }
     return sub ($x) {
         for (@case) {
             my ($match, $action) = @$_;
@@ -184,8 +186,10 @@ defop MOVE => 6, 'action', '(XX)+', sub ($c, $ctx, @arg) {
         $x->finish_move;
         $x->{moving}--;
         $x->refresh;
+        my $vacant = ref $x->{node} eq 'JGraft::Missing';
+        $x->put(node => [], undef) if $vacant;      # what a failure leaves behind must still be data
         die $error unless $ok;
-        $x->fail_target('MOVE left the current node empty') if ref $x->{node} eq 'JGraft::Missing';
+        $x->fail_target('MOVE left the current node empty') if $vacant;
     };
 };
 

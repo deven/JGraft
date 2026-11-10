@@ -86,7 +86,7 @@ subtest 'repeated edits happen in place' => sub {
 };
 
 subtest 'compile-time decisions' => sub {
-    my $c   = bless { faults => [] }, 'JGraft::Compiler';
+    my $c   = JGraft::Compiler->new;
     my $ctx = { scope => { exprs => {}, cells => {} } };
     ok !$c->match($ctx, { a => [ ALL => 'a', ['STR'] ] })->{throws}, 'a pattern of literals needs no error trap';
     ok $c->match($ctx, { a => [ ALL => 'a', ['NODE', 'x'] ] })->{throws}, 'a pattern that reads the data does';
@@ -98,7 +98,7 @@ subtest 'compile-time decisions' => sub {
 };
 
 subtest 'constant folding' => sub {
-    my $c     = bless { faults => [] }, 'JGraft::Compiler';
+    my $c     = JGraft::Compiler->new;
     my %exprs = (limit => 100, sum => [ ADD => 1, 2 ], inc => [ ADD => ['NODE'], 1 ], big => [ NUM => 2 ],
                  bad => [ DIV => 1, 0 ], loop => [ EXPR => 'loop' ]);
     my $ctx    = { scope => { exprs => \%exprs, cells => {}, known => { tbl => { a => 1, b => 2 } } } };
@@ -216,7 +216,7 @@ subtest 'constant folding' => sub {
     my $long    = [ ROUND => { as => 'STR', at => 1e6 }, '1' ];     # a million digits
     my $six     = [ ADD => [ [ 1 .. 6 ] ] ];                        # six operations
     my $compile = sub (%limits) {
-        my $k = bless { faults => [], limits => {%limits} }, 'JGraft::Compiler';
+        my $k = JGraft::Compiler->new(limits => {%limits});
         sub ($s) { $k->value($ctx, $s)->{const} ? 'folded' : 'left' };
     };
     is $compile->()->($long),           'folded', 'with no limits, every constant is folded';
@@ -262,7 +262,7 @@ subtest 'what always fails is found when the graft is compiled' => sub {
     my $r = graft([ IF => ['NUM'], [ COPY => $div, ['NODE'] ] ])->run('x');
     ok $r->ok, 'the graft is still valid, and works where the expression is not reached';
     $r = graft([ COPY => [ ADD => 1, $div ], 'a' ])->run({});
-    is "@{[ $r->error ]}", 'INVALID_TARGET: division by zero in COPY', 'and fails as it always did where it is';
+    is "@{[ $r->error ]}", 'INVALID_TARGET: division by zero in COPY at /2', 'and fails as it always did where it is';
     is show(graft([ COPY => [ FILTER => [ ANY => [ IS => $div ], ['NUM'] ], ['NODE'] ], ['NODE'] ])->apply([ 1, 'a', 2 ])),
         '[1,2]', 'or does not match';
 
@@ -411,7 +411,7 @@ subtest 'limits on the arrays and objects a run creates' => sub {
 
     # As with the other limits, constants are made by `new`, under the limits given to it.
     my $compile = sub (%limits) {
-        my $k = bless { faults => [], limits => {%limits} }, 'JGraft::Compiler';
+        my $k = JGraft::Compiler->new(limits => {%limits});
         sub ($s) { $k->value({ scope => { exprs => {}, cells => {} } }, $s)->{const} ? 'folded' : 'left' };
     };
     my $one = $compile->(new_obj => 1);
@@ -421,6 +421,63 @@ subtest 'limits on the arrays and objects a run creates' => sub {
     my @limits = (limits => { prop_per_obj => 1 });
     is JGraft->new([ JGRAFT => {}, [ COPY => [ MKOBJ => 'a', 1, 'b', 2 ], $N ] ], @limits)->run(0, @limits)->error->code,
         'RESOURCE_LIMIT', 'so a constant too wide for both is refused by the run';
+};
+
+subtest 'an error says where in the graft it arose' => sub {
+    # `where` is a JSON Pointer into the structure given to `new`.
+    my $struct = [ JGRAFT => {},
+        [ COPY => 1, 'x' ],
+        [ AT => 'a',
+            [ COPY => 2, 'c' ],
+            [ IF => ['NUM'], [ COPY => 1, 'n' ], { b => 1 }, [ MATCH => { b => [ 'NODE', 'limit' ] } ], [ COPY => [ DIV => 1, ['NODE', 'b'] ], 'd' ] ] ],
+        [ ATSPLIT => 's', ',', [ COPY => 5, 0 ] ] ];
+    my $g       = JGraft->new($struct);
+    my $pointed = sub ($e) { my $at = $struct; $at = $at->[$_] for grep { length } split m{/}, $e->where; $at };
+    my $r       = $g->run({ a => { b => 1 } });
+    is "@{[ $r->error ]}", 'NO_MATCH: the data does not match in MATCH at /3/3/4', 'an action inside others';
+    is $r->error->action, 'MATCH', 'the action is named';
+    ok $pointed->($r->error) == $struct->[3][3][4], 'and the pointer leads to it';
+    is show($r->partial), '{"a":{"b":1,"c":2},"x":1}', 'the partial document has what was done before it';
+    $r = $g->run({ a => { b => 0 } });
+    is "@{[ $r->error ]}", 'INVALID_TARGET: division by zero in COPY at /3/3/5', 'the last, unconditional action of an IF';
+    $r = $g->run({ a => { b => 2 }, s => 'p,q' });
+    is "@{[ $r->error ]}", 'INVALID_TARGET: JOIN needs an array of strings in ATSPLIT at /4',
+        'an action that fails after the actions inside it have run';
+    $r = JGraft->new([ JGRAFT => {}, [ JGRAFT => { const => [ k => [ DIV => 1, ['NODE'] ] ] } ] ])->run(0);
+    is "@{[ $r->error ]}", 'INVALID_TARGET: division by zero in JGRAFT at /2', 'an inner graft';
+    $r = JGraft->new([ JGRAFT => { const => [ k => [ DIV => 1, ['NODE'] ] ] } ])->run(0);
+    is "@{[ $r->error ]}", 'INVALID_TARGET: division by zero in JGRAFT', 'the graft itself, whose pointer is empty';
+    is $r->error->where, '', '... but defined';
+
+    # What is found when compiling is placed in the same way.
+    ok !eval { graft([ MATCH => 1, ['NOPE'] ]) }, 'an unknown action is a fault';
+    is "$@", 'INVALID_GRAFT: unknown action at /2/2', 'placed, though it has no name';
+    ok !eval { graft([ MATCH => 1, [ COPY => [ SLICE => 'abc', 'x' ], 'a' ] ]) }, 'so is an expression that is always invalid';
+    like "$@", qr/^INVALID_GRAFT: an expression always fails: .* in COPY at \/2\/2$/, 'placed by the action it is in';
+    my ($warning) = graft([ IF => 1, [ COPY => [ DIV => 1, 0 ], 'a' ] ])->warnings;
+    is "$warning", 'INVALID_TARGET: division by zero in COPY at /2/2', 'and so is a warning';
+    my $lazy = JGraft->new([ JGRAFT => { expr => [ f => [ CONCAT => 'a', [ SLICE => 'abc', 'x' ] ] ] },
+        [ COPY => 1, 'a' ], [ COPY => [ EXPR => ['NODE', 'name'] ], 'b' ] ], strict => 0);
+    is "@{[ $lazy->run({ name => 'f' })->error ]}",
+        'INVALID_GRAFT: an expression always fails: SLICE offset and length must be integers in COPY at /3',
+        'even a fault in an expression that is compiled only when a run first uses it';
+    ok !eval { JGraft->new([ COPY => 1, 2 ]) } && "$@" eq 'INVALID_GRAFT: a graft must be a JGRAFT action',
+        'what is not a graft at all has no place to report';
+
+    # A failure leaves data behind, never the engine's own markers.
+    my @vacated = (
+        [ { a => 1, b => 2 }, '{"a":null,"b":2}', [ AT => 'a', [ MOVE => ['NODE'], [ 'STASH', 'x' ] ] ] ],
+        [ [ 1, 2 ],           '[null,2]',         [ AT => 0,   [ MOVE => ['NODE'], [ 'STASH', 'x' ] ] ] ],
+        [ [ 1 ],              'null',             [ MOVE => ['NODE'], [ 'STASH', 'x' ] ] ],
+    );
+    is show(graft($_->[2])->run($_->[0])->partial), $_->[1], "a node moved away and not replaced is left as null: $_->[1]"
+        for @vacated;
+
+    my $fault = JGraft->new([ JGRAFT => {}, [ COPY => 1, 'a' ], ['NOPE'] ], strict => 0);
+    my ($one, $two) = map { $fault->run($_) } {}, { z => 1 };
+    is show([ $one->error->partial, $two->error->partial ]), '[{"a":1},{"a":1,"z":1}]',
+        'the error of each run is its own, though the fault is one';
+    is(($fault->faults)[0]->partial, undef, 'and the fault itself is left alone');
 };
 
 subtest 'the public interface' => sub {
@@ -435,9 +492,14 @@ subtest 'the public interface' => sub {
     $r = $g->run(5);
     ok !$r->ok, 'run reports a failure';
     is $r->error->code, 'NO_MATCH', 'with its code';
-    like "" . $r->error, qr/^NO_MATCH: .* in MATCH$/, 'which reads sensibly';
+    is "" . $r->error, 'NO_MATCH: the data does not match in MATCH at /3', 'which reads sensibly';
+    is $r->output, undef, 'and there is no output';
+    is $r->partial, 5, 'only the document as the failure left it';
+    is show($r->logs), '[{"data":5,"level":1,"message":"careful"}]', 'and the log';
     ok !eval { $g->apply(5); 1 }, 'apply dies instead';
     is ref $@, 'JGraft::Error', 'with the error object';
+    is show([ $@->partial, $@->logs ]), '[5,[{"data":5,"level":1,"message":"careful"}]]', 'which has both of those';
+    is $g->run(1)->partial, undef, 'a run that succeeds leaves nothing partial';
 
     my $dates = graft([ COPY => { on => [ CASTDATE => '2024-02-29T12:00:00+0130' ] }, 'when' ]);
     is show($dates->apply({})), '{"when":{"on":"2024-02-29T12:00:00+0130"}}', 'dates leave as strings';

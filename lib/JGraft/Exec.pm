@@ -26,7 +26,8 @@ sub new ($class, $input, %opt) {
         depth => 0, max_depth => $limit->{depth} // 512,
         owned => {}, side => {}, moving => 0,
         dates => $opt{dates} // \0,     # whether the graft is one that makes dates
-        quiet => 0, where => undef, logs => [], opt => \%opt,
+        quiet => 0, logs => [], opt => \%opt,
+        site => {},                     # the action that is running: { where, action }, as in an error
         folding => 0,                   # set by the compiler, when evaluating a constant expression
     }, $class;
 }
@@ -64,19 +65,19 @@ my %PROBE = map { $_ => JGraft::Error->new(code => $_, message => 'failed probe'
     qw(INVALID_TARGET INVALID_OPERAND);
 
 sub fail ($x, $code, $message) {
-    die JGraft::Error->new(code => $code, message => $message, where => $x->{where});
+    die JGraft::Error->new(code => $code, message => $message, %{ $x->{site} });
 }
 
 # The two recoverable errors.  Under a match they are routine, so they cost
 # nothing to raise there.  A failure is `meant` if the graft asks for it.
 sub fail_target ($x, $message, $meant = 0) {
     die $x->{quiet} ? $PROBE{INVALID_TARGET} : JGraft::Error->new(
-        code => 'INVALID_TARGET', message => $message, where => $x->{where}, soft => 1, meant => $meant);
+        code => 'INVALID_TARGET', message => $message, %{ $x->{site} }, soft => 1, meant => $meant);
 }
 
 sub fail_operand ($x, $message) {
     die $x->{quiet} ? $PROBE{INVALID_OPERAND}
-        : JGraft::Error->new(code => 'INVALID_OPERAND', message => $message, where => $x->{where}, soft => 1);
+        : JGraft::Error->new(code => 'INVALID_OPERAND', message => $message, %{ $x->{site} }, soft => 1);
 }
 
 sub limit ($x, $which) { $x->fail(RESOURCE_LIMIT => "$which limit exceeded") }

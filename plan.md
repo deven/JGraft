@@ -1004,9 +1004,24 @@ Each of these made the code smaller; none changes behaviour the suite can see.
 - **Fewer modules** (§3): no `JGraft::Result` file (it is three accessors in
   `JGraft.pm`); operations are in `Ops::Action`, `Match`, `Fn`, `Math`,
   `Split`.
-- **Options not built** (§2): `forbid_proto`, `allow_inf`, and a `partial`
-  field (after a failure, `output` is the tree as it stood). `where` is the
-  name of the action, not an index path.
+- **Options not built** (§2): `forbid_proto` and `allow_inf`. The spec makes
+  both optional; the first matters only to grafts that must also run on old
+  JavaScript engines, and the second needs every numeric operation to say
+  what it does with an infinity.
+- **`partial` and `where` are as §2 describes**, after a first version that
+  cut both short (`output` doubled as the partial tree, and `where` was only
+  the action's name). A failed run has no `output`; the tree as the failure
+  left it is `partial`, on the result and, with `logs`, on the error, which
+  is how a caller of `apply` reaches them. The error given to a run is a
+  copy, because a fault is one object raised by every run. `where` is a JSON
+  Pointer to the action in the structure that was compiled, with the
+  action's name beside it as `action`. The compiler knows each action's
+  index as it compiles it, so the pointer costs a run nothing but what the
+  name did: each action sets one field, now with `local`, so that an action
+  that fails after the actions inside it have run is the one reported.
+  Faults and warnings are placed by the action being compiled. A node that
+  MOVE takes away and nothing replaces is left as null, so that the partial
+  tree never holds the engine's placeholder.
 - **No native-regex translation** (§11.4). Instead three exact, general
   shortcuts: `index` for literal separators, a run loop in REP when its body
   matches exactly one element, and working back from the end for a right-trim

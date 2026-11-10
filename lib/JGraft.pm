@@ -27,13 +27,14 @@ sub warnings ($self) { @{ $self->{warnings} } }
 # the graft, and is to be treated as read-only (see the documentation below).
 sub run ($self, $input, %opt) {
     my $x = JGraft::Exec->new($input, %opt, dates => $self->{dates});
-    my $error;
-    eval { $self->{code}->($x); 1 } or do {
-        $error = $@;
-        die $error unless ref $error && $error->isa('JGraft::Error');
-    };
-    return bless { ok => !$error, error => $error, output => $x->{root}, logs => $x->{logs} },
-        'JGraft::Result';
+    return bless { ok => 1, output => $x->{root}, logs => $x->{logs} }, 'JGraft::Result'
+        if eval { $self->{code}->($x); 1 };
+    my $error = $@;
+    die $error unless ref $error && $error->isa('JGraft::Error');
+    # The error takes with it what the run left behind, for a caller of
+    # `apply`.  It is a copy that does: a fault is the same error in every run.
+    my %left = (partial => $x->{root}, logs => $x->{logs});
+    return bless { ok => 0, error => JGraft::Error->new(%$error, %left), %left }, 'JGraft::Result';
 }
 
 # Apply the graft and return the output, dying with a JGraft::Error on failure.
@@ -45,10 +46,11 @@ sub apply ($self, $input, %opt) {
 
 package JGraft::Result;
 
-sub ok     { $_[0]{ok} }
-sub error  { $_[0]{error} }
-sub logs   { $_[0]{logs} }
-sub output { $_[0]{output} }    # after a failure: the tree as it stood
+sub ok      { $_[0]{ok} }
+sub error   { $_[0]{error} }
+sub logs    { $_[0]{logs} }
+sub output  { $_[0]{output} }       # only of a run that succeeded
+sub partial { $_[0]{partial} }      # only of one that failed: the document as the failure left it
 
 1;
 
@@ -68,6 +70,35 @@ JGraft - apply JGraft edits to trees of JSON-like data
 
 A compiled graft can be applied any number of times, and never modifies its
 input.
+
+=head1 RESULTS AND ERRORS
+
+C<run> returns a result, whatever happens:
+
+    $result->ok         # true if the graft was applied
+    $result->output     # the new document, if so
+    $result->error      # a JGraft::Error, if not
+    $result->partial    # the document as the failure left it, if not
+    $result->logs       # what RAISE recorded: [ { level, message, data }, ... ]
+
+A failed run has no C<output>, so that a half-edited document cannot be taken
+for a finished one; it is there to inspect as C<partial>.  C<apply> returns
+the output, and dies with the error if there is none.
+
+An error has a C<code> (C<NO_MATCH>, C<INVALID_TARGET>, C<INVALID_OPERAND>,
+C<INVALID_GRAFT>, C<UNSUPPORTED_GRAFT> or C<RESOURCE_LIMIT>) and a
+C<message>, and says which action failed:
+
+    $error->action      # its name: "COPY"
+    $error->where       # where it is in the graft: "/3/2"
+    $error->partial     # as for the result, so that a caller of apply has them
+    $error->logs
+    "$error"            # "INVALID_TARGET: division by zero in COPY at /3/2"
+
+C<where> is a JSON Pointer (RFC 6901) into the structure given to C<new>:
+C</3/2> is C<< $struct->[3][2] >>, and the graft as a whole is the empty
+string.  Faults and warnings found by C<new> are placed in the same way, by
+the action they are in.
 
 =head1 THE OUTPUT IS READ-ONLY
 
