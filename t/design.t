@@ -1155,6 +1155,11 @@ subtest 'JSON is written back as it was read' => sub {
     is $rejoin->(qq({"a":"\xF0\x9F","b":"\x98","z":"\x80"}), [ COPY => [ CONCAT => [ 'NODE', 'a' ], [ 'NODE', 'b' ], [ 'NODE', 'z' ] ], 'c' ]), '1F600',
         'four, in three pieces';
     is $rejoin->(qq({"a":"\xC3","b":"\xA9\xA9"}), $concat), 'E9 1100A9', 'with a byte left over';
+    is $rejoin->(qq({"a":"\x80\xFF\xC3","b":"\xA9\xFE\x80"}), $concat), '110080 1100FF E9 1100FE 110080', 'with stray bytes before and after that stay as they are';
+    is $rejoin->(qq({"a":"\xE2\x82\xC3","b":"\xA9"}), $concat), '1100E2 110082 E9', 'after a character that is still cut short';
+    is $rejoin->(qq({"a":"\xC3","b":"\xA9\x80\xF0\x9F","z":"\x98\x80\xBF"}), [ COPY => [ CONCAT => [ 'NODE', 'a' ], [ 'NODE', 'b' ], [ 'NODE', 'z' ] ], 'c' ]),
+        'E9 110080 1F600 1100BF', 'two characters in one run of bytes, and the bytes between and after';
+    is $rejoin->(qq({"a":"\xC3\xC3","b":"\xA9"}), $concat), '1100C3 E9', 'a lead byte takes only its own continuation';
     is $rejoin->(qq({"a":"\xC3","b":"\xFF"}), $concat), '1100C3 1100FF', 'but not bytes that spell nothing';
     is $rejoin->(qq({"a":"\xE2\x82","b":"y"}), $concat), '1100E2 110082 79', 'nor a character still cut short';
     is $rejoin->(qq({"a":"\xC0","b":"\x80"}), $concat), '1100C0 110080', 'nor an overlong form';
