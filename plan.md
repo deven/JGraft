@@ -920,8 +920,14 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   as well, a two-value IS or HAS the node) cancels that name. Whatever is left
   reading nothing is a constant, at any depth, and is evaluated at compile
   time under a small budget. So `[MAP, [ADD, [NODE], 1], [[1,2,3]]]` folds,
-  though its inner expression alone does not. Anything that fails or exceeds
-  the budget is left to raise its error in the run that reaches it.
+  though its inner expression alone does not. A match expression that reads
+  nothing, not even the node it is matched against (`[IS, 5, 5]`, or any
+  combination of such by ANY, ALL, NONE and WITH), is decided the same way
+  wherever it appears in a pattern. Anything that fails or exceeds the budget
+  is left to raise its error in the run that reaches it. The budget is not to
+  save work: `new` takes no limits and evaluates eagerly, so without one an
+  expensive constant would be computed even in a branch never taken, and
+  would escape the limits of every run.
   Operands that default to the current node are declared in the table
   (argument letter `N`), which is how `[POW, 2]` is known to read the node.
 - **Named constants are constants.** A `const` definition whose value is

@@ -96,7 +96,8 @@ defop BOOL => 10, 'match', '', sub ($c, $ctx) {
 }, safe => 1;
 
 #---------------------------------------------------------------------------
-# Logic.  In a sequence these combine sets of successor positions.
+# Logic.  In a sequence these combine sets of successor positions.  Like HAS
+# and IS they are `blind`: only what they combine looks at the node.
 
 # Children of ANY and NONE are trapped individually, and cannot capture.
 my $alternatives = sub ($c, $ctx, @spec) {
@@ -107,7 +108,7 @@ defop NONE => 3, 'match', 'X*', sub ($c, $ctx, @spec) {
     my @try = $alternatives->($c, $ctx, @spec);
     return { code => sub { $_->(@_) and return 0 for @try; 1 } } unless $ctx->{seq};
     return { seq => 1, code => sub { (() = $_->(@_)) and return for @try; $_[2] } };
-}, seq => 1;
+}, seq => 1, blind => 1;
 
 defop ANY => 4, 'match', 'X+', sub ($c, $ctx, @spec) {
     my @try = $alternatives->($c, $ctx, @spec);
@@ -118,7 +119,7 @@ defop ANY => 4, 'match', 'X+', sub ($c, $ctx, @spec) {
         my %seen;
         grep { !$seen{$_}++ } @end;
     } };
-}, seq => 1;
+}, seq => 1, blind => 1;
 
 defop ALL => 5, 'match', 'X+', sub ($c, $ctx, @spec) {
     my @kid  = map { $c->match({ %$ctx, top => 0 }, $_) } @spec;
@@ -143,7 +144,7 @@ defop ALL => 5, 'match', 'X+', sub ($c, $ctx, @spec) {
         }
     };
     return { %$n, seq => 1, resolve => $resolve };
-}, seq => 1;
+}, seq => 1, blind => 1;
 
 # [WITH, name, value, ..., spec]: match under extra TEMP bindings.
 defop WITH => 12, 'match', 'X+', sub ($c, $ctx, @arg) {
@@ -170,7 +171,7 @@ defop WITH => 12, 'match', 'X+', sub ($c, $ctx, @arg) {
     $n{resolve} = $under->($body->{resolve}, 0, 1, 2, 4) if $body->{resolve};
     delete $n{lit};
     return \%n;
-}, seq => 1;
+}, seq => 1, blind => 1;
 
 #---------------------------------------------------------------------------
 # Sequences

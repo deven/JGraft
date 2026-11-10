@@ -347,8 +347,10 @@ sub match ($c, $ctx, $s) { $c->as_seq($ctx, $c->_match($ctx, $s)) }
 sub _match ($c, $ctx, $s) {
     my $one = $ctx->{seq} ? { %$ctx, seq => 0, top => 0 } : $ctx;    # for matching a single element
     if (my $row = row(\%EXPR, $s)) {
-        return $c->build($row->{seq} ? $ctx : $one, $row, $s) if $row->{kind} eq 'match' || $row->{name} eq 'EXPR';
-        return $c->matcher($ctx, $c->value($ctx, $s));               # a function's result, used as a pattern
+        return $c->matcher($ctx, $c->value($ctx, $s))                # a function's result, used as a pattern
+            unless $row->{kind} eq 'match' || $row->{name} eq 'EXPR';
+        my ($n, $read) = $c->reading(sub { $c->build($row->{seq} ? $ctx : $one, $row, $s) });
+        return %$read || $n->{seq} || $n->{caps} || $n->{poison} ? $n : decided($ctx, $n);
     }
     return $c->matcher($ctx, konst($s)) if ref $s ne 'ARRAY' && ref $s ne 'HASH';
     return $c->fault('only characters can be matched in a string') if $ctx->{regex};
@@ -356,6 +358,15 @@ sub _match ($c, $ctx, $s) {
     return $c->object($one, $s) if ref $s eq 'HASH';
     return $c->array($one, $s->[0]) if @$s == 1 && ref $s->[0] eq 'ARRAY';
     return $c->fault(@$s ? 'unknown expression' : 'an empty array is not an expression');
+}
+
+# A match that reads nothing, not even the node it is matched against, has one
+# answer.  Find it now, unless finding it fails, which is left for a run to do.
+sub decided ($ctx, $n) {
+    my $test  = $n->{code};
+    my $known = fold($ctx, sub { &$test ? $TRUE : $FALSE }) or return $n;
+    my $yes   = $known->{value} ? 1 : 0;
+    return { zero => $n->{zero}, code => sub { $yes } };
 }
 
 # Match the node against whatever value $v produces.  A node that compares

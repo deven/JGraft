@@ -157,6 +157,25 @@ subtest 'constant folding' => sub {
     ok exists $c->match($ctx, { a => [ CONCAT => 'a', [ CASTSTR => [ EXPR => 'limit' ] ] ] })->{lit},
         'a folded value is a literal to a pattern';
     ok !$c->match($ctx, [ ANY => [ 'CONST', 'tbl', 'a' ], [ EXPR => 'sum' ] ])->{throws}, 'and so are named constants';
+
+    # A match that does not depend on what it is matched against is decided when compiled.
+    my $decided = sub ($s) {
+        my $n = $c->match($ctx, $s);
+        return 'not decided' if $n->{throws};
+        my %answer = map { ($n->{code}->(undef, $_) ? 'yes' : 'no') => 1 } 5, 7, 'anything', { a => 1 };
+        return keys %answer == 1 ? (keys %answer)[0] : 'not decided';
+    };
+    is $decided->([ IS => 5, 5 ]),                                           'yes', 'a match of two values, as a pattern';
+    is $decided->([ HAS => { a => 1, b => 2 }, { a => [ ADD => 1, 1 ] } ]),   'no',  'with a computed pattern';
+    is $decided->([ ANY => [ IS => 1, 2 ], [ ALL => [ IS => 'abc', ['STR'] ], [ NONE => [ IS => 1, 2 ] ] ] ]), 'yes',
+        'combinations of them';
+    is $decided->([ WITH => 'x', 3, [ IS => [ 'TEMP', 'x' ], [ NUM => 1, 5 ] ] ]), 'yes', 'under WITH';
+    is $decided->(['NONE']),                                                 'yes', 'NONE of nothing';
+    is $decided->([ IS => ['NODE'], 5 ]),          'not decided', 'but not one that looks at the document';
+    is $decided->([ ANY => [ IS => 1, 2 ], 7 ]),   'not decided', 'nor a combination in which anything does';
+    is $decided->([ IS => [ DIV => 1, 0 ], 1 ]),   'not decided', 'nor one that fails';
+    is show(graft([ COPY => [ CAPTURE => [ ALL => [ IS => [ [ 1, 2 ] ], [ [ 1, [ SEQMAX => 'x', ['REP'] ] ] ] ] ] ], ['NODE'] ])
+        ->apply(0)), '{"x":{"len":1,"lim":2,"ofs":1,"path":[]}}', 'nor one whose captures are wanted';
     ok !@{ $c->{faults} }, 'none of which is a fault';
 
     # What a run sees is the same either way.
