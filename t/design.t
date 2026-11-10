@@ -562,8 +562,13 @@ subtest 'a run can be undone' => sub {
         [ 'and so is an element added at the end' => '["SPLICE",["NODE","tags",4],1]', [ COPY => 'e', [ 'NODE', 'tags', 4 ] ] ],
         [ 'an element that moved goes back' => '["SPLICE",["NODE","tags",3],1] ["SPLICE",["NODE","tags",0],0,"a"]',
             [ MOVE => [ 'NODE', 'tags', 0 ], [ 'NODE', 'tags', 3.5 ] ] ],
-        [ 'a string that was edited in pieces is put back whole' => '["COPY","one\\ntwo\\nthree",["NODE","text"]]',
-            [ ATSPLIT => 'text', "\n", [ SPLICE => 1, 1, '2' ] ] ],
+        [ 'in a string of several lines, the lines that changed are put back' =>
+            '["ATSPLIT",["NODE","text"],"\\n",["COPY","two",["NODE",1]]]', [ ATSPLIT => 'text', "\n", [ SPLICE => 1, 1, '2' ] ] ],
+        [ 'however the string came to change' => '["ATSPLIT",["NODE","text"],"\\n",["SPLICE",["NODE",3],1]]',
+            [ COPY => [ CONCAT => [ 'NODE', 'text' ], "\nfour" ], 'text' ] ],
+        [ 'a string with no line in common is put back whole' => '["COPY","one\\ntwo\\nthree",["NODE","text"]]',
+            [ COPY => "1\n2", 'text' ] ],
+        [ 'and so is one of a single line' => '["COPY","x",["NODE","name"]]', [ COPY => 'y', 'name' ] ],
         [ 'arrays in what is put back are written as a graft writes them' => '["COPY",[["a","b","c","d"]],["NODE","tags"]]',
             [ COPY => 'none', 'tags' ] ],
         [ 'several changes to one array are undone one by one, the last first' =>
@@ -591,6 +596,61 @@ subtest 'a run can be undone' => sub {
     cmp_ok $looked, '<', 10, "and an array or object that a run left alone is not looked into ($looked comparisons, beside 10,000 values)";
     is $undo->([ 1 .. 500 ], [ COPY => [ MAP => [ ADD => ['NODE'], 0.5 ] ], ['NODE'] ]),
         '["SPLICE",["NODE",0],500,' . join(',', 1 .. 500) . ']', 'an array that changed throughout is put back in one action';
+
+    my $text  = join "\n", map { $_ % 7 ? "line $_ of the text" : '' } 1 .. 10_000;
+    my $lines = $undo->({ doc => $text }, [ ATSPLIT => 'doc', "\n", [ SPLICE => 9000, 2, 'new' ], [ SPLICE => 5000, 0, 'inserted', '' ],
+        [ COPY => 'CHANGED', 12 ], [ SPLICE => 3, 1 ] ]);
+    is $lines, '["ATSPLIT",["NODE","doc"],"\\n",["SPLICE",["NODE",9001],1,"line 9001 of the text",""],["SPLICE",["NODE",4999],2],'
+        . '["COPY","line 13 of the text",["NODE",11]],["SPLICE",["NODE",3],0,"line 4 of the text"]]',
+        'a handful of changes among 10,000 lines are undone by as many actions';
+
+    # Arrays are compared for the least change there can be: checked here against the textbook
+    # table for the longest common subsequence.
+    my $common = sub ($a, $b) {
+        my @t = map { [ (0) x (@$b + 1) ] } 0 .. @$a;
+        for my $i (1 .. @$a) {
+            for my $j (1 .. @$b) {
+                my ($up, $left) = ($t[ $i - 1 ][$j], $t[$i][ $j - 1 ]);
+                $t[$i][$j] = $a->[ $i - 1 ] eq $b->[ $j - 1 ] ? $t[ $i - 1 ][ $j - 1 ] + 1 : $up > $left ? $up : $left;
+            }
+        }
+        $t[-1][-1];
+    };
+    my $marked = sub ($flags) { scalar grep { $_ } @$flags };
+    my $sound  = sub ($new, $old, $come, $gone) {       # what is left of each must be the same, in the same order
+        join(' ', map { $new->[$_] } grep { !$come->[$_] } 0 .. $#$new) eq join(' ', map { $old->[$_] } grep { !$gone->[$_] } 0 .. $#$old);
+    };
+    srand 11;
+    my %bad = (least => 0, 'not the least' => 0, roughly => 0);
+    for (1 .. 1500) {
+        my $letters = 1 + int rand(rand() < .5 ? 3 : 30);
+        my @old = map { int rand $letters } 1 .. rand 14;
+        my @new = rand() < .5 ? (map { int rand $letters } 1 .. rand 14) : @old;
+        if (@new == @old) { rand() < .5 ? splice(@new, rand(@new + 1), 1) : splice(@new, rand(@new + 1), 0, int rand $letters) for 1 .. rand 5 }
+        my ($come, $gone) = JGraft::Undo::least(\@new, \@old, 1e9);
+        $bad{least}++ unless $sound->(\@new, \@old, $come, $gone);
+        $bad{'not the least'}++ unless $marked->($come) + $marked->($gone) == @new + @old - 2 * $common->(\@new, \@old);
+        $bad{roughly}++ unless $sound->(\@new, \@old, JGraft::Undo::roughly(\@new, \@old));
+    }
+    is show(\%bad), '{"least":0,"not the least":0,"roughly":0}', 'the change found between two arrays is sound, and is the least there can be';
+
+    # When too much has changed for the least to be worth finding, it is found roughly, but
+    # still without disturbing what did not change.
+    is scalar(() = JGraft::Undo::least([ 1 .. 300 ], [ reverse 1 .. 300 ], 1000 + 4 * 600)), 0, 'a large change is given up on';
+    my @was = ((0) x 3000, (map { $_ % 2 } 1 .. 3000), (0) x 3000);
+    my @now = ((0) x 3000, (map { $_ * 7 % 3 ? 1 : 0 } 1 .. 2900), 5, (0) x 3000);
+    my $much = graft([ COPY => [ \@now ], ['NODE'] ])->run(\@was);
+    my (undef, undef, @do)   = @{ $much->undo };
+    my ($removed, $restored) = (0, 0);
+    ($removed += $_->[2], $restored += @$_ - 3) for grep { $_->[0] eq 'SPLICE' } @do;
+    $restored += (@$_ - 1) / 2 for grep { $_->[0] eq 'COPY' } @do;
+    cmp_ok $removed + $restored, '<', 3000, "and touches only where the change is ($removed removed, $restored put back, of 9,000)";
+    is show(JGraft->new($much->undo)->apply($much->output)), show(\@was), 'and is undone all the same';
+    my @from = ('A', (map { "x$_" } 1 .. 1000), '', 'y');
+    my @to   = ('', @from[ 1 .. $#from ]);
+    my @keys = map { [ map { JGraft::Undo::key($_) } @$_ ] } \@to, \@from;
+    is join(' ', map { $marked->($_) } JGraft::Undo::roughly(@keys)), '1 1',
+        'an element that only looks like one far away is not taken for it';
 
     # A failure can be undone too: from the partial document.
     my $fails = graft([ COPY => 1, 'new' ], [ SPLICE => [ 'NODE', 'tags', 0 ], 1 ], [ MATCH => 0 ]);

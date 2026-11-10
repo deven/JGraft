@@ -142,26 +142,55 @@ run left alone, what changed is found by comparing the two when C<undo> is
 first called, without looking into anything they share.  So call it before
 you change the input, if you ever do.
 
-The undo graft puts back what a property or element was, removes what was
-added, and restores to arrays the elements they lost, at the places they
-were.  It is close to the least that would do, with these exceptions:
+The undo graft is made to touch as little as it can:
 
 =over
 
 =item *
 
-A string that changed is put back whole, however little of it changed.
-(An C<ATSPLIT> is not undone piece by piece.)
+In an object, it puts back the properties that changed and removes those
+that were added.
 
 =item *
 
-Where one array differs from the other is found in a single pass, which
-can see more change than there was when equal elements were rearranged.
+In an array, it finds the least change there can be between the two (the
+fewest elements to remove and to put back), and makes that with C<SPLICE>.
+Elements that are the same before and after are left alone, wherever they
+have moved to.  An array or object that stands where one stood is taken to
+have changed inside, and is undone inside.
 
 =item *
 
-It does not check that the document it is given is the one it was made
-for.
+In a string of several lines, it puts back the lines that changed, with an
+C<ATSPLIT> on the line breaks, comparing the lines as it would an array.
+This does not depend on how the string came to change.
+
+=back
+
+Three things are less than ideal:
+
+=over
+
+=item *
+
+Finding the least change in an array takes work that grows as the square of
+the change.  It is given about as much effort as reading the two arrays
+takes several times over, which finds any change of up to a few hundred
+elements in an array of tens of thousands.  Beyond that the change is found
+in a single pass: it may then remove and put back some elements that it
+need not have, near the places where the array did change, but never the
+long runs that did not.
+
+=item *
+
+A changed element that is right beside elements that came or went is put
+back whole, not undone inside.  So is a string of one line, or one that has
+no line in common with what it was.
+
+=item *
+
+The undo graft does not check that the document it is given is the one it
+was made for.
 
 =back
 

@@ -1032,17 +1032,30 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   so `JGraft::Undo` compares the two afterwards, stopping wherever they are
   the same one: the cost is in proportion to what changed, is paid only if
   `undo` is called, and no action needs to know about it. Objects are
-  compared key by key. Arrays are walked together in one pass, which finds
-  the stretches that differ by looking for each side's element further on in
-  the other; a stretch becomes a SPLICE, or, where there are as many
-  elements as there were and they are arrays or objects still, changes
-  within them. Stretches are undone last first, so that positions stay
-  true. A changed string is put back whole; inverting an ATSPLIT piece by
-  piece would need its split to come out the same on the edited string,
-  which cannot be relied on. Values put back are written as graft literals
-  (arrays escaped, dates as CASTDATE, as the spec asks). The conformance
-  harness checks that every case, passing or failing, is restored by its
-  undo graft.
+  compared key by key. Arrays are compared for the least change (Myers's
+  O(ND) algorithm, on a key for each element: its address if it is an array
+  or object, so that what a run left alone can be mistaken for nothing
+  else). That search costs the square of the change, so it is given a fixed
+  multiple of the arrays' length in comparisons, and not tried when too few
+  elements are common to both; past that, one pass pairs the arrays off by
+  looking for each side's element further on in the other, taking the
+  nearer, and never passing over an element that is on both sides for one
+  that is on only one. A stretch that differs becomes a SPLICE, or, where
+  there are as many elements as there were and they are arrays or objects
+  still, changes within them. Stretches are undone last first, so that
+  positions stay true. A string of several lines is compared as the array
+  of its lines and undone by an ATSPLIT on the line breaks, chosen by the
+  undo and not copied from the graft: an ATSPLIT's own split cannot be
+  relied on to come out the same on the edited string. Values put back are
+  written as graft literals (arrays escaped, dates as CASTDATE, as the spec
+  asks). The conformance harness checks that every case, passing or
+  failing, is restored by its undo graft; `t/design.t` checks the array
+  comparison against a longest-common-subsequence table.
+  Recording inverses was considered again for arrays and rejected: it
+  would undo what was done, not what changed, so an array rewritten by an
+  expression (`[COPY, [FILTER, ...], path]`) would be put back whole, where
+  comparison finds the two elements that went. It would also need an option,
+  and a record made by every writer, MOVE's deferred steps included.
 - **A run-time error also says where the current node is** (`node`), which
   the spec recommends and the plan did not have. It is in the form of a
   capture: `{ path }` from the root of the partial document, and inside
