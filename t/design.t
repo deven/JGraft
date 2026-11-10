@@ -542,6 +542,79 @@ subtest 'an error says where in the document the current node is' => sub {
     is $warning->node, undef, 'what is found when compiling has no node';
 };
 
+subtest 'a run can be undone' => sub {
+    # `undo` is a graft that turns what a run left into what it was given.
+    my $doc  = sub { { name => 'x', tags => [ 'a', 'b', 'c', 'd' ], user => { id => 7, roles => [ [ 1, 2 ], { k => 'v' } ] }, text => "one\ntwo\nthree" } };
+    my $undo = sub ($in, @actions) {
+        my $r    = graft(@actions)->run($in);
+        my $back = JGraft->new($json->decode($json->encode($r->undo)))->apply($r->ok ? $r->output : $r->partial);
+        return 'does not restore the input: ' . show($back) if show($back) ne show($in);
+        my (undef, undef, @do) = @{ $r->undo };
+        return join ' ', map { show($_) } @do;
+    };
+    my @case = (
+        [ 'nothing, if nothing was done' => '', [ MATCH => { name => 'x' } ] ],
+        [ 'what was added is removed, and what was replaced put back' =>
+            '["MOVE",["NODE","new"],null] ["COPY","x",["NODE","name"],"v",["NODE","user","roles",1,"k"]]',
+            [ COPY => 1, 'new', 'y', 'name', 9, [ 'NODE', 'user', 'roles', 1, 'k' ] ] ],
+        [ 'a path that was created is removed where it began' => '["MOVE",["NODE","a"],null]', [ COPY => 1, [ 'NODE', 'a', 'b', 0, 'c' ] ] ],
+        [ 'a splice is undone by a splice' => '["SPLICE",["NODE","tags",1],3,"b","c"]', [ SPLICE => [ 'NODE', 'tags', 1 ], 2, 'X', 'Y', 'Z' ] ],
+        [ 'and so is an element added at the end' => '["SPLICE",["NODE","tags",4],1]', [ COPY => 'e', [ 'NODE', 'tags', 4 ] ] ],
+        [ 'an element that moved goes back' => '["SPLICE",["NODE","tags",3],1] ["SPLICE",["NODE","tags",0],0,"a"]',
+            [ MOVE => [ 'NODE', 'tags', 0 ], [ 'NODE', 'tags', 3.5 ] ] ],
+        [ 'a string that was edited in pieces is put back whole' => '["COPY","one\\ntwo\\nthree",["NODE","text"]]',
+            [ ATSPLIT => 'text', "\n", [ SPLICE => 1, 1, '2' ] ] ],
+        [ 'arrays in what is put back are written as a graft writes them' => '["COPY",[["a","b","c","d"]],["NODE","tags"]]',
+            [ COPY => 'none', 'tags' ] ],
+        [ 'several changes to one array are undone one by one, the last first' =>
+            '["COPY","",["NODE",29]] ["SPLICE",["NODE",20],0,"line 20"] ["SPLICE",["NODE",6],1] ["COPY","line 5",["NODE",4]]',
+            [ SPLICE => 4, 2, 'new', '', 'newer' ], [ SPLICE => 20, 1 ], [ COPY => 'end', 29 ] ],
+    );
+    for (@case) {
+        my ($name, $want, @actions) = @$_;
+        is $undo->($actions[0][0] eq 'SPLICE' && !ref $actions[0][1] ? [ map { $_ % 3 ? "line $_" : '' } 1 .. 30 ] : $doc->(), @actions),
+            $want, $name;
+    }
+
+    # However much there is, only what changed is put back.
+    my $records = sub { { list => [ map { { id => $_, tags => [ 'a', 'b' ] } } 1 .. 2000 ], other => [ 1 .. 2000 ] } };
+    is $undo->($records->(), [ COPY => 'changed', [ 'NODE', 'list', 1500, 'tags', 1 ] ], [ SPLICE => [ 'NODE', 'list', 10 ], 2 ]),
+        '["COPY","b",["NODE","list",1498,"tags",1]] ["SPLICE",["NODE","list",10],0,{"id":11,"tags":[["a","b"]]},{"id":12,"tags":[["a","b"]]}]',
+        'two changes far apart in a long array are two small actions';
+    my $wide = { a => [ { id => 1 }, { id => 2 } ], big => [ 1 .. 5000 ], more => { map { ("k$_" => [ 1 .. 10 ]) } 1 .. 500 } };
+    my ($looked, $alike) = (0, \&JGraft::Undo::alike);
+    {
+        no warnings 'redefine';
+        local *JGraft::Undo::alike = sub { $looked++; goto &$alike };
+        graft([ COPY => 0, [ 'NODE', 'a', 1, 'id' ] ])->run($wide)->undo;
+    }
+    cmp_ok $looked, '<', 10, "and an array or object that a run left alone is not looked into ($looked comparisons, beside 10,000 values)";
+    is $undo->([ 1 .. 500 ], [ COPY => [ MAP => [ ADD => ['NODE'], 0.5 ] ], ['NODE'] ]),
+        '["SPLICE",["NODE",0],500,' . join(',', 1 .. 500) . ']', 'an array that changed throughout is put back in one action';
+
+    # A failure can be undone too: from the partial document.
+    my $fails = graft([ COPY => 1, 'new' ], [ SPLICE => [ 'NODE', 'tags', 0 ], 1 ], [ MATCH => 0 ]);
+    my $r     = $fails->run($doc->());
+    is show($r->partial->{tags}), '["b","c","d"]', 'a run that fails has made changes';
+    is show([ @{ $r->undo }[ 2, 3 ] ]), '[["MOVE",["NODE","new"],null],["SPLICE",["NODE","tags",0],0,"a"]]', 'and says how to undo them';
+    is show(JGraft->new($r->undo)->apply($r->partial)), show($doc->()), 'which gives back the input';
+    ok !eval { $fails->apply($doc->()); 1 }, 'apply dies';
+    is show(JGraft->new($@->undo)->apply($@->partial)), show($doc->()), 'and its error has the same';
+    ok $r->undo == $r->undo, 'it is worked out once';
+    my ($fault) = JGraft->new([ JGRAFT => {}, ['NOPE'] ], strict => 0)->faults;
+    is $fault->undo, undef, 'a fault found when compiling has nothing to undo';
+
+    # Dates, where a document keeps them, are written as the expressions that make them.
+    my @keep  = (date_export => sub ($d) { $d });
+    my $dated = graft([ COPY => [ CASTDATE => '2024-02-29' ], 'd', [ CASTDATE => '2024-02-29T10:00:00+0100' ], 't' ])->apply({}, @keep);
+    $r = graft([ COPY => 1, 'd' ], [ MOVE => 't', undef ])->run($dated, @keep);
+    is show($r->undo->[2]), '["COPY",["CASTDATE","2024-02-29"],["NODE","d"],["CASTDATE","2024-02-29T10:00:00+0100"],["NODE","t"]]',
+        'a date is put back by CASTDATE';
+    my $back = JGraft->new($r->undo)->apply($r->output, @keep);
+    is join(' ', map { ref($back->{$_}) . ' ' . $back->{$_}->str } 'd', 't'), 'JGraft::Date 2024-02-29 JGraft::Date 2024-02-29T10:00:00+0100',
+        'and is a date again';
+};
+
 subtest 'the public interface' => sub {
     my @seen;
     my $g = graft([ RAISE => 'warn', 'careful', ['NODE'] ], [ MATCH => 1 ], [ COPY => 2, ['NODE'] ]);

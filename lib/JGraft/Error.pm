@@ -1,6 +1,7 @@
 package JGraft::Error;
 
 use v5.36;
+use JGraft::Undo;
 
 # "INVALID_TARGET: division by zero in COPY at /3/2, on /orders/0/note (ofs 12, len 5)"
 use overload
@@ -39,5 +40,9 @@ sub node    { $_[0]{node} }
 # From a run: the document as the failure left it, and the log.
 sub partial { $_[0]{partial} }
 sub logs    { $_[0]{logs} }
+
+# From a run: the structure of a graft that turns that document back into
+# the input.  It is worked out when first asked for.
+sub undo ($e) { exists $e->{input} ? $e->{undo} //= JGraft::Undo::graft(@$e{qw(partial input)}) : undef }
 
 1;

@@ -4,6 +4,7 @@ use v5.36;
 use JGraft::Error;
 use JGraft::Compiler;
 use JGraft::Exec;
+use JGraft::Undo;
 
 our $VERSION = '0.01';
 
@@ -27,13 +28,13 @@ sub warnings ($self) { @{ $self->{warnings} } }
 # the graft, and is to be treated as read-only (see the documentation below).
 sub run ($self, $input, %opt) {
     my $x = JGraft::Exec->new($input, %opt, dates => $self->{dates});
-    return bless { ok => 1, output => $x->{root}, logs => $x->{logs} }, 'JGraft::Result'
+    return bless { ok => 1, output => $x->{root}, logs => $x->{logs}, input => $input }, 'JGraft::Result'
         if eval { $self->{code}->($x); 1 };
     my $error = $@;
     die $error unless ref $error && $error->isa('JGraft::Error');
     # The error takes with it what the run left behind, for a caller of
     # `apply`.  It is a copy that does: a fault is the same error in every run.
-    my %left = (partial => $x->{root}, logs => $x->{logs});
+    my %left = (partial => $x->{root}, logs => $x->{logs}, input => $input);
     return bless { ok => 0, error => JGraft::Error->new(%$error, %left), %left }, 'JGraft::Result';
 }
 
@@ -51,6 +52,10 @@ sub error   { $_[0]{error} }
 sub logs    { $_[0]{logs} }
 sub output  { $_[0]{output} }       # only of a run that succeeded
 sub partial { $_[0]{partial} }      # only of one that failed: the document as the failure left it
+
+# The structure of a graft that turns the output, or the partial document of
+# a failure, back into the input.  It is worked out when first asked for.
+sub undo ($r) { $r->{ok} ? $r->{undo} //= JGraft::Undo::graft(@$r{qw(output input)}) : $r->{error}->undo }
 
 1;
 
@@ -80,6 +85,7 @@ C<run> returns a result, whatever happens:
     $result->error      # a JGraft::Error, if not
     $result->partial    # the document as the failure left it, if not
     $result->logs       # what RAISE recorded: [ { level, message, data }, ... ]
+    $result->undo       # a graft that undoes what the run did (see below)
 
 A failed run has no C<output>, so that a half-edited document cannot be taken
 for a finished one; it is there to inspect as C<partial>.  C<apply> returns
@@ -94,6 +100,7 @@ C<message>, and says which action failed:
     $error->node        # where its current node is in the document: { path => ["orders", 0] }
     $error->partial     # as for the result, so that a caller of apply has them
     $error->logs
+    $error->undo
     "$error"            # "INVALID_TARGET: division by zero in COPY at /3/2, on /orders/0"
 
 C<where> is a JSON Pointer (RFC 6901) into the structure given to C<new>:
@@ -115,6 +122,51 @@ For that to mean anything, a failure inside C<ATSPLIT> leaves the string in
 C<partial> as its pieces stood, put back together.  If they could not be
 (one of them is no longer a string, say), the string is left as it was and
 C<node> has only the path.
+
+=head1 UNDO
+
+C<< $result->undo >> is the structure of a graft that undoes the run:
+applied to the output, it gives the input back.  After a failure it undoes
+whatever the run did before it failed, and applies to C<partial>.
+
+    my $result = $graft->run($document);
+    my $undo   = $result->undo;                 # [ "JGRAFT", { v => 1 }, [ "SPLICE", ... ], ... ]
+    my $before = JGraft->new($undo)->apply($result->output);
+
+It is plain data, to be encoded as JSON and kept, or applied later to
+another copy of the same output.
+
+Asking for it costs a run nothing, and needs no option: nothing is recorded
+while a graft runs.  Because the output shares with the input all that the
+run left alone, what changed is found by comparing the two when C<undo> is
+first called, without looking into anything they share.  So call it before
+you change the input, if you ever do.
+
+The undo graft puts back what a property or element was, removes what was
+added, and restores to arrays the elements they lost, at the places they
+were.  It is close to the least that would do, with these exceptions:
+
+=over
+
+=item *
+
+A string that changed is put back whole, however little of it changed.
+(An C<ATSPLIT> is not undone piece by piece.)
+
+=item *
+
+Where one array differs from the other is found in a single pass, which
+can see more change than there was when equal elements were rearranged.
+
+=item *
+
+It does not check that the document it is given is the one it was made
+for.
+
+=back
+
+A date in the document (which there can be only if C<date_export> keeps
+them) is put back by a C<CASTDATE> expression.
 
 =head1 THE OUTPUT IS READ-ONLY
 

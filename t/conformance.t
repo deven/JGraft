@@ -1,7 +1,8 @@
 #!/usr/bin/env perl
 
 # Runs every case in conformance/*.json, once with eager validation of the
-# graft and once with lazy.
+# graft and once with lazy.  Each run, whether it succeeds or fails, must
+# also be undone by its own undo graft.
 #
 #   JGRAFT_FILES=regex   only run matching files
 #   JGRAFT_MODE=1|0      only run strict (1) or lazy (0)
@@ -82,6 +83,13 @@ sub check ($t, $strict) {
     if ($t->{logs} && $result) {
         same($result->logs, $t->{logs})
             or return 'logs ' . show($result->logs) . ', expected ' . show($t->{logs});
+    }
+    # Whatever happened, undoing it gives back the input.
+    if ($result) {
+        my $undo = $result->undo;
+        my $back = eval { JGraft->new($undo)->apply($result->ok ? $result->output : $result->partial) };
+        return 'the undo graft failed: ' . ($@ || 'no result') . "\n      undo: " . show($undo) if $@;
+        return 'the undo graft gives ' . show($back) . "\n      undo: " . show($undo) unless same($back, $t->{input});
     }
     return $allowed->{$code} ? () : "unexpected $error; expected " . join('/', sort keys %$allowed)
         . (exists $t->{output} ? ' or output ' . show($t->{output}) : '') if $code;

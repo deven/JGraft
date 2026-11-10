@@ -1022,6 +1022,24 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   Faults and warnings are placed by the action being compiled. A node that
   MOVE takes away and nothing replaces is left as null, so that the partial
   tree never holds the engine's placeholder.
+- **Undo is built, and not in the way §13 foresaw.** The plan would have
+  recorded an inverse operation in each of the store's write primitives.
+  Nothing is recorded. Immutable data with path-copying (§7) means that the
+  output shares with the input every array and object the run left alone,
+  so `JGraft::Undo` compares the two afterwards, stopping wherever they are
+  the same one: the cost is in proportion to what changed, is paid only if
+  `undo` is called, and no action needs to know about it. Objects are
+  compared key by key. Arrays are walked together in one pass, which finds
+  the stretches that differ by looking for each side's element further on in
+  the other; a stretch becomes a SPLICE, or, where there are as many
+  elements as there were and they are arrays or objects still, changes
+  within them. Stretches are undone last first, so that positions stay
+  true. A changed string is put back whole; inverting an ATSPLIT piece by
+  piece would need its split to come out the same on the edited string,
+  which cannot be relied on. Values put back are written as graft literals
+  (arrays escaped, dates as CASTDATE, as the spec asks). The conformance
+  harness checks that every case, passing or failing, is restored by its
+  undo graft.
 - **A run-time error also says where the current node is** (`node`), which
   the spec recommends and the plan did not have. It is in the form of a
   capture: `{ path }` from the root of the partial document, and inside
