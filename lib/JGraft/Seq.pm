@@ -14,8 +14,8 @@ sub possible ($x, $items, $subject, $len, $starts, $end) {
     my @at = @$starts;
     for my $item (@$items) {
         my ($code, %seen) = $item->{code};
+        $x->charge(scalar @at);         # each place it is tried from is work, whether or not it matches there
         @at = grep { !$seen{$_}++ } map { $code->($x, $subject, $_, $len) } @at or return 0;
-        $x->charge(scalar @at);
     }
     return defined $end ? scalar grep { $_ == $end } @at : 1;
 }
