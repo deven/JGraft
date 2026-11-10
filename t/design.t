@@ -340,6 +340,89 @@ subtest 'dates are replaced where they leave the engine' => sub {
     is $looked, 0, 'and a graft that makes no dates looks at nothing at all';
 };
 
+subtest 'limits on the arrays and objects a run creates' => sub {
+    # The smallest limit of one kind under which a run succeeds: what the run used.
+    my $least = sub ($which, $in, @actions) {
+        my $g = graft(@actions);
+        for my $n (0 .. 20) {
+            my $r = $g->run($in, limits => { $which => $n });
+            return $n if $r->ok;
+            return 'failed: ' . $r->error unless $r->error->code eq 'RESOURCE_LIMIT' && $r->error->message =~ /^$which /;
+        }
+        return 'more than 20';
+    };
+    my $N = ['NODE'];
+
+    # new_obj: each array or object made as a value counts one.
+    my @new = (
+        [ 1, 'an object written with a computed member'  => 5, [ COPY => { a => $N }, $N ] ],
+        [ 1, 'an array written with a computed element'  => 5, [ COPY => [ [ $N, 1 ] ], $N ] ],
+        [ 2, 'each of them, when nested'                 => 5, [ COPY => { a => { b => $N } }, $N ] ],
+        [ 2, 'each object made on the way to a new path' => {}, [ COPY => 1, [ 'NODE', 'a', 'b', 'c' ] ] ],
+        [ 2, 'and each array'                            => {}, [ COPY => 1, [ 'NODE', 'list', 0, 'x' ] ] ],
+        [ 1, 'the result of MAP'                         => [ 1, 2, 3 ], [ COPY => [ MAP => [ ADD => $N, 1 ] ], $N ] ],
+        [ 4, 'and whatever it makes for each element'    => [ 1, 2, 3 ], [ COPY => [ MAP => { v => $N } ], $N ] ],
+        [ 1, 'the result of FILTER'                      => [ 1, 2, 3 ], [ COPY => [ FILTER => [ NUM => 2 ] ], $N ] ],
+        [ 1, 'of CONCAT on arrays'                       => [ 1, 2, 3 ], [ COPY => [ CONCAT => $N, $N ], $N ] ],
+        [ 1, 'of SLICE on an array'                      => [ 1, 2, 3 ], [ COPY => [ SLICE => $N, 1 ], $N ] ],
+        [ 1, 'of SPLIT'                                  => 'a,b', [ COPY => [ SPLIT => ',' ], $N ] ],
+        [ 1, 'the pieces that ATSPLIT works on'          => 'a,b', [ ATSPLIT => $N, ',', [ COPY => 'c', 0 ] ] ],
+        [ 1, 'the names from PROPS'                      => { a => 1, b => 2 }, [ COPY => ['PROPS'], $N ] ],
+        [ 3, 'its pairs, and the array of them'          => { a => 1, b => 2 }, [ COPY => [ PROPS => $N, 1 ], $N ] ],
+        [ 3, 'its names and values, and the array of both' => { a => 1, b => 2 }, [ COPY => [ PROPS => $N, 2 ], $N ] ],
+        [ 1, 'the result of MKOBJ'                       => 5, [ COPY => [ MKOBJ => 'a', $N ], $N ] ],
+        [ 2, 'a capture and its path'                    => [ 1, 2 ], [ MATCH => [ [ [ SEQMAX => 'x', ['REP'] ] ] ] ] ],
+        [ 3, 'and the object that CAPTURE returns'       => [ 1, 2 ], [ COPY => [ CAPTURE => [ [ [ SEQMAX => 'x', ['REP'] ] ] ] ], $N ] ],
+    );
+    is $least->(new_obj => @$_[ 2 .. $#$_ ]), $_->[0], "new_obj counts $_->[1]" for @new;
+
+    my @free = (
+        [ 'a constant, which is part of the graft' => 5, [ COPY => { a => { b => [ [ 1 ] ] } }, $N ] ],
+        [ 'a string'                => 'abc', [ COPY => [ CONCAT => $N, [ SLICE => $N, 1 ] ], $N ] ],
+        [ 'a change to what exists' => { a => [ 1, 2 ], b => { c => 1 } }, [ COPY => 9, [ 'NODE', 'b', 'c' ] ],
+            [ SPLICE => [ 'NODE', 'a', 0 ], 1, 7, 8 ], [ MOVE => [ 'NODE', 'a', 0 ], [ 'NODE', 'b', 'd' ] ] ],
+        [ 'a copy of what exists'   => { a => [ 1, { b => 2 } ] },
+            [ COPY => [ 'NODE', 'a' ], 'again', [ 'NODE', 'a', 1 ], [ 'STASH', 's' ] ] ],
+        [ 'a property added'        => {}, [ COPY => 1, 'a', 2, 'b', 3, 'c' ] ],
+    );
+    is $least->(new_obj => @$_[ 1 .. $#$_ ]), 0, "but not $_->[0]" for @free;
+
+    # prop_per_obj: an object may not be made with more properties, nor be given more.
+    my $two = { a => 1, b => 2 };
+    my @wide = (
+        [ 3, 'an object written with computed members' => 5, [ COPY => { a => $N, b => 1, c => 2 }, $N ] ],
+        [ 2, 'the result of MKOBJ'                     => 5, [ COPY => [ MKOBJ => 'a', $N, 'b', 1 ], $N ] ],
+        [ 3, 'an object given a property'              => $two, [ COPY => 3, 'c' ] ],
+        [ 3, 'or given one on the way to a new path'   => $two, [ COPY => 3, [ 'NODE', 'c', 'd' ] ] ],
+        [ 3, 'or by MOVE'                              => { a => { x => 1 }, b => 2 }, [ MOVE => [ 'NODE', 'a', 'x' ], 'c' ] ],
+        [ 2, 'even in place of one it lost'            => $two, [ MOVE => 'a', 'c' ] ],
+        [ 2, 'a namespace, which is an object too'     => 5, [ COPY => 1, [ 'STASH', 's' ], 2, [ 'STASH', 't' ] ] ],
+    );
+    is $least->(prop_per_obj => @$_[ 2 .. $#$_ ]), $_->[0], "prop_per_obj limits $_->[1]" for @wide;
+    my @narrow = (
+        [ 'an array, however long'       => 5,    [ COPY => [ [ $N, $N, $N ] ], $N ] ],
+        [ 'a property that is replaced'  => $two, [ COPY => 3, 'b' ] ],
+        [ 'a property that is removed'   => $two, [ MOVE => 'a', undef ] ],
+        [ 'an object that is only read'  => $two, [ MATCH => { a => 1 } ], [ COPY => ['PROPS'], 'a' ] ],
+    );
+    is $least->(prop_per_obj => @$_[ 1 .. $#$_ ]), 0, "but not $_->[0]" for @narrow;
+
+    is graft([ COPY => [ MAP => { v => $N } ], $N ])->run([ 1 .. 500 ])->ok, 1, 'neither is limited unless asked';
+
+    # As with the other limits, constants are made by `new`, under the limits given to it.
+    my $compile = sub (%limits) {
+        my $k = bless { faults => [], limits => {%limits} }, 'JGraft::Compiler';
+        sub ($s) { $k->value({ scope => { exprs => {}, cells => {} } }, $s)->{const} ? 'folded' : 'left' };
+    };
+    my $one = $compile->(new_obj => 1);
+    is join(' ', map { $one->([ MAP => [ ADD => $N, 1 ], [ [ 1, 2 ] ] ]) } 1, 2), 'folded left',
+        'new_obj given to new is an allowance for the constants of the graft';
+    is $compile->(prop_per_obj => 1)->([ MKOBJ => 'a', 1, 'b', 2 ]), 'left', 'and prop_per_obj applies to each of them';
+    my @limits = (limits => { prop_per_obj => 1 });
+    is JGraft->new([ JGRAFT => {}, [ COPY => [ MKOBJ => 'a', 1, 'b', 2 ], $N ] ], @limits)->run(0, @limits)->error->code,
+        'RESOURCE_LIMIT', 'so a constant too wide for both is refused by the run';
+};
+
 subtest 'the public interface' => sub {
     my @seen;
     my $g = graft([ RAISE => 'warn', 'careful', ['NODE'] ], [ MATCH => 1 ], [ COPY => 2, ['NODE'] ]);

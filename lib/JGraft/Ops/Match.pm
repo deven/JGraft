@@ -209,6 +209,7 @@ for ([ SEQMAX => 14, 'max' ], [ SEQMIN => 15, 'min' ]) {
             if (defined $key) {
                 is_str($key) || is_int($key) or $x->fail_operand('capture name must be a string');
                 exists $x->{caps}{$key} and $x->fail_operand("duplicate capture name '$key'");
+                $x->charge_obj for 1, 2;        # the record and its path
                 $x->{caps}{$key} = { path => [ @{ $x->{path} } ], ofs => $from, len => $to - $from, lim => $to };
             }
             $body->($x, $s, $from, $to, $len) if $body;

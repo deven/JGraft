@@ -87,10 +87,17 @@ sub charge ($x, $ops, $mem = 0) {
     ($x->{mem} -= $mem) >= 0 or $x->limit('mem') if $mem;
 }
 
-# Account for a new container with $props members.
-sub charge_obj ($x, $props) {
-    --$x->{new_obj} >= 0            or $x->limit('new_obj');
-    $props <= $x->{prop_per_obj}    or $x->limit('prop_per_obj');
+# Account for an array or object that the run creates as a value: an object
+# with $props properties.  (The engine's own copies of what exists already,
+# made in order to change it, are not new values.)
+sub charge_obj ($x, $props = 0) {
+    --$x->{new_obj} >= 0         or $x->limit('new_obj');
+    $props <= $x->{prop_per_obj} or $x->limit('prop_per_obj');
+}
+
+# Account for the property $name, about to be set in $object.
+sub charge_prop ($x, $object, $name) {
+    exists $object->{$name} || keys %$object < $x->{prop_per_obj} or $x->limit('prop_per_obj');
 }
 
 #---------------------------------------------------------------------------
@@ -182,7 +189,8 @@ sub own_path ($x, $slot, $keys, $n) {
         if (ref $child eq 'JGraft::Missing') {      # absent, or an element whose removal is pending
             $child = is_idx($keys->[ $i + 1 ]) ? [] : {};
             $x->{owned}{ refaddr $child } = $child;
-            $x->charge_obj(0);
+            $x->charge_obj;
+            $x->charge_prop($c, $k) unless $array;
             $array ? ($c->[$k] = $child) : ($c->{$k} = $child);
             $x->arrived($c, $k) if $array;
         }
@@ -209,7 +217,7 @@ sub put ($x, $ns, $keys, $v, $meta = undef) {
     else {
         my $c = $x->own_path($slot, $k, $#$k);
         if (ref $c eq 'HASH') {
-            exists $c->{ $k->[-1] } or $x->charge_obj(1 + keys %$c);
+            $x->charge_prop($c, $k->[-1]);
             $c->{ $k->[-1] } = $v;
         }
         else {
@@ -298,6 +306,7 @@ sub give ($x, $ns, $keys, $v, $meta) {
         my $c = $x->own_path($slot, $k, $#$k);
         my $i = $k->[-1];
         if (ref $c eq 'HASH') {
+            $x->charge_prop($c, $i);
             $c->{$i} = $v;
         }
         elsif (defined $i && $i != int $i) {        # a half index: insert between elements, later

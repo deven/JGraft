@@ -848,6 +848,14 @@ the behaviour the conformance tests currently assert.
     suite's own gloss, "maximum recursion depth of any expression". Every
     case in the suite that sets `depth` is EXPR recursion, so the suite
     passes under either rule and the spec has to choose.)
+    `new_obj` and `prop_per_obj` have no cases in the suite at all, and their
+    glosses leave open what this implementation had to decide (§17): whether
+    an implementation's internal copies are "new objects" (here: no, only
+    arrays and objects made as values, so that the count does not depend on
+    how an implementation shares data); whether "properties added to any one
+    object" counts additions or the resulting size (here: the size, checked
+    when an object is made or gains a property); and whether constants in
+    the graft count (here: no). → Define both, and add cases.
 12. **TEMP lifetime (212–216).** "For the duration of one action" does not say
     whether sub-actions of AT / MATCH / IF share it. Suite: each COPY / MOVE
     starts empty. → State that every action execution starts with an empty
@@ -975,6 +983,16 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   per-node depth and no per-action check. This is now the definition
   recommended for the spec (§16 item 11), not just a shortcut. A graft
   written more deeply than the limit, without EXPR, is therefore accepted.
+- **`new_obj` and `prop_per_obj` are counted where §9 said, and tested.**
+  The first implementation charged them in three places only, counted an
+  array's elements as properties, and spent a `new_obj` for each property
+  added by COPY; nothing caught this, because the suite has no case for
+  either limit. Now `charge_obj` is called wherever an array or object is
+  made as a value (literals with computed members, containers made along a
+  new path, MAP, FILTER, CONCAT, SLICE, SPLIT, PROPS, MKOBJ, captures), and
+  `charge_prop` wherever an object gains a property (COPY, MOVE, and a
+  container made along a path). Copy-on-write clones are not counted: they
+  are this implementation's business. `t/design.t` pins the count for each.
 - **Dates are replaced where they leave the engine** (§7.2): when an action
   stores a value into the document, or puts one in the log. Instead of the
   planned count of dates made during the run, which says only that a date

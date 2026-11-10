@@ -15,7 +15,11 @@ use JGraft::Compiler qw(defop);
 # [CAPTURE, spec]: the captures of a successful match, else false.
 defop CAPTURE => 50, 'fn', 'X', sub ($c, $ctx, $spec) {
     my $match = $c->root($ctx, $spec, 1)->{code};
-    return { code => sub { &$match // $FALSE } };
+    return { code => sub {
+        my $caps = &$match or return $FALSE;
+        $_[0]->charge_obj(scalar keys %$caps);
+        $caps;
+    } };
 };
 
 # [LOCAL, name, value, ..., result]: evaluate the result under extra TEMP
@@ -105,8 +109,10 @@ my $elements = sub ($x, $v, $who) {
     return $v;
 };
 
-# Give $new the SPLIT metadata of the elements of $a at the indices @from.
-my $inherit = sub ($x, $new, $a, @from) {
+# Account for the array $new, made of the elements of $a at the indices
+# @from, and give it their SPLIT metadata.
+my $made = sub ($x, $new, $a, @from) {
+    $x->charge_obj;
     my $split = $x->split_of($a) or return $new;
     $x->carry($new, $split->{origin}, @{ $split->{m} }[@from]);
     return $new;
@@ -120,7 +126,7 @@ defop FILTER => 60, 'fn', 'XN?', sub ($c, $ctx, $spec, $of) {
         my $x    = $_[0];
         my $a    = $elements->($x, &$get, 'FILTER');
         my @kept = grep { $keep->($x, $a->[$_], $_, $a) } 0 .. $#$a;
-        $inherit->($x, [ @$a[@kept] ], $a, @kept);
+        $made->($x, [ @$a[@kept] ], $a, @kept);
     };
 };
 
@@ -131,7 +137,7 @@ defop MAP => 61, 'fn', 'XN?', sub ($c, $ctx, $each, $of) {
     return sub {
         my $x = $_[0];
         my $a = $elements->($x, &$get, 'MAP');
-        $inherit->($x, [ map { $f->($x, $a->[$_], $_, $a) } 0 .. $#$a ], $a, 0 .. $#$a);
+        $made->($x, [ map { $f->($x, $a->[$_], $_, $a) } 0 .. $#$a ], $a, 0 .. $#$a);
     };
 }, dated => 1;      # the elements come from an expression of its own
 
@@ -148,6 +154,7 @@ defop CONCAT => 58, 'fn', 'V+', sub ($c, $ctx, @arg) {
             return join '', @v;
         }
         grep { ref ne 'ARRAY' } @v and $x->fail_target('CONCAT needs strings or arrays');
+        $x->charge_obj;
         my @all = map { @{ $elements->($x, $_, 'CONCAT') } } @v;
         # metadata survives from the first SPLIT represented, and from any others like it
         if (my ($origin) = map { $_->{origin} } grep { $_ } map { $x->split_of($_) } @v) {
@@ -202,7 +209,7 @@ defop SLICE => 57, 'fn', 'VV?V?', sub ($c, $ctx, @arg) {
         return substr $v, $ofs, $lim - $ofs unless ref $v;
         my @span = $ofs .. $lim - 1;
         $x->check_live(@$v[@span]) if $x->{moving};
-        $inherit->($x, [ @$v[@span] ], $v, @span);
+        $made->($x, [ @$v[@span] ], $v, @span);
     };
 };
 
@@ -220,6 +227,7 @@ defop PROPS => 64, 'fn', 'N?X?', sub ($c, $ctx, $of, @form) {
         ref $o eq 'HASH' or $_[0]->fail_target('PROPS needs an object');
         my @name = sort keys %$o;
         $_[0]->charge(scalar @name, 16 + 24 * @name);
+        $_[0]->charge_obj for 1 .. (1, 1 + @name, 3)[$form];        # the arrays in each form of result
         $form == 0 ? \@name : $form == 1 ? [ map { [ $_, $o->{$_} ] } @name ] : [ \@name, [ @$o{@name} ] ];
     };
 };

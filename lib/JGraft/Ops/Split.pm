@@ -125,6 +125,7 @@ sub split_string ($x, $plan, $s) {
         }
     }
     $x->charge(scalar @part, 16 + 8 * @part);
+    $x->charge_obj;
     # Metadata is only worth keeping if it says something a JOIN could not know.
     $x->carry(\@part, ++$x->{origins}, @m) if grep { grep { defined } @$_ } @m;
     return \@part;

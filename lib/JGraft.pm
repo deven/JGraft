@@ -102,11 +102,39 @@ Changing anything shared with the input changes the input.
 
 =head1 LIMITS
 
-C<limits> is a hash of any of C<ops> (operations performed), C<mem>
-(estimated bytes allocated), C<new_obj> (arrays and objects created),
-C<prop_per_obj> (properties in any one object) and C<depth> (nesting of
-common expressions, 512 unless given).  Apart from C<depth>, what is not
-given is not limited.
+C<limits> is a hash of any of these.  Apart from C<depth>, what is not given
+is not limited.
+
+=over
+
+=item C<ops>
+
+Operations performed.  Only work that grows with the data is counted, an
+element or a character at a time.
+
+=item C<mem>
+
+Estimated bytes allocated.
+
+=item C<new_obj>
+
+Arrays and objects created as values: those written in the graft with
+computed members, those created on the way to a path that did not exist,
+captures, and the results of functions (C<MAP>, C<SPLIT>, C<MKOBJ> and so
+on).  Changing or copying an array or object that exists does not count,
+though the engine may copy it internally.
+
+=item C<prop_per_obj>
+
+The number of properties an object may have when it is created, or once it
+has been given another.  A larger object in the input can be read, changed
+and reduced, but not added to.  Arrays are not objects, however long.
+
+=item C<depth>
+
+Calls of common expressions (C<EXPR>) in progress at once: 512 unless given.
+
+=back
 
 Limits bound the work done by the call they are given to, and C<new> does
 work too: it evaluates, once, every expression in the graft that does not

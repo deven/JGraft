@@ -279,7 +279,7 @@ sub construct ($c, $ctx, $s) {
     my @meta = $hash ? () : map { $_->{meta} } @kid;
     return node(sub {
         my $x = $_[0];
-        $x->charge_obj(scalar @code);
+        $x->charge_obj($hash ? scalar @code : 0);
         my $new = $make->(map { $_->(@_) } @code);
         if (%{ $x->{side} }) {      # elements referred to directly keep their SPLIT metadata
             $meta[$_] and $x->set_meta($new, $_, $meta[$_]->(@_)) for 0 .. $#meta;
