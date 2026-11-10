@@ -1117,6 +1117,43 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   then would have changed the graft. An error that names an expression
   still names the caller's own (`JGraft::theirs`). The defaults stay
   unlimited, as Perl's own are.
+- **Exact numbers** (`JGraft::Number`; the comparison's item 6). Asked for
+  by `exact => 1`, given to `JGraft::JSON->parse` or to `run`, arithmetic is
+  done in decimal on a whole coefficient and a power of ten, by the rules of
+  the General Decimal Arithmetic specification: so 0.1 + 0.2 is 0.3, and
+  0.10 + 0.20 is 0.30, the places a number was written with being kept.
+  `Math::BigFloat` would have given the first (it is decimal, not binary)
+  but not the second, since it drops trailing zeros, as `Math::BigRat` does;
+  and a rational has no decimal to write for 1/3 either. So the class is
+  the engine's own, some two hundred lines, with `Math::BigInt` for a
+  coefficient of more than eighteen digits and Perl's integers for the rest.
+  Decisions:
+  - *The result is Perl's own number wherever that says as much*, and an
+    object only otherwise (0.30; more digits than Perl keeps; out of range).
+    So an exact run of ordinary data gives ordinary data. One of Perl's
+    numbers is taken for the shortest decimal that reads back as it.
+  - *A whole number has no places*: 1e2 is 100, and 150e28 is 15e29.
+  - *The flag is the run's*, not the graft's, so one compiled graft serves
+    both; it defaults to how the document was read (the root's record says).
+    Folding does not know which run it is for, so while folding, arithmetic
+    that would differ dies ("undecided") and is left unfolded: whole-number
+    arithmetic still folds, and anything on a number that is already an
+    object, which is exact in any run.
+  - *Objects are numbers everywhere* (`Util::is_num`, `type_of`, `match_lit`,
+    `compare`, the literal matchers, `NUM`, indices), and so are
+    `Math::BigInt` and `Math::BigFloat`, though none is made.
+  - *Equality is of value* (0.30 matches 0.3); only the JSON writer and undo
+    ask whether two numbers are the same to the place (`Number::same`).
+  - *Division* is exact when it ends and otherwise 40 digits; `LOG` and
+    fractional `POW` stay Perl's.
+  - *Cost is charged*: a digit of a kept object, the zeros between two
+    numbers added, the digits of a power, with a cap of a billion.
+  The whole conformance suite gives the same results exact as not, except
+  the fifteen cases whose point is that a number is beyond Perl's range;
+  `t/conformance.t` now checks that. It is slow beside Perl's arithmetic
+  (15 to 25 µs an operation here, against 1), which is why it is asked for.
+  The spec might say that an implementation may offer this: "Math" defines
+  ADD as "the host language's addition".
 - **A review of the whole, by readers who had not written it**, found some
   forty defects, each reproduced before it was fixed and pinned by a test
   (`t/design.t`, "corners of moving, matching and counting" and "numbers and

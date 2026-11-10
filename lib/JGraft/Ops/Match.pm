@@ -103,12 +103,17 @@ defop STR => 8, 'match', 'X?', sub ($c, $ctx, @regex) {
 
 defop NUM => 9, 'match', 'V?V?', sub ($c, $ctx, @bound) {
     my @get = map { $_->{code} } @bound;
-    return { code => sub { created_as_number($_[1]) } } unless @get;
+    return { code => sub { is_num($_[1]) } } unless @get;
     return sub {
         my ($lo, $hi) = map { $_->(@_) } @get;
         my $x = $_[0];
-        defined $_ && !(created_as_number($_) && $_ - $_ == 0) and $x->fail_operand('NUM bounds must be numbers')
+        defined $_ && !(ref $_ ? is_num($_) : created_as_number($_) && $_ - $_ == 0) and $x->fail_operand('NUM bounds must be numbers')
             for $lo, $hi;
+        if (grep { ref } $lo, $hi, $_[1]) {     # one of them is a decimal that Perl's own number would not hold
+            my $above = sub ($a, $b) { JGraft::Number::order($a, $b) > 0 };
+            $x->fail_operand('NUM bounds out of order') if defined $lo && defined $hi && $above->($lo, $hi);
+            return is_num($_[1]) && (ref $_[1] || $_[1] - $_[1] == 0) && !(defined $lo && $above->($lo, $_[1])) && !(defined $hi && $above->($_[1], $hi));
+        }
         $x->fail_operand('NUM bounds out of order') if defined $lo && defined $hi && $lo > $hi;
         created_as_number($_[1]) && (!defined $lo || $_[1] >= $lo) && (!defined $hi || $_[1] <= $hi);
     };

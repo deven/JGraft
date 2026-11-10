@@ -71,6 +71,8 @@ sub alike ($a, $b) {
     return 0 if grep { ref eq 'ARRAY' || ref eq 'HASH' } $a, $b;
     # dates are alike only if written alike: the same moment in another zone is another value
     return ref $b eq 'JGraft::Date' && $a->str eq $b->str if ref $a eq 'JGraft::Date';
+    # a decimal kept with every digit is alike only if it has the same digits: 0.30 is not 0.3
+    return is_num($b) && JGraft::Number::same($a, $b) if ref $a && is_num($a);
     return match_lit($a, $b, 1);
 }
 
@@ -79,7 +81,8 @@ sub key ($v) {
     my $t = type_of($v);
     return $t == T_NULL ? 'null'
          : $t == T_BOOL ? ($v ? 'true' : 'false')
-         : $t == T_NUM  ? sprintf('%s %.17g', $v, $v)      # as an integer shows itself, and as a float does
+         : $t == T_NUM  ? (ref $v ? 'decimal ' . join('e', JGraft::Number::parts($v))
+                                  : sprintf '%s %.17g', $v, $v)     # as an integer shows itself, and as a float does
          : $t == T_STR  ? "'$v"
          : ref $v eq 'JGraft::Date' ? 'date ' . $v->str
          :                '@' . refaddr $v;

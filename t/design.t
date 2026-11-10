@@ -1241,6 +1241,135 @@ subtest 'JSON is written back as it was read' => sub {
     is $count{wrong}, 0, "and after a random change each says what the run left ($count{written} of them)";
 };
 
+subtest 'numbers that are exact' => sub {
+    require Math::BigInt;
+    require Math::BigFloat;
+    # A graft applied to a text read with its numbers exact, and the text written back.
+    my $on = sub ($text, @actions) {
+        my $doc = JGraft::JSON->parse($text, exact => 1);
+        my $r   = JGraft->new([ JGRAFT => {}, @actions ])->run($doc->data);
+        return $r->ok ? $doc->write($r->output) : $r->error->code;
+    };
+    my ($A, $B) = ([ NODE => 'a' ], [ NODE => 'b' ]);
+    my $calc = sub ($a, $b, $expr) { $on->(qq({"a":$a,"b":$b}), [ COPY => $expr, ['NODE'] ]) };
+
+    is $calc->('0.1', '0.2', [ ADD => $A, $B ]), '0.3', 'a tenth and two tenths are three tenths';
+    ok JGraft->new([ JGRAFT => {}, [ COPY => [ ADD => $A, $B ], ['NODE'] ] ])->apply({ a => 0.1, b => 0.2 }) != 0.3, '... which they are not, in arithmetic that is not exact';
+    is $calc->('19.99', '3', [ MUL => $A, $B ]), '59.97', 'a price three times';
+    is $calc->('0.10', '0.20', [ ADD => $A, $B ]), '0.30', 'a sum is known to as many places as its terms';
+    is $calc->('0.10', '0.2', [ ADD => $A, $B ]), '0.30', '... as the finer of them';
+    is $calc->('0.30', '0.30', [ SUB => $A, $B ]), '0.00', '... even if it is nothing';
+    is $calc->('1.50', '2.0', [ MUL => $A, $B ]), '3.000', 'a product to as many as its factors together';
+    is $calc->('6.0', '2', [ DIV => $A, $B ]), '3.0', 'a quotient that ends keeps the places of what was divided';
+    is $calc->('1', '4', [ DIV => $A, $B ]), '0.25', '... and has those it needs';
+    is $calc->('1', '1024', [ DIV => $A, $B ]), '0.0009765625', '... all of them';
+    is $calc->('1', '3', [ DIV => $A, $B ]), '0.' . '3' x 40, 'one that does not end is given forty digits';
+    is $calc->('2', '-3', [ DIV => $A, $B ]), '-0.' . '6' x 39 . '7', '... the last of them rounded';
+    is $calc->('7', '0', [ DIV => $A, $B ]), 'INVALID_TARGET', 'nothing is divided by zero';
+    is $calc->('7.5', '-2', [ MOD => $A, $B ]), '-0.5', 'a remainder takes the sign of the divisor';
+    is $calc->('1e30', '7', [ MOD => $A, $B ]), '1', '... and is right however large the number';
+    is $calc->('12345678901234567890123', '1', [ ADD => $A, $B ]), '12345678901234567890124', 'an integer longer than Perl holds is added to';
+    is $calc->('123456789012', '123456789012', [ MUL => $A, $B ]), '15241578753153483936144', 'and a product that outgrows Perl is whole';
+    is $calc->('9223372036854775807', '1', [ ADD => $A, $B ]), '9223372036854775808', 'as is a sum that only just does';
+    is $calc->('2', '100', [ POW => $A, $B ]), '1267650600228229401496703205376', 'a power is exact';
+    is $calc->('0.5', '3', [ POW => $A, $B ]), '0.125', '... of a fraction too';
+    is $calc->('2', '-2', [ POW => $A, $B ]), '0.25', '... and a negative one is its inverse';
+    is $calc->('10', '1000000000000', [ POW => $A, $B ]), '1e+1000000000000', 'a power of ten costs nothing, however great';
+    is $calc->('7', '1000000000000', [ POW => $A, $B ]), 'UNSUPPORTED_GRAFT', '... but a number of a billion digits is not attempted';
+    is $calc->('1e400', '2', [ MUL => $A, $B ]), '2e+400', 'a number beyond the range of Perl is one like any other';
+    is $calc->('1e-400', '1e-400', [ ADD => $A, $B ]), '2e-400', '... a small one too';
+    is length $calc->('1e400', '1', [ ADD => $A, $B ]), 401, '... and adding one to it writes every digit';
+    is $calc->('1e1000000000000', '1', [ ADD => $A, $B ]), 'UNSUPPORTED_GRAFT', '... unless there are too many to write';
+    is $calc->('2', '0.5', [ POW => $A, $B ]) =~ /^1\.41421356\d+$/ ? 'a float' : 'not', 'a float', 'a root is no more exact than Perl makes it';
+    is $calc->('1000', '10', [ LOG => $B, $A ]), '3', 'nor a logarithm, though it is whole where it should be';
+
+    # The result is a number of Perl's own wherever that says as much, and an object only where it would not.
+    my $made = sub ($expr, %opt) { JGraft->new([ JGRAFT => {}, [ COPY => $expr, ['NODE'] ] ])->apply(undef, exact => 1, %opt) };
+    ok !ref $made->([ ADD => 0.1, 0.2 ]) && $made->([ ADD => 0.1, 0.2 ]) == 0.3, 'three tenths is a number of Perl\'s own';
+    ok !ref $made->([ ADD => 2, 3 ]) && !ref $made->([ MUL => 1.5, 1.5 ]) && !ref $made->([ DIV => 7, 2 ]), 'so is what Perl would have got right';
+    my $third = $made->([ DIV => 1, 3 ]);
+    is ref $third, 'JGraft::Number', 'a third is not: it is an object';
+    is "$third", '0.' . '3' x 40, '... which reads as the number';
+    ok $third < 0.34 && $third > 0.33 && abs($third * 3 - 1) < 1e-15 && $third == $made->([ DIV => 2, 6 ]), '... and can be compared and calculated with, as Perl does';
+    is ref $made->([ POW => 2, 64 ]), 'JGraft::Number', 'an integer that Perl does not hold is one';
+    ok !ref $made->([ SUB => [ POW => 2, 64 ], 1 ]), 'and the widest that it does is not';
+    is ref $made->([ CASTNUM => '1.50' ]), 'JGraft::Number', 'a number known to a place that Perl would drop is one';
+    is $made->([ CASTSTR => [ ADD => [ CASTNUM => '1.50' ], 1 ] ]), '2.50', '... and the place is kept';
+    ok !ref $made->([ CASTNUM => '1.5' ]), 'one that Perl says as well is not';
+    is JGraft->new([ JGRAFT => {}, [ COPY => [ CASTNUM => '1.50' ], ['NODE'] ] ])->apply(undef), 1.5, 'unless asked, CASTNUM gives Perl\'s number';
+    is JGraft->new([ JGRAFT => {}, [ COPY => [ CASTNUM => '1e400' ], ['NODE'] ] ])->run(undef)->error->code, 'UNSUPPORTED_GRAFT', '... and refuses what Perl cannot hold';
+    is $made->([ CASTSTR => [ CASTNUM => '1e400' ] ]), '1e+400', 'which an exact run does not';
+
+    # One graft, compiled once, is exact or not as each run is.
+    my $both = JGraft->new([ JGRAFT => {}, [ COPY => [ [ [ ADD => 0.1, 0.2 ], [ ADD => 1, 2 ], [ ROUND => { at => 25, as => 'NUM' }, '0.1234567890123456789012345' ] ] ], ['NODE'] ] ]);
+    is JGraft::JSON->encode($both->apply(undef, exact => 1)), '[0.3,3,0.1234567890123456789012345]', 'arithmetic written in the graft is exact in a run that is';
+    is JGraft::JSON->encode($both->apply(undef)), '[0.30000000000000004,3,0.12345678901234568]', '... and not in one that is not';
+    is JGraft::JSON->encode($both->apply(undef, exact => 1)), '[0.3,3,0.1234567890123456789012345]', '... whichever came first';
+    is scalar(() = graft([ COPY => [ DIV => 1, 0 ], ['NODE'] ])->warnings), 1, 'what always fails is still seen when the graft is compiled';
+
+    # A document read exactly is run exactly, unless it is said otherwise; one that was not is not.
+    my $doc = JGraft::JSON->parse('{"a":0.1,"b":0.2}', exact => 1);
+    my $sum = JGraft->new([ JGRAFT => {}, [ COPY => [ ADD => $A, $B ], 'c' ] ]);
+    is $doc->write($sum->apply($doc->data)), '{"a":0.1,"b":0.2,"c":0.3}', 'a document read exactly is run exactly';
+    is $doc->write($sum->apply($sum->apply($doc->data))), '{"a":0.1,"b":0.2,"c":0.3}', '... and so is what a run made of it';
+    is $doc->write($sum->apply($doc->data, exact => 0)), '{"a":0.1,"b":0.2,"c":0.30000000000000004}', '... unless the run is told not to be';
+    is JGraft::JSON->parse('{"a":0.1,"b":0.2}')->write($sum->apply(JGraft::JSON->parse('{"a":0.1,"b":0.2}')->data)), '{"a":0.1,"b":0.2,"c":0.30000000000000004}',
+        'a document read as usual is not';
+    ok !eval { JGraft::JSON->parse('1', exactly => 1); 1 } && $@ =~ /unknown option exactly/, 'parse refuses an option it does not know';
+    is $doc->write($sum->apply($doc->data, exact => 0)), '{"a":0.1,"b":0.2,"c":0.30000000000000004}', 'the document is none the worse';
+
+    # What is not touched is written as it was; what is, with the digits it has.
+    my $kept = '{"big":123456789012345678901234567890, "sci":1e1, "zero":-0.0, "places":1.50, "huge":1e400, "tiny":12e-30}';
+    is $on->($kept, [ COPY => 1, 'n' ]), $kept =~ s/\}$/, "n":1}/r, 'numbers of every kind are written back as they were';
+    is $on->('{"a":1.50,"b":1e1}', [ MOVE => 'a', 'c', 'b', 'd' ]), '{"c":1.50,"d":1e1}', 'and go where they are moved to as they were';
+    is $on->('{"a":1.50}', [ COPY => [ ADD => $A, 0 ], 'a' ]), '{"a":1.50}', 'a number that comes out as it went in is left as it was';
+    is $on->('{"a":1.5}', [ COPY => [ CASTNUM => '1.50' ], 'a' ]), '{"a":1.50}', 'but one known to another place is written so, though it is equal';
+    is $on->('{"a":1e1}', [ COPY => [ ADD => $A, 0 ], 'a' ]), '{"a":1e1}', 'a whole number has no places to differ in';
+
+    # Numbers are compared by what they are worth.
+    my $test = sub ($text, $pattern) { $on->($text, [ COPY => [ CASE => $pattern, 'yes', 'no' ], ['NODE'] ]) };
+    is $test->('{"a":0.30}', { a => 0.3 }), '"yes"', 'thirty hundredths match three tenths';
+    is $test->('{"a":0.30,"b":0.3}', [ IS => $A, $B ]), '"yes"', '... and are it, compared as values';
+    is $test->('{"a":12345678901234567890123,"b":12345678901234567890124}', [ IS => $A, $B ]), '"no"', 'two long integers that differ in the last digit are not one';
+    is $test->('{"a":12345678901234567890123,"b":12345678901234567890124}', [ IS => [ LESS => $A, $B ], $JGraft::Util::TRUE ]), '"yes"', '... and the lesser is less';
+    is $test->('{"a":12345678901234567890123}', { a => [ NUM => 1e22, 1e23 ] }), '"yes"', 'NUM knows a long number for one, and where it lies';
+    is $test->('{"a":0.30}', { a => [ NUM => 0.31 ] }), '"no"', '... and where it does not';
+    is $test->('{"a":1e400}', { a => [ NUM => [ CASTNUM => '9e399' ], [ CASTNUM => '1.1e400' ] ] }), '"yes"', '... with bounds as long';
+    is $on->('{"i":1.0,"list":[5,6,7]}', [ COPY => [ NODE => 'list', [ NODE => 'i' ] ], ['NODE'] ]), '6', 'a whole number, however written, is an index';
+
+    # ROUND and the casts know the digits.
+    is $on->('{"a":1.50}', [ COPY => [ CASTSTR => $A ], ['NODE'] ]), '"1.50"', 'CASTSTR writes the places';
+    is $on->('{"a":1.50}', [ COPY => [ ROUND => { as => 'SIG', at => 5 }, $A ], ['NODE'] ]), '"1.50"', 'ROUND knows how many are significant';
+    is $on->('{"a":2.345}', [ COPY => [ ROUND => { at => 2, mode => 'HALF_EVEN' }, $A ], ['NODE'] ]), '2.34', 'and rounds the digits there are';
+    is $on->('{"a":1.5}', [ COPY => [ ROUND => { as => 'INT', shift => 30 }, $A ], ['NODE'] ]), '1.5e+30', 'an integer too long for Perl is kept whole';
+    is $on->('{"a":123456789012345678901234567890.5}', [ COPY => [ ROUND => { as => 'INT', mode => 'DOWN' }, $A ], ['NODE'] ]), '123456789012345678901234567890',
+        '... every digit of it';
+    is JGraft->new([ JGRAFT => {}, [ COPY => [ ROUND => { as => 'INT', shift => 30 }, ['NODE'] ], ['NODE'] ] ])->run(1.5)->error->code, 'UNSUPPORTED_GRAFT',
+        'which arithmetic that is not exact cannot do';
+
+    # Numbers of the modules that Perl has for the purpose are numbers too.
+    my $foreign = { a => Math::BigInt->new(2)->bpow(70), b => Math::BigFloat->new('2.5') };
+    my $r = JGraft->new([ JGRAFT => {}, [ MATCH => { a => ['NUM'], b => 2.5 } ], [ COPY => [ ADD => $A, 1 ], 'c', [ MUL => $B, $B ], 'd' ] ])->run($foreign);
+    is JGraft::JSON->encode([ @{ $r->output }{qw(a c d)} ]), '[1180591620717411303424,1180591620717411303425,6.25]', 'Math::BigInt and Math::BigFloat are read as numbers, in any run';
+    is ref $r->output->{c}, 'JGraft::Number', '... and calculated with exactly';
+
+    # What it costs is counted.
+    my $limited = sub ($expr, %limits) { my $r = JGraft->new([ JGRAFT => {}, [ COPY => $expr, ['NODE'] ] ])->run(undef, exact => 1, limits => \%limits); $r->ok ? 'ok' : $r->error->code };
+    is $limited->([ POW => 3, 100000 ], mem => 5000), 'RESOURCE_LIMIT', 'a number of many digits is memory';
+    is $limited->([ POW => 3, 100000 ], ops => 5000), 'RESOURCE_LIMIT', '... and work';
+    is $limited->([ ADD => [ POW => 10, 1e6 ], 1 ], mem => 1e5), 'RESOURCE_LIMIT', 'as are the zeros between two numbers far apart';
+    is $limited->([ POW => 3, 100 ], mem => 5000, ops => 5000), 'ok', 'a number of few is little';
+
+    # A run that is exact can be undone exactly.
+    my $before = JGraft::JSON->parse('{"a":0.3,"b":[1,2]}', exact => 1);
+    my $change = JGraft->new([ JGRAFT => {}, [ COPY => [ CASTNUM => '0.30' ], 'a', [ POW => 2, 80 ], [ 'NODE', 'b', 0 ] ] ])->run($before->data);
+    is $before->write($change->output), '{"a":0.30,"b":[1208925819614629174706176,2]}', 'a change that is only of places, and one to a long number';
+    is $before->write(JGraft->new($change->undo)->apply($change->output)), '{"a":0.3,"b":[1,2]}', 'are both undone';
+    my $long  = JGraft::JSON->parse('[12345678901234567890123]', exact => 1);
+    my $drop  = JGraft->new([ JGRAFT => {}, [ COPY => 5, 0 ] ])->run($long->data);
+    is $long->write(JGraft->new($drop->undo)->apply($drop->output)), '[12345678901234567890123]', 'and a long number that was lost is put back, digit for digit';
+};
+
 subtest 'the public interface' => sub {
     my @seen;
     my $g = graft([ RAISE => 'warn', 'careful', ['NODE'] ], [ MATCH => 1 ], [ COPY => 2, ['NODE'] ]);

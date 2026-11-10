@@ -18,6 +18,9 @@ use JGraft::Source;
 
 use constant INF => 9**9**9;
 
+# Was the text that this sheet (of JGraft::Source) leads back to read with its numbers exact?
+sub exact_text ($sheet) { my $record = $sheet && ($sheet->{rec} // $sheet->{from}); $record && $record->{exact} }
+
 sub new ($class, $input, %opt) {
     my $limit = $opt{limits} // {};
     return bless {
@@ -35,6 +38,8 @@ sub new ($class, $input, %opt) {
         # Is the document one that JGraft::JSON read?  Then where each value came from in its
         # text is kept up as values move (see JGraft::Source), and new objects keep their order.
         src => ref $input && JGraft::Source::sheet($input) ? 1 : 0,
+        # Is arithmetic to be exact (see JGraft::Number)?  As asked; or as the document was read.
+        exact => $opt{exact} // (ref $input && exact_text(JGraft::Source::sheet($input)) ? 1 : 0),
         folding => 0,                   # set by the compiler, when evaluating a constant expression
     }, $class;
 }

@@ -13,7 +13,7 @@ no warnings qw(recursion);
 # that is not among them is a mistake in the caller, and is not let pass: a
 # limit misspelt would be no limit at all.
 my %NEW   = map { $_ => 1 } qw(strict max_version limits);
-my %RUN   = map { $_ => 1 } qw(limits on_raise temp date_export);
+my %RUN   = map { $_ => 1 } qw(limits on_raise temp date_export exact);
 my %LIMIT = map { $_ => 1 } qw(ops mem new_obj prop_per_obj depth);
 
 sub options ($for, $known, %opt) {
@@ -313,7 +313,8 @@ text, and C<write> dies if given one.  If a graft joins strings so that
 such bytes come together and spell a character between them (the two halves
 of one that had been cut in two, say), they become that character.  A number
 too large or too precise for Perl is seen by the graft as the nearest one
-Perl has, and keeps its spelling if the graft leaves it alone.
+Perl has, and keeps its spelling if the graft leaves it alone; unless the
+text is read with its numbers exact, as the next section describes.
 
 The graft may be read the same way, C<< JGraft->new(JGraft::JSON->parse($g)->data) >>,
 and then an object written in it gives its properties to the output in the
@@ -321,6 +322,81 @@ order written there.
 
 As with C<output> in general, treat C<< $doc->data >> as read-only: C<write>
 takes an array or object that was read to be still as it was read.
+
+=head1 EXACT NUMBERS
+
+Arithmetic in a graft is Perl's own, as the specification has it, and so
+C<[ADD, 0.1, 0.2]> is 0.30000000000000004, and an integer of thirty digits
+is only nearly itself.  It can be done in decimal instead, as on paper:
+
+    my $doc  = JGraft::JSON->parse($bytes, exact => 1);
+    my $text = $doc->write($graft->apply($doc->data));
+
+    my $output = $graft->apply($data, exact => 1);      # or for data that is Perl's own
+
+C<exact> given to C<parse> reads every number with every digit it has, and a
+run on a document read so is exact unless told otherwise (C<< exact => 0 >>).
+A document that is nothing but one number or string has nowhere to say how
+it was read: give C<exact> to the run.
+
+In an exact run:
+
+=over
+
+=item *
+
+Sums, differences, products, remainders and whole powers are exact,
+whatever their size.  0.1 and 0.2 make 0.3.
+
+=item *
+
+A number is known to the places it was written with, and the result of a
+calculation to the places that follow from them, by the rules that decimal
+arithmetic has in other languages (the General Decimal Arithmetic
+specification): 0.10 and 0.20 make 0.30, 1.50 times 2.0 is 3.000, and
+0.30 less 0.30 is 0.00.  C<CASTSTR> writes those places, C<ROUND> counts
+them as significant, and a text written back has them.  They make no
+difference to what a number is worth: 0.30 matches 0.3.
+
+=item *
+
+A quotient is exact if it ends (1 by 8 is 0.125), and is otherwise rounded
+to 40 significant digits (C<$JGraft::Number::DIGITS>).
+
+=item *
+
+C<LOG>, and C<POW> to a power that is not whole, are Perl's own and no more
+exact than that.
+
+=item *
+
+No number is out of range.  C<CASTNUM> of C<"1e400"> is that number, where a
+run that is not exact fails with C<UNSUPPORTED_GRAFT>; C<ROUND> to an
+integer gives one of any length.  What a long number costs is counted
+against C<ops> and C<mem>, a digit at a time, and a number of more than a
+billion digits is not attempted (C<UNSUPPORTED_GRAFT>).
+
+=back
+
+The numbers that come out are Perl's own wherever Perl's number says as
+much: 0.3 is, and 12, and whatever else Perl would have got right.  Only one
+that Perl's would not hold is an object, a L<JGraft::Number>: a number
+written to a place that Perl would drop (0.30), one of more digits than
+Perl keeps, or one beyond its range.  Such an object reads as the number
+(C<"$n"> is C<0.30>), compares as it, and can be calculated with as Perl
+calculates (C<$n + 1>, inexactly); C<< JGraft::JSON->encode >> writes it
+in full, as C<write> does.
+
+Numbers of that class, and C<Math::BigInt> and C<Math::BigFloat> objects, are
+numbers wherever they are met in the data or in a graft, in any run, and
+arithmetic on one is exact whether or not the run is.
+
+It costs time: some tens of times what Perl's own arithmetic does, for each
+operation that is not on whole numbers, and more for numbers longer than
+eighteen digits.  One of Perl's own numbers is taken for the shortest
+decimal that reads back as it, so a number that some earlier binary
+arithmetic has left as 1.2899999999999998 is exactly that, with all its
+digits, and sums of such are long.
 
 =head1 THE OUTPUT IS READ-ONLY
 
@@ -462,7 +538,9 @@ C<new>: C<strict> (default 1), C<max_version> (default 1), C<limits>.
 
 C<run> / C<apply>: C<limits>, C<on_raise> (callback for each RAISE record),
 C<temp> (initial TEMP namespace), C<date_export> (callback turning a
-JGraft::Date into output data; the default is its string form).
+JGraft::Date into output data; the default is its string form), C<exact>
+(decimal arithmetic: see L</EXACT NUMBERS>; the default is as the document
+was read).
 
 An option that is not one of these is refused: C<new> and C<run> C<croak>.
 

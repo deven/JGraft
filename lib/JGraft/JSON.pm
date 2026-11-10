@@ -43,7 +43,12 @@ sub text ($doc) { ${ $doc->{text} } }
 #---------------------------------------------------------------------------
 # Reading
 
-sub parse ($class, $text) {
+our $EXACT;      # is the text being written one whose numbers were read exactly?
+
+sub parse ($class, $text, %opt) {
+    my @unknown = grep { $_ ne 'exact' } sort keys %opt;
+    die "JGraft::JSON->parse: unknown option @unknown\n" if @unknown;
+    my $exact = $opt{exact};
     utf8::downgrade($text, 1) or utf8::encode($text);       # bytes, however they were handed over
     my $src   = \$text;
     my $fail  = sub ($what) { die sprintf "JGraft::JSON: %s at byte %d\n", $what, pos($text) // 0 };
@@ -59,7 +64,7 @@ sub parse ($class, $text) {
         my ($v, $record);
         if ($text =~ /\G\{/gc) {
             $v      = JGraft::Ordered::hash();
-            $record = { text => $src, start => $start, members => \my @member };
+            $record = { text => $src, start => $start, exact => $exact, members => \my @member };
             $space->();
             until ($text =~ /\G\}/gc) {
                 !@member || $text =~ /\G,/gc or $fail->('expected , or }');
@@ -77,7 +82,7 @@ sub parse ($class, $text) {
         }
         elsif ($text =~ /\G\[/gc) {
             $v      = [];
-            $record = { text => $src, start => $start, items => \my @item };
+            $record = { text => $src, start => $start, exact => $exact, items => \my @item };
             $space->();
             until ($text =~ /\G\]/gc) {
                 !@item || $text =~ /\G,/gc or $fail->('expected , or ]');
@@ -88,7 +93,9 @@ sub parse ($class, $text) {
             }
         }
         elsif (substr($text, $start, 1) eq '"') { $v = $string->() }
-        elsif ($text =~ /\G(-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)/gc) { $v = 0 + $1 }
+        elsif ($text =~ /\G(-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)/gc) {
+            $v = $exact ? JGraft::Number::read($1) // $fail->('a number is beyond all reason') : 0 + $1;
+        }
         elsif ($text =~ /\Gtrue\b/gc)   { $v = $TRUE }
         elsif ($text =~ /\Gfalse\b/gc)  { $v = $FALSE }
         elsif ($text =~ /\Gnull\b/gc)   { $v = undef }
@@ -104,7 +111,7 @@ sub parse ($class, $text) {
     $space->();
     pos($text) == length $text or $fail->('there is something after the value');
     undef $value;       # (it refers to itself)
-    return bless { text => $src, data => $data, root => $root }, $class;
+    return bless { text => $src, data => $data, root => $root, exact => $exact }, $class;
 }
 
 # What is between the quotes of a string, as characters: or nothing, if an
@@ -136,6 +143,7 @@ sub unquote ($body) {
 # The text of the document with $value as its data.
 sub write ($doc, $value = $doc->{data}) {
     my ($start, $end, $text) = @{ $doc->{root} };
+    local $EXACT = $doc->{exact};
     return substr($$text, 0, $start) . emit($value, $doc->{root}) . substr($$text, $end);
 }
 
@@ -156,9 +164,11 @@ sub emit ($v, $hint) {
     if ($hint) {
         my $token = substr ${ $hint->[2] }, $hint->[0], $hint->[1] - $hint->[0];
         if ($token !~ /^[\[{]/) {
+            # (a number is read as it was when the text was: with every digit, if that is how it is kept)
             my $was = $token =~ /^"/ ? unquote(substr $token, 1, -1) : $token eq 'true' ? $TRUE : $token eq 'false' ? $FALSE
-                    : $token eq 'null' ? undef : 0 + $token;
-            return $token if type_of($was) == type_of($v) && match_lit($v, $was, 1);       # it says what the value still is
+                    : $token eq 'null' ? undef : $EXACT || ref $v ? JGraft::Number::read($token) : 0 + $token;
+            return $token                                                                   # it says what the value still is
+                if type_of($was) == type_of($v) && (is_num($v) ? JGraft::Number::same($v, $was) : match_lit($v, $was, 1));
             return '"' . patched($token, $was, $v) . '"' if is_str($v) && is_str($was);
         }
     }
@@ -170,6 +180,7 @@ sub scalar_text ($v) {
     return 'null' if $t == T_NULL;
     return $v ? 'true' : 'false' if $t == T_BOOL;
     return '"' . quoted($t == T_STR ? $v : $v->can('str') ? $v->str : "$v") . '"' if $t != T_NUM;
+    return ref($v) eq 'JGraft::Number' || !$v->is_nan && !$v->is_inf ? JGraft::Number::str($v) : 'null' if ref $v;
     return "$v" if "$v" =~ /\A-?[0-9]+\z/;
     $v - $v == 0 or return 'null';                              # JSON has no way to write these
     for my $digits (15, 16) {                                   # as few as give the same number back

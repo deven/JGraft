@@ -101,6 +101,15 @@ sub check ($t, $strict) {
         return "what was written cannot be read: $@      text: $text" if $@;
         return "what was written, $text, is not what it left, " . show($now) unless same($read, $now);
     }
+    # With arithmetic exact, the same: but that no number is then beyond what can be held.
+    if ($result && $strict && $code ne 'UNSUPPORTED_GRAFT') {
+        my $exact = eval { JGraft->new($t->{jgraft}, limits => $t->{limits} // {})->run($t->{input}, exact => 1) }
+            or return "exactly, it died: $@";
+        return 'exactly, ' . ($exact->ok ? 'it succeeded' : 'it failed with ' . $exact->error) . ', but not otherwise'
+            if !$exact->ok != !$result->ok || !$exact->ok && $exact->error->code ne $code;
+        my ($left, $now) = map { $_->ok ? $_->output : $_->partial } $result, $exact;
+        return 'exactly, it leaves ' . JGraft::JSON->encode($now) . ' and not ' . show($left) unless same($now, $left);
+    }
     # Whatever happened, undoing it gives back the input.
     if ($result) {
         my $undo = $result->undo;

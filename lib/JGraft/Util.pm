@@ -7,6 +7,7 @@ use v5.36;
 use builtin qw(created_as_number is_bool);
 no warnings qw(experimental::builtin recursion non_unicode);
 use JSON::PP ();
+use JGraft::Number ();
 use Exporter 'import';
 
 use constant {
@@ -16,7 +17,7 @@ use constant {
 
 our @EXPORT = qw(
     T_MISSING T_NULL T_BOOL T_NUM T_STR T_ARR T_OBJ T_DATE T_DATETIME T_TIMESTAMP T_OTHER
-    $TRUE $FALSE $MISSING type_of is_str is_int is_idx match_lit sizeof
+    $TRUE $FALSE $MISSING type_of is_str is_num is_int is_idx match_lit sizeof
     STRAY $WIDE mended
 );
 
@@ -50,7 +51,10 @@ sub mended ($s) {
     return $s;
 }
 
-my %CLASS_TYPE = ('JSON::PP::Boolean' => T_BOOL, 'JGraft::Missing' => T_MISSING);
+# A number is one of Perl's own, or a decimal that Perl's own would not hold
+# (JGraft::Number, which also reads these two classes as numbers).
+my %NUMBER     = map { $_ => 1 } qw(JGraft::Number Math::BigInt Math::BigFloat);
+my %CLASS_TYPE = ('JSON::PP::Boolean' => T_BOOL, 'JGraft::Missing' => T_MISSING, map { $_ => T_NUM } keys %NUMBER);
 
 sub type_of {
     my $r = ref $_[0];
@@ -61,19 +65,23 @@ sub type_of {
 }
 
 sub is_str { defined $_[0] && !ref $_[0] && !created_as_number($_[0]) && !is_bool($_[0]) }
+sub is_num { created_as_number($_[0]) || ref $_[0] && $NUMBER{ ref $_[0] } }
 
 # A finite number with no fractional part.
-sub is_int { created_as_number($_[0]) && $_[0] == int $_[0] && $_[0] - $_[0] == 0 }
+sub is_int {
+    return $_[0] == int $_[0] && $_[0] - $_[0] == 0 if created_as_number($_[0]);
+    return ref $_[0] && $NUMBER{ ref $_[0] } && JGraft::Number::whole($_[0]);
+}
 
 # Path keys are validated before use: strings name object properties, while
 # numbers and undef (the "append position", written `false`) index arrays.
-sub is_idx { !defined $_[0] || created_as_number($_[0]) }
+sub is_idx { !defined $_[0] || is_num($_[0]) }
 
 # Does data $v match the plain value $p?  HAS semantics unless $exact.
 sub match_lit ($v, $p, $exact, $x = undef) {
     my $t = type_of($p);
     return 0 unless $t == type_of($v);
-    return $v == $p   if $t == T_NUM;
+    return ref $v || ref $p ? !JGraft::Number::order($v, $p) : $v == $p if $t == T_NUM;
     return $v eq $p   if $t == T_STR;
     return 1          if $t == T_NULL;
     return !$v == !$p if $t == T_BOOL;
