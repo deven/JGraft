@@ -149,7 +149,6 @@ subtest 'constant folding' => sub {
         [ 'a common expression is recursive' => [ EXPR => 'loop' ] ],
         [ 'it fails'                         => [ DIV => 1, 0 ] ],
         [ 'a common expression fails'        => [ EXPR => 'bad' ] ],
-        [ 'it costs too much'                => [ ROUND => { as => 'STR', at => 1e7 }, '1' ] ],
         [ 'a SPLIT hides separators'         => [ SPLIT => { sep => [ ANY => ',', ';' ], default => ',' }, 'a,b;c' ] ],
     );
     is $folded->($_->[1]), 'not folded', "but not when $_->[0]" for @not;
@@ -212,8 +211,23 @@ subtest 'constant folding' => sub {
     is $r->error->code, 'INVALID_TARGET', 'a failure is raised by the run that reaches it';
     is show(graft([ COPY => [ ANY => [ DIV => 1, 0 ], [ IS => [ DIV => 4, 2 ], 2 ] ], ['NODE'] ])->apply(0)), 'true',
         'and is still only a failed probe inside a match';
-    is graft([ COPY => [ ROUND => { as => 'STR', at => 1e7 }, '1' ], 'a' ])->run({}, limits => { mem => 1e6 })
-        ->error->code, 'RESOURCE_LIMIT', 'and limits still apply to what was not folded';
+
+    # Folding is work done by `new`, so the limits given to `new` govern it.
+    my $long    = [ ROUND => { as => 'STR', at => 1e6 }, '1' ];     # a million digits
+    my $six     = [ ADD => [ [ 1 .. 6 ] ] ];                        # six operations
+    my $compile = sub (%limits) {
+        my $k = bless { faults => [], limits => {%limits} }, 'JGraft::Compiler';
+        sub ($s) { $k->value($ctx, $s)->{const} ? 'folded' : 'left' };
+    };
+    is $compile->()->($long),           'folded', 'with no limits, every constant is folded';
+    is $compile->(mem => 1e5)->($long), 'left',   'with limits, not one that would exceed them';
+    my $ten = $compile->(ops => 10);
+    is join(' ', map { $ten->($six) } 1 .. 3), 'folded left left', 'and the limits are for the graft as a whole';
+
+    my @limits = (limits => { mem => 1e5 });
+    my $either = JGraft->new([ JGRAFT => {}, [ IF => ['NUM'], [ COPY => 'short', ['NODE'] ], [ COPY => $long, ['NODE'] ] ] ], @limits);
+    is $either->run(1, @limits)->output, 'short', 'what was left costs nothing in a run that does not reach it';
+    is $either->run('x', @limits)->error->code, 'RESOURCE_LIMIT', 'and is subject to the limits of one that does';
     my $date = graft([ COPY => [ CASTDATE => '2024-02-29' ], 'd', [ CASTDATE => '2024-02-29' ], [ 'STASH', 'd' ] ],
         [ COPY => [ 'STASH', 'd', 'month' ], 'm' ], [ COPY => { in => [ [ [ CASTDATE => '2024-03-01' ] ] ] }, 'deep' ]);
     is show($date->apply({})), '{"d":"2024-02-29","deep":{"in":["2024-03-01"]},"m":2}',

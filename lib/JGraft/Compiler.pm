@@ -101,7 +101,7 @@ sub row ($table, $s) {
 }
 
 sub compile ($class, $struct, %opt) {
-    my $c    = bless { max_version => 1, %opt, faults => [], dates => 0 }, $class;
+    my $c    = bless { max_version => 1, %opt, faults => [], dates => 0, limits => { %{ $opt{limits} // {} } } }, $class;
     my $root = row(\%ACTION, $struct);
     my $code = $root && $root->{name} eq 'JGRAFT'
         ? $c->action({ scope => { exprs => {}, cells => {}, known => {} } }, $struct)
@@ -180,6 +180,9 @@ sub build ($c, $ctx, $row, $s) {
 # with `binding`, and the name goes no further: [MAP, f, array] supplies the
 # node that f reads.  An expression left reading nothing is a constant,
 # however it is built, and `value` evaluates it there and then.
+#
+# That evaluation is work done by `new`, so it is the `limits` given to `new`
+# that govern it: one allowance for the whole graft.
 
 sub reads ($c, @names) {
     my $noted = $c->{reads} or return;
@@ -199,13 +202,16 @@ sub reading ($c, $compile, @bound) {
 sub binding ($c, $bound, $compile) { ($c->reading($compile, @$bound))[0] }
 
 # Evaluate now, and return a constant node.  Returns nothing for whatever
-# fails or costs too much, which will then behave as it should when a run
-# reaches it; and for a SPLIT, whose result is more than its value.
-sub fold ($ctx, $code) {
-    my $x = JGraft::Exec->new(undef, limits => { ops => 10_000, mem => 65_536 });
+# fails, or would exceed what the limits still allow: that will behave as it
+# should when a run reaches it.  Nor for a SPLIT, whose result is more than
+# its value.
+sub fold ($c, $ctx, $code) {
+    my $x = JGraft::Exec->new(undef, limits => $c->{limits});
     @$x{qw(quiet const)} = (1, $ctx->{scope}{known} // {});
     my $v;
-    return eval { $v = $code->($x, $MISSING, undef, undef); 1 } && !%{ $x->{side} } ? konst($v) : undef;
+    my $done = eval { $v = $code->($x, $MISSING, undef, undef); 1 };
+    $c->{limits}{$_} = $x->{$_} for qw(ops mem new_obj);        # what is left, for the rest of the graft
+    return $done && !%{ $x->{side} } ? konst($v) : undef;
 }
 
 sub action ($c, $ctx, $s) {
@@ -222,7 +228,7 @@ sub value ($c, $ctx, $s) {
     $ctx = { scope => $ctx->{scope}, regex => $ctx->{regex}, v => 1 } unless $ctx->{v};
     my ($n, $read) = $c->reading(sub { $c->_value($ctx, $s) });
     return $n if $n->{const} || $n->{poison} || %$read;
-    return fold($ctx, $n->{code}) // $n;
+    return $c->fold($ctx, $n->{code}) // $n;
 }
 
 sub _value ($c, $ctx, $s) {
@@ -350,7 +356,7 @@ sub _match ($c, $ctx, $s) {
         return $c->matcher($ctx, $c->value($ctx, $s))                # a function's result, used as a pattern
             unless $row->{kind} eq 'match' || $row->{name} eq 'EXPR';
         my ($n, $read) = $c->reading(sub { $c->build($row->{seq} ? $ctx : $one, $row, $s) });
-        return %$read || $n->{seq} || $n->{caps} || $n->{poison} ? $n : decided($ctx, $n);
+        return %$read || $n->{seq} || $n->{caps} || $n->{poison} ? $n : $c->decided($ctx, $n);
     }
     return $c->matcher($ctx, konst($s)) if ref $s ne 'ARRAY' && ref $s ne 'HASH';
     return $c->fault('only characters can be matched in a string') if $ctx->{regex};
@@ -362,9 +368,9 @@ sub _match ($c, $ctx, $s) {
 
 # A match that reads nothing, not even the node it is matched against, has one
 # answer.  Find it now, unless finding it fails, which is left for a run to do.
-sub decided ($ctx, $n) {
+sub decided ($c, $ctx, $n) {
     my $test  = $n->{code};
-    my $known = fold($ctx, sub { &$test ? $TRUE : $FALSE }) or return $n;
+    my $known = $c->fold($ctx, sub { &$test ? $TRUE : $FALSE }) or return $n;
     my $yes   = $known->{value} ? 1 : 0;
     return { zero => $n->{zero}, code => sub { $yes } };
 }

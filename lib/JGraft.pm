@@ -9,7 +9,8 @@ our $VERSION = '0.01';
 
 # Compile a decoded JGraft structure.  With `strict` (the default) any fault
 # found by static validation is thrown now; otherwise it is thrown only if
-# the faulty part of the graft is reached.
+# the faulty part of the graft is reached.  `limits` bound the work of
+# evaluating the graft's constant expressions (see the documentation below).
 sub new ($class, $struct, %opt) {
     my $strict = delete $opt{strict} // 1;
     my ($code, $faults, $dates) = JGraft::Compiler->compile($struct, %opt);
@@ -98,13 +99,36 @@ Changing anything shared with the input changes the input.
 
 =back
 
+=head1 LIMITS
+
+C<limits> is a hash of any of C<ops> (operations performed), C<mem>
+(estimated bytes allocated), C<new_obj> (arrays and objects created),
+C<prop_per_obj> (properties in any one object) and C<depth> (nesting of
+common expressions, 512 unless given).  Apart from C<depth>, what is not
+given is not limited.
+
+Limits bound the work done by the call they are given to, and C<new> does
+work too: it evaluates, once, every expression in the graft that does not
+depend on the data, so that no run has to.
+
+    my %limits = (limits => { ops => 1e6, mem => 1e8 });
+    my $result = JGraft->new($untrusted, %limits)->run($input, %limits);
+
+A run that exceeds its limits fails with C<RESOURCE_LIMIT>.  C<new> does
+not fail: whatever its limits do not allow it to evaluate is left for the
+runs that reach it, under their limits.  Given to C<new>, the limits are an
+allowance for the whole graft.
+
+So if a graft is not trusted, give limits to both.  Limits given to C<run>
+alone do not cover an expensive constant, which C<new> will already have
+computed.
+
 =head1 OPTIONS
 
-C<new>: C<strict> (default 1), C<max_version> (default 1).
+C<new>: C<strict> (default 1), C<max_version> (default 1), C<limits>.
 
-C<run> / C<apply>: C<limits> (C<depth>, C<ops>, C<mem>, C<new_obj>,
-C<prop_per_obj>), C<on_raise> (callback for each RAISE record), C<temp>
-(initial TEMP namespace), C<date_export> (callback turning a JGraft::Date
-into output data; the default is its string form).
+C<run> / C<apply>: C<limits>, C<on_raise> (callback for each RAISE record),
+C<temp> (initial TEMP namespace), C<date_export> (callback turning a
+JGraft::Date into output data; the default is its string form).
 
 =cut

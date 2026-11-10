@@ -70,7 +70,8 @@ sub check ($t, $strict) {
     my $result  = eval {
         local $SIG{ALRM} = sub { die "timed out\n" };
         alarm 20;
-        my $r = JGraft->new($t->{jgraft}, strict => $strict)->run($t->{input}, limits => $t->{limits} // {});
+        my @limits = (limits => $t->{limits} // {});
+        my $r = JGraft->new($t->{jgraft}, strict => $strict, @limits)->run($t->{input}, @limits);
         alarm 0;
         $r;
     };

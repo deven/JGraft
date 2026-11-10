@@ -923,11 +923,16 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   though its inner expression alone does not. A match expression that reads
   nothing, not even the node it is matched against (`[IS, 5, 5]`, or any
   combination of such by ANY, ALL, NONE and WITH), is decided the same way
-  wherever it appears in a pattern. Anything that fails or exceeds the budget
-  is left to raise its error in the run that reaches it. The budget is not to
-  save work: `new` takes no limits and evaluates eagerly, so without one an
-  expensive constant would be computed even in a branch never taken, and
-  would escape the limits of every run.
+  wherever it appears in a pattern. Anything that fails is left to raise its
+  error in the run that reaches it.
+- **Folding is governed by limits given to `new`**, not by a built-in budget.
+  Evaluating constants is work done by `new`, so `new` takes the same
+  `limits` as `run`, as one allowance for the whole graft; without them
+  nothing is limited, as for `run`. What the allowance does not cover is left
+  unfolded, for the runs that reach it, under their own limits; `new` itself
+  never fails for this reason. A caller who does not trust a graft gives
+  limits to both. (The plan had a fixed budget of 10 000 operations and
+  64 KiB per expression.)
   Operands that default to the current node are declared in the table
   (argument letter `N`), which is how `[POW, 2]` is known to read the node.
 - **Named constants are constants.** A `const` definition whose value is
