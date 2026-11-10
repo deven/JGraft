@@ -1105,6 +1105,18 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   beside a sequence is now a fault, as it is anywhere outside one, and so is
   a SEQ inside a top-level ANY, ALL or NONE; write `[SEQ, [REP, ...]]`. One
   case in the suite depended on the difference and still passes.
+- **What a comparison with the other Perl implementation showed** (it was in
+  another repository, `JGraft-perl`, and the comparison is written up there,
+  in `JGraft-implementation-comparison.md`). Taken from it so far:
+  `new` and `run` refuse an option or a limit they do not know (a limit
+  misspelt had been no limit); the limits given to `new` are those of every
+  run, unless the run is given its own, so that an untrusted graft needs
+  them in one place only; and `new` compiles a copy of the structure
+  (`JGraft::snapshot`), since a definition reached only by a computed name is
+  compiled when first used, and a caller who had changed the structure by
+  then would have changed the graft. An error that names an expression
+  still names the caller's own (`JGraft::theirs`). The defaults stay
+  unlimited, as Perl's own are.
 - **A review of the whole, by readers who had not written it**, found some
   forty defects, each reproduced before it was fixed and pinned by a test
   (`t/design.t`, "corners of moving, matching and counting" and "numbers and

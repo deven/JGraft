@@ -1275,6 +1275,39 @@ subtest 'the public interface' => sub {
     is graft()->run(1, limits => { ops => 0 })->ok, 1, 'limits only count real work';
     is JGraft->new([ JGRAFT => { expr => [ loop => [ EXPR => 'loop' ] ] }, [ COPY => [ EXPR => 'loop' ], ['NODE'] ] ])
         ->run(1, limits => { depth => 50 })->error->code, 'RESOURCE_LIMIT', 'runaway recursion is stopped';
+
+    # A name that is not known is a mistake, and is said to be: most of all a limit, which misspelt would not limit.
+    my $croaks = sub ($what, $code) { my $at = __LINE__; eval { $code->(); 1 } ? 'accepted' : $@ =~ /^JGraft->\w+: (.*) at \S*design\.t line/ ? $1 : "died: $@" };
+    is $croaks->(new => sub { JGraft->new([ JGRAFT => {} ], strick => 0) }), 'unknown option strick', 'new refuses an option it does not know';
+    is $croaks->(new => sub { JGraft->new([ JGRAFT => {} ], limits => { opps => 5 }) }), 'unknown limit opps', '... and a limit';
+    is $croaks->(new => sub { JGraft->new([ JGRAFT => {} ], limits => [ ops => 5 ]) }), 'limits must be a hash', '... and limits that are not a hash';
+    is $croaks->(run => sub { graft()->run(1, on_rase => sub { }, tmp => {}) }), 'unknown options on_rase tmp', 'run refuses them too';
+    is $croaks->(run => sub { graft()->apply(1, limits => { mem => -1 }) }), 'limit mem must be a number that is not negative', '... and a limit that is not one';
+    is $croaks->(run => sub { graft()->apply(1, limits => { mem => 'lots' }) }), 'limit mem must be a number that is not negative', '... or not a number';
+    is $croaks->(run => sub { graft()->apply(1, limits => { ops => '1e6', mem => undef }, temp => {}, on_raise => undef, date_export => undef) }), 'accepted',
+        'what is known is accepted, and a limit that is not defined is none';
+
+    # The limits given to new are those of each run, unless the run is given its own.
+    my @work  = ([ JGRAFT => {}, [ COPY => [ MAP => 1, ['NODE'] ], ['NODE'] ] ], [ 1 .. 50 ]);
+    my $bound = JGraft->new($work[0], limits => { ops => 10, mem => 1e9 });
+    is $bound->run($work[1])->error->code, 'RESOURCE_LIMIT', 'a run is under the limits given to new';
+    is $bound->run($work[1])->error->code, 'RESOURCE_LIMIT', '... each run under all of them, not what the last left';
+    ok $bound->run($work[1], limits => { ops => 1000 })->ok, '... unless given its own';
+    ok $bound->run($work[1], limits => { ops => undef })->ok, '... or none';
+    is $bound->run($work[1], limits => { ops => 1000, mem => 10 })->error->code, 'RESOURCE_LIMIT', 'a limit the run does not mention stays, and one it does replaces';
+    ok JGraft->new($work[0])->run($work[1])->ok, 'with no limits there are none';
+
+    # The graft is what the structure was when it was compiled.
+    my $later = [ JGRAFT => { expr => [ f => [ ADD => 1, 1 ], g => [ [ 1, 2 ] ] ] }, [ COPY => [ EXPR => [ NODE => 'n' ] ], 'a' ] ];
+    my $fixed = JGraft->new($later);
+    $later->[1]{expr}[1][1] = 5;                # a definition not yet used, changed where it stands
+    push @{ $later->[1]{expr}[3][0] }, 3;
+    $later->[2][2] = 'b';
+    is show($fixed->apply({ n => 'f' })), '{"a":2,"n":"f"}', 'a change to the structure after new does not reach the graft';
+    is show($fixed->apply({ n => 'g' })), '{"a":[1,2],"n":"g"}', '... in any part of it';
+    is show($fixed->struct), '["JGRAFT",{"expr":["f",["ADD",1,1],"g",[[1,2]]]},["COPY",["EXPR",["NODE","n"]],"a"]]', 'struct is the graft as it was compiled';
+    my $shared = [ ADD => 1, 2 ];
+    is show(JGraft->new([ JGRAFT => {}, [ COPY => $shared, 'a', $shared, 'b' ] ])->apply({})), '{"a":3,"b":3}', 'a structure that uses one array twice is no trouble';
 };
 
 done_testing;

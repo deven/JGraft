@@ -5,7 +5,42 @@ use JGraft::Error;
 use JGraft::Compiler;
 use JGraft::Exec;
 use JGraft::Undo;
-use Scalar::Util qw(blessed);
+use Carp qw(croak);
+use Scalar::Util qw(blessed looks_like_number refaddr);
+no warnings qw(recursion);
+
+# What may be asked of `new` and of `run`, and what may be limited.  A name
+# that is not among them is a mistake in the caller, and is not let pass: a
+# limit misspelt would be no limit at all.
+my %NEW   = map { $_ => 1 } qw(strict max_version limits);
+my %RUN   = map { $_ => 1 } qw(limits on_raise temp date_export);
+my %LIMIT = map { $_ => 1 } qw(ops mem new_obj prop_per_obj depth);
+
+sub options ($for, $known, %opt) {
+    my @unknown = grep { !$known->{$_} } sort keys %opt;
+    croak "JGraft->$for: unknown option" . (@unknown > 1 ? 's' : '') . " @unknown" if @unknown;
+    my $limits = $opt{limits} // return;
+    ref $limits eq 'HASH' or croak "JGraft->$for: limits must be a hash";
+    for my $name (sort keys %$limits) {
+        $LIMIT{$name} or croak "JGraft->$for: unknown limit $name";
+        my $n = $limits->{$name} // next;       # not defined: not limited (or for depth, as usual)
+        looks_like_number($n) && $n >= 0 or croak "JGraft->$for: limit $name must be a number that is not negative";
+    }
+}
+
+# A copy of a graft's structure, which nothing the caller does afterwards
+# can change; and for each array and object of the copy, the one it is a
+# copy of, by which an error can point into the structure the caller has.
+sub snapshot ($v, $from, $seen = {}) {
+    my $kind = ref $v;
+    return $v unless $kind eq 'ARRAY' || $kind eq 'HASH';
+    return $seen->{ refaddr $v } if $seen->{ refaddr $v };
+    my $copy = $seen->{ refaddr $v } = $kind eq 'ARRAY' ? [] : JGraft::Ordered::is($v) ? JGraft::Ordered::hash() : {};
+    $from->{ refaddr $copy } = $v;
+    if ($kind eq 'ARRAY') { @$copy = map { snapshot($_, $from, $seen) } @$v }
+    else                  { $copy->{$_} = snapshot($v->{$_}, $from, $seen) for keys %$v }
+    return $copy;
+}
 
 our $VERSION = '0.01';
 
@@ -14,21 +49,32 @@ our $VERSION = '0.01';
 # the faulty part of the graft is reached.  `limits` bound the work of
 # evaluating the graft's constant expressions (see the documentation below).
 sub new ($class, $struct, %opt) {
+    options(new => \%NEW, %opt);
     my $strict = delete $opt{strict} // 1;
-    my ($code, $faults, $dates, $warnings) = JGraft::Compiler->compile($struct, %opt);
-    die $faults->[0] if $strict && @$faults;
-    return bless { struct => $struct, code => $code, faults => $faults, dates => $dates, warnings => $warnings }, $class;
+    my $self   = bless { from => {}, limits => { %{ $opt{limits} // {} } } }, $class;
+    $self->{struct} = snapshot($struct, $self->{from});
+    @$self{qw(code faults dates warnings)} = JGraft::Compiler->compile($self->{struct}, %opt);
+    die $self->theirs($self->{faults}[0]) if $strict && @{ $self->{faults} };
+    return $self;
 }
 
-sub struct   ($self) { $self->{struct} }
-sub faults   ($self) { @{ $self->{faults} } }
-sub warnings ($self) { @{ $self->{warnings} } }
+# An error, with the expression it names (if it names one) as the caller has it.
+sub theirs ($self, $error) {
+    my $expr = ref $error->{expr} ? $self->{from}{ refaddr $error->{expr} } : undef;
+    return $expr ? JGraft::Error->new(%$error, expr => $expr) : $error;
+}
+
+sub struct   ($self) { $self->{struct} }        # the graft's own copy of it
+sub faults   ($self) { map { $self->theirs($_) } @{ $self->{faults} } }
+sub warnings ($self) { map { $self->theirs($_) } @{ $self->{warnings} } }
 
 # Apply the graft.  Never dies for JGraft errors; returns a JGraft::Result.
 # The input is not modified.  The output shares structure with it and with
 # the graft, and is to be treated as read-only (see the documentation below).
 sub run ($self, $input, %opt) {
-    my $x = JGraft::Exec->new($input, %opt, dates => $self->{dates});
+    options(run => \%RUN, %opt);
+    # the limits given to `new` are those of every run, but for what a run is given of its own
+    my $x = JGraft::Exec->new($input, %opt, limits => { %{ $self->{limits} }, %{ $opt{limits} // {} } }, dates => $self->{dates});
     return bless { ok => 1, output => $x->{root}, logs => $x->{logs}, input => $input }, 'JGraft::Result'
         if eval { $self->{code}->($x); 1 };
     my $error = $@;
@@ -36,7 +82,7 @@ sub run ($self, $input, %opt) {
     # The error takes with it what the run left behind, for a caller of
     # `apply`.  It is a copy that does: a fault is the same error in every run.
     my %left = (partial => $x->{root}, logs => $x->{logs}, input => $input);
-    return bless { ok => 0, error => JGraft::Error->new(%$error, %left), %left }, 'JGraft::Result';
+    return bless { ok => 0, error => JGraft::Error->new(%{ $self->theirs($error) }, %left), %left }, 'JGraft::Result';
 }
 
 # Apply the graft and return the output, dying with a JGraft::Error on failure.
@@ -345,21 +391,31 @@ Calls of common expressions (C<EXPR>) in progress at once: 512 unless given.
 
 =back
 
-Limits bound the work done by the call they are given to, and C<new> does
-work too: it evaluates, once, every expression in the graft that does not
-depend on the data, so that no run has to.
+Give limits to C<new>, and they bound everything the graft does:
 
-    my %limits = (limits => { ops => 1e6, mem => 1e8 });
-    my $result = JGraft->new($untrusted, %limits)->run($input, %limits);
+    my $graft  = JGraft->new($untrusted, limits => { ops => 1e6, mem => 1e8 });
+    my $result = $graft->run($input);
 
-A run that exceeds its limits fails with C<RESOURCE_LIMIT>.  C<new> does
-not fail: whatever its limits do not allow it to evaluate is left for the
-runs that reach it, under their limits.  Given to C<new>, the limits are an
-allowance for the whole graft.
+C<new> does work too: it evaluates, once, every expression in the graft that
+does not depend on the data, so that no run has to.  The limits are its
+allowance for that, for the whole graft.  It does not fail for want of it:
+whatever the limits do not allow it to evaluate is left for the runs that
+reach it.
 
-So if a graft is not trusted, give limits to both.  Limits given to C<run>
-alone do not cover an expensive constant, which C<new> will already have
-computed.
+Each run then has the same limits, all of them, however many runs there
+are; one that exceeds them fails with C<RESOURCE_LIMIT>.  Limits given to
+C<run> replace, one by one, those given to C<new>, and a limit given as
+C<undef> is no limit:
+
+    $graft->run($large, limits => { ops => 1e8 });      # mem is still 1e8
+
+Limits given to C<run> alone do not cover an expensive constant, which
+C<new> will already have computed.  So if a graft is not trusted, C<new> is
+where the limits go.
+
+A limit must be a number that is not negative, and a name that is not one
+of those above is refused (C<new> and C<run> C<croak>): a limit misspelt
+would not be one.
 
 =head1 FAULTS AND WARNINGS
 
@@ -407,5 +463,12 @@ C<new>: C<strict> (default 1), C<max_version> (default 1), C<limits>.
 C<run> / C<apply>: C<limits>, C<on_raise> (callback for each RAISE record),
 C<temp> (initial TEMP namespace), C<date_export> (callback turning a
 JGraft::Date into output data; the default is its string form).
+
+An option that is not one of these is refused: C<new> and C<run> C<croak>.
+
+C<new> takes a copy of the structure it is given, so nothing done to that
+structure afterwards changes the graft.  C<struct> returns the copy.  Where
+an error names an expression (C<expr>), it is the expression in the
+structure that was given.
 
 =cut
