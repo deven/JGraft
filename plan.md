@@ -1075,6 +1075,52 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   Plain values now go first, then patterns by how much is written in them,
   then by name, so the time is steady and usually the lower one. The spec
   leaves the order open.
+- **A review of the whole, by readers who had not written it**, found some
+  forty defects, each reproduced before it was fixed and pinned by a test
+  (`t/design.t`, "corners of moving, matching and counting" and "numbers and
+  dates at their edges"). Those that bear on this design:
+  - *Sequences of "anything".* A `[REP]` with no pattern returned every
+    place up to the end, for every place it was tried from: quadratic in
+    time and memory for `[SEQ, [REP], x, [REP]]`, and uncounted. Such an
+    item is now marked `any`, and `JGraft::Seq::advance` (which `possible`
+    and SEQ both step with) joins the runs of places it leads to. A STR
+    that asks only whether there is a match tries its starting places in
+    turn and stops at the first.
+  - *Counting.* Comparing data with data (`match_lit` on a pattern that
+    comes from the run), ordering arrays, and replacing dates on the way
+    out are now charged. `[ARRAY, n, ...]` no longer copies the n elements
+    it skips in order to ask whether a MOVE is in progress.
+  - *Flags passed on by wrappers.* WITH passed on what was known of its
+    pattern as a regex, though a value it cannot have makes it fail; so did
+    the one-argument HAS and IS in a sequence. A reference by a computed
+    name claimed no captures while its definition recorded them during the
+    search. EXPR now takes `caps` and `pref` from the compiled definition,
+    and resolves captures through a computed name as through a literal one.
+  - *MOVE.* A node already moved away could be moved again, putting the
+    engine's placeholder into the output; the document could not be moved
+    into itself; an element arriving from another SPLIT replaced the
+    array's own separators; and the putting back of a failed pair could
+    itself fail under `prop_per_obj`.
+  - *Constants.* Freezing walked a value as a tree, so a folded value
+    holding one array in many places took exponential time.
+  - *Numbers.* MOD through a float quotient, POW inexact past 2**53,
+    overflow checked only at the end of ADD and MUL, and several faults in
+    ROUND and in writing dates.
+  Left as they are, knowingly:
+  - A COPY or MOVE that fails after making containers on the way to its
+    destination leaves them in `partial`; and a failed MOVE pair is put
+    back by its path, which a container made on the way can have shifted.
+    The spec has the destination verified before anything is detached
+    (MOVE, step 2). Only `partial` shows the difference, and the undo graft
+    is made from it correctly.
+  - A right trim that is not a run tries every place it could begin.
+  - A regex given to Perl with several runs side by side can cost more
+    than the closures do (a power of the length equal to their number).
+  - During a MOVE, a positional array pattern can see an element awaiting
+    removal as absent, where the spec has any access to it fail.
+  - Definitions reached only by a computed name are compiled during a run,
+    and what they fold is counted against what `new` was allowed.
+  - Side records for SPLIT results are kept until the run ends.
 - **A pattern is charged for each place it is tried from** (§9), not for
   each place it matched from. As first written, `possible` charged after
   each step, by the number of positions that survived it, so an unanchored

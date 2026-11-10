@@ -3,9 +3,10 @@ package JGraft::Exec;
 # The state of one run, and the only code that changes a data tree.
 #
 # Trees are immutable: a container reachable from a namespace is modified in
-# place only if this run created it by cloning and nothing else can refer to
-# it ("owned").  Everything else is path-copied on write, so the input is
-# never touched, COPY can share structure, and RAISE data is a snapshot.
+# place only if this run created it (by cloning one, or on the way to a path
+# that did not exist) and nothing else can refer to it ("owned").  Everything
+# else is path-copied on write, so the input is never touched, COPY can share
+# structure, and RAISE data is a snapshot.
 
 use v5.36;
 use builtin qw(refaddr);
@@ -48,6 +49,7 @@ sub export ($x, $v) {
     my $array = $r eq 'ARRAY';
     return $v unless $array || $r eq 'HASH';
     my $copy;
+    $x->charge($array ? scalar @$v : scalar keys %$v);
     for my $k ($array ? 0 .. $#$v : keys %$v) {
         my $old = $array ? $v->[$k] : $v->{$k};
         ref $old or next;
@@ -81,10 +83,10 @@ sub locus ($x) {
     return $piece ? $piece->($x->{root}, @{ $x->{at} }) : { path => [ @{ $x->{at} } ] };
 }
 
-# Run $code only to look at what a failure has left: none of it is charged
-# for, and if it fails in its turn it just returns nothing.
+# Run $code only to look at what a failure has left, or to put it straight:
+# no limit applies, and if it fails in its turn it just returns nothing.
 sub aside ($x, $code) {
-    local @$x{qw(quiet ops mem)} = (1, INF, INF);
+    local @$x{qw(quiet ops mem new_obj prop_per_obj)} = (1, (INF) x 4);
     my @found;
     return eval { @found = $code->(); 1 } ? @found : ();
 }
@@ -147,7 +149,10 @@ sub index_for ($x, $a, $k, $write = 0) {
 sub step ($x, $v, $k) {
     my $r = ref $v;
     if ($r eq 'HASH') {
-        return $v->{$k} if !is_idx($k) && exists $v->{$k};
+        if (!is_idx($k) && exists $v->{$k}) {
+            my $e = $v->{$k};
+            return $e unless ref $e eq 'JGraft::Missing';       # the current node, moved away and not yet replaced
+        }
     }
     elsif ($r eq 'ARRAY') {
         if (is_idx($k)) {
@@ -203,6 +208,11 @@ sub own ($x, $v, $k) {
 # Make every container along keys[0 .. $n-1] modifiable, creating missing
 # ones, and return the container that keys[$n] indexes.
 sub own_path ($x, $slot, $keys, $n) {
+    if (ref $$slot eq 'JGraft::Missing') {      # the document itself, moved away: it is made anew, as anything else would be
+        $$slot = is_idx($keys->[0]) ? [] : {};
+        $x->{owned}{ refaddr $$slot } = $$slot;
+        $x->charge_obj;
+    }
     my $c = $$slot = $x->own($$slot, $keys->[0]);
     for my $i (0 .. $n - 1) {
         my $array = ref $c eq 'ARRAY';
@@ -255,7 +265,8 @@ sub put ($x, $ns, $keys, $v, $meta = undef) {
 # Replace $count elements at the array element a path names (SPLICE).
 sub splice_at ($x, $ns, $keys, $count, $new, $metas) {
     my ($slot, $k) = $x->slot($ns, $keys);
-    @$k && is_idx($k->[-1]) or $x->fail_target('SPLICE needs an element of an array');
+    # (an element at or below the current node: not the node itself, though it be one in its parent)
+    @$keys && is_idx($keys->[-1]) or $x->fail_target('SPLICE needs an element of an array');
     $x->walk($$slot, @$k[ 0 .. $#$k - 1 ]);        # no containers are created on the way
     my $c    = $x->own_path($slot, $k, $#$k);
     my $i    = $x->index_for($c, $k->[-1], 1);
@@ -297,6 +308,7 @@ sub take ($x, $ns, $keys) {
     my @k = $x->locate($$slot, @$k);                # it must exist
     my ($v, $meta);
     if (!@k) {
+        ref $$slot eq 'JGraft::Missing' and $x->fail_target('path does not exist');     # moved away already
         ($v, $$slot) = ($$slot, $MISSING);
     }
     else {
@@ -357,7 +369,9 @@ sub finish_move ($x) {
             push @entry, map { @$_ } @{ $pend->{ins}{ $i + 0.5 } // [] };
         }
         @$a = @entry[ grep { $_ % 2 == 0 } 0 .. $#entry ];
-        delete $side->{split};
+        # An array that came of a SPLIT keeps to it: what arrives from another is not let in.
+        $side->{split} = $side->{split} ? { origin => $side->{split}{origin}, m => [] } : undef;
+        delete $side->{split} unless $side->{split};
         $x->set_meta($a, $_, $entry[ 2 * $_ + 1 ]) for 0 .. $#$a;
         $x->settle($a);
     }

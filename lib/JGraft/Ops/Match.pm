@@ -28,7 +28,7 @@ for my $exact (0, 1) {
             # In a sequence the spec is tested from here, however far it
             # reaches, and then exactly one element is consumed.
             my ($test, $resolve) = @n{qw(code resolve)};
-            delete @n{qw(re fixed longest least chars run tails)};     # which were true of the spec, not of this
+            delete @n{qw(re width longest least chars run tails any)};     # which were true of the spec, not of this
             return { %n, code => sub { $_[2] < $_[3] && (() = &$test) ? $_[2] + 1 : () },
                 resolve => sub ($x, $s, $from, $to, $len) {
                     my @end = do { local $x->{capturing} = 0; $test->($x, $s, $from, $len) };
@@ -38,17 +38,26 @@ for my $exact (0, 1) {
         $ctx = { %$ctx, seq => 0, top => 0 };      # with a value, it tests that value and consumes nothing
         my $value = $c->value($ctx, $arg[0]);
         my $get   = $value->{code};
-        my $n;
-        if ($c->matches($ctx, $spec)) {     # matching begins anew, on the given value
+        # Either matching begins anew, on the given value; or the spec is
+        # itself a value, still seen from the current node, to compare with.
+        my $anew = sub {
             my $m    = $c->binding(['node'], sub { $c->match({ %$in, seq => 0, regex => 0 }, $spec) });
             my $test = $m->{code};
-            $n = node(sub { my $x = $_[0]; my $v = &$get; local $x->{path} = []; $test->($x, $v, undef, undef) },
-                $value, $m);
-        }
-        else {                              # the spec is itself a value, still seen from the current node
+            node(sub { my $x = $_[0]; my $v = &$get; local $x->{path} = []; $test->($x, $v, undef, undef) }, $value, $m);
+        };
+        my $compare = sub {
             my $want = $c->value($ctx, $spec)->{code};
-            $n = { code => sub { match_lit(&$get, &$want, $exact) } };
+            +{ code => sub { match_lit(&$get, &$want, $exact, $_[0]) } };
+        };
+        my $n;
+        if (((row(\%EXPR, $spec) // {})->{name} // '') eq 'EXPR' && @$spec == 2 && ref $spec->[1]) {
+            # Which it is, for a common expression whose name is computed, depends on the one named.
+            my %begins = map { $_ => $c->matches($ctx, [ EXPR => $_ ]) } keys %{ $ctx->{scope}{exprs} };
+            my $name   = $c->value($ctx, $spec->[1])->{code};
+            my ($matching, $comparing) = map { $_->()->{code} } $anew, $compare;
+            $n = { code => sub { my $nm = &$name; defined $nm && !ref $nm && $begins{$nm} ? &$matching : &$comparing } };
         }
+        else { $n = $c->matches($ctx, $spec) ? $anew->() : $compare->() }
         return { %$n, throws => 1, zero => 1 };
     }, seq => 1, blind => 1;        # what they match looks at the node; they do not
 }
@@ -76,11 +85,19 @@ defop STR => 8, 'match', 'X?', sub ($c, $ctx, @regex) {
     # the pattern can be written as a regex and no captures are wanted.  It
     # is not asked when operations are being counted: Perl does not count.
     my $perl = !$item->{caps} && defined $item->{re} ? eval { no warnings; qr/$item->{re}/ } : undef;
-    return { throws => 1, caps => $item->{caps}, code => sub {
+    my ($caps, $try) = @$item{qw(caps code)};
+    return { throws => 1, caps => $caps, code => sub {
         return 0 unless is_str($_[1]);
         return $_[1] =~ $perl ? 1 : 0 if $perl && $_[0]{ops} == INF;
-        my $len = length $_[1];
-        $run->($_[0], \$_[1], $len, [ 0 .. $len ], undef);      # not anchored: may start anywhere
+        my ($x, $len) = ($_[0], length $_[1]);
+        # not anchored: it may start anywhere, and for captures the first place that it can is wanted
+        return $run->($x, \$_[1], $len, [ 0 .. $len ], undef) if $caps && $x->{capturing};
+        # otherwise only whether there is a match, and the first place found settles that
+        for my $p (0 .. $len) {
+            $x->charge(1);
+            return 1 if () = $try->($x, \$_[1], $p, $len);
+        }
+        return 0;
     } };
 };
 
@@ -107,7 +124,6 @@ defop BOOL => 10, 'match', '', sub ($c, $ctx) {
 
 # Children of ANY and NONE are trapped individually, and cannot capture.
 my $alternative = sub ($c, $ctx, @spec) { map { $c->match({ %$ctx, cap => 0, top => 0 }, $_) } @spec };
-my $alternatives = sub ($c, $ctx, @spec) { map { trap($_) } $alternative->($c, $ctx, @spec) };
 
 defop NONE => 3, 'match', 'X*', sub ($c, $ctx, @spec) {
     my @kid = $alternative->($c, $ctx, @spec);
@@ -127,10 +143,10 @@ defop ANY => 4, 'match', 'X+', sub ($c, $ctx, @spec) {
     my $chars = (grep { !$_->{chars} } @kid) ? undef : [ map { @{ $_->{chars} } } @kid ];
     # As a regex, alternatives of known lengths are put longest first, so
     # that the first of them to match is the longest that does.
-    my $sized = !grep { !defined $_->{fixed} } @kid;
-    my @by    = $sized ? sort { $b->{fixed} <=> $a->{fixed} } @kid : @kid;
+    my $sized = !grep { !defined $_->{width} } @kid;
+    my @by    = $sized ? sort { $b->{width} <=> $a->{width} } @kid : @kid;
     my $re    = (grep { !defined $_->{re} } @kid) ? undef : '(?:' . join('|', map { $_->{re} } @by) . ')';
-    my %size  = $sized ? (longest => 1, least => $by[-1]{fixed}, fixed => $by[0]{fixed} == $by[-1]{fixed} ? $by[0]{fixed} : undef) : ();
+    my %size  = $sized ? (longest => 1, least => $by[-1]{width}, width => $by[0]{width} == $by[-1]{width} ? $by[0]{width} : undef) : ();
     return { seq => 1, one => $one, chars => $chars, re => $re, %size, code => sub {
         my @end = map { $_->(@_) } @try;
         return @end if @end < 2;
@@ -187,7 +203,9 @@ defop WITH => 12, 'match', 'X+', sub ($c, $ctx, @arg) {
     };
     my %n = (%$body, throws => 1, code => $under->($body->{code}));
     $n{resolve} = $under->($body->{resolve}, 0, 1, 2, 4) if $body->{resolve};
-    delete $n{lit};
+    # What was known of the pattern alone is not known of this: a value that
+    # cannot be had makes it fail, whatever the pattern would have matched.
+    delete @n{qw(lit re width longest least chars run tails any)};
     return \%n;
 }, seq => 1, blind => 1;
 
@@ -201,16 +219,13 @@ sub sequence ($c, $ctx, @spec) {
     my $n    = node(sub {
         my ($x, $s, $p, $len) = @_;
         my @at = ($p);
-        for my $code (@code) {
-            my %seen;
-            @at = grep { !$seen{$_}++ } map { $code->($x, $s, $_, $len) } @at or return;
-            $x->charge(scalar @at);
-        }
+        @at = JGraft::Seq::advance($x, $_, $s, $len, \@at) or return for @kid;
         @at;
     }, @kid);
     my $run = JGraft::Seq::runner(\@kid);
     my $re  = (grep { !defined $_->{re} } @kid) ? undef : join '', map { $_->{re} } @kid;
-    return { %$n, seq => 1, re => $re, resolve => sub ($x, $s, $from, $to, $len) { $run->($x, $s, $len, [$from], $to) } };
+    my $any = @kid == 1 ? $kid[0]{any} : undef;        # a sequence of one thing is that thing
+    return { %$n, seq => 1, re => $re, any => $any, resolve => sub ($x, $s, $from, $to, $len) { $run->($x, $s, $len, [$from], $to) } };
 }
 
 defop SEQ => 13, 'match', 'X*', \&sequence, seq => 1;
@@ -246,7 +261,9 @@ defop REP => 16, 'match', 'V?V?X?', sub ($c, $ctx, @arg) {
         return $hi >= $lo ? ($lo, $hi) : ();
     };
     my @given = @arg[ 0 .. ($#arg < 1 ? $#arg : 1) ];
-    my @fixed = (grep { !$_->{const} } @given) ? () : $limits->((map { $_->{value} } @given), (0, -1)[ @given .. 1 ]);
+    my $known = !grep { !$_->{const} } @given;
+    my @fixed = $known ? $limits->((map { $_->{value} } @given), (0, -1)[ @given .. 1 ]) : ();
+    return $c->fault('invalid REP bounds') if $known && !@fixed;
     my $kid    = @arg > 2 ? $c->match({ %$ctx, cap => 0, top => 0 }, $arg[2]) : undef;
     my $body   = $kid && trap($kid);        # a failed probe ends the repetition
     my $single = $kid && $kid->{one};
@@ -255,13 +272,23 @@ defop REP => 16, 'match', 'V?V?X?', sub ($c, $ctx, @arg) {
     my $run = @fixed && $kid && $kid->{chars} ? [ $kid->{chars}, @fixed ] : undef;
     # as a regex: a run of any characters, or of those in one set, which Perl makes as long as it can
     my $unit = !$kid ? '(?s:.)' : $kid->{chars} ? JGraft::Compiler::re_set($kid->{chars}) : undef;
-    my %re   = @fixed && $unit
-        ? (re => "$unit\{$fixed[0]," . ($fixed[1] == INF ? '' : $fixed[1]) . '}', longest => 1, least => $fixed[0]) : ();
-    return { seq => 1, throws => !@fixed, tails => @fixed && !$fixed[0] && (!$kid || $single), run => $run, %re, code => sub {
+    my $few  = @fixed && !grep { $_ != INF && $_ > 60_000 } @fixed;     # counts that Perl will take in a regex
+    $run = undef unless $few;
+    my %re   = $few && $unit
+        ? (re => sprintf('%s{%d,%s}', $unit, $fixed[0], $fixed[1] == INF ? '' : sprintf '%d', $fixed[1]), longest => 1, least => $fixed[0])
+        : ();
+    # `any`: any elements at all, this many: which Seq::advance makes short work of
+    my $any = @fixed && !$kid ? \@fixed : undef;
+    return { seq => 1, throws => !@fixed, tails => @fixed && !$fixed[0] && (!$kid || $single), run => $run, any => $any, %re, code => sub {
         my ($x, $s, $p, $len) = @_;
         my ($lo, $hi) = @fixed ? @fixed : $limits->($min ? &$min : 0, $max ? &$max : -1)
             or $x->fail_operand('invalid REP bounds');
-        return $p + $lo .. min($len, $p + $hi) unless $body;        # any elements at all
+        if (!$body) {                                               # any elements at all
+            return if $p + $lo > $len;                              # more than there are
+            my $upto = min($len, $p + $hi);
+            $x->charge($upto - $p - $lo + 1);
+            return $p + $lo .. $upto;
+        }
         if ($single) {                                              # a run of single elements
             my $n = 0;
             $n++ while $n < $hi && (() = $body->($x, $s, $p + $n, $len));
@@ -321,10 +348,16 @@ defop CHARS => 19, 'match', 'X*', sub ($c, $ctx, @spec) {
         }
         elsif ($t == T_STR) { push @rule, map { [ $adding, $_, $_ ] } map { ord } split //, $e }
         elsif (((row(\%EXPR, $e) // {})->{name} // '') eq 'EXPR') {
-            # a computed name is looked up when used; a literal one must name another set
+            # The name must be that of another set.  A literal name is checked
+            # now, and a computed one each time it is looked up.
             @$e == 2 or return $c->fault('wrong number of arguments to EXPR');
-            my $set = ref $e->[1] || ($c->peek($ctx, $e) // '') eq 'CHARS';
-            push @rule, [ $adding, $set ? $c->match({ %$ctx, seq => 0, top => 0, cap => 0 }, $e)->{code} : $not_a_set ];
+            my $member = sub { $c->match({ %$ctx, seq => 0, top => 0, cap => 0 }, $e)->{code} };
+            if (ref $e->[1]) {
+                my ($name, $test) = ($c->value($ctx, $e->[1])->{code}, $member->());
+                my %set = map { $_ => 1 } grep { ($c->peek($ctx, [ EXPR => $_ ]) // '') eq 'CHARS' } keys %{ $ctx->{scope}{exprs} };
+                push @rule, [ $adding, sub { my $nm = &$name; defined $nm && !ref $nm && $set{$nm} ? &$test : &$not_a_set } ];
+            }
+            else { push @rule, [ $adding, ($c->peek($ctx, $e) // '') eq 'CHARS' ? $member->() : $not_a_set ] }
         }
         else { return $c->fault('invalid member of a character set') }
     }
@@ -338,9 +371,9 @@ defop CHARS => 19, 'match', 'X*', sub ($c, $ctx, @spec) {
     }
     my $chars = (grep { @$_ == 2 } @rule) ? undef : \@set;
     @rule = reverse @rule;      # the last rule that mentions a character decides
-    my %re = $chars ? (re => JGraft::Compiler::re_set($chars), fixed => 1) : ();
+    my %re = $chars ? (re => JGraft::Compiler::re_set($chars), width => 1) : ();
     return { chars => $chars, %re, throws => !!(grep { @$_ == 2 } @rule), code => sub {
-        my $cp = created_as_number($_[1]) ? $_[1] : is_str($_[1]) && length $_[1] == 1 ? ord $_[1] : return 0;
+        my $cp = is_int($_[1]) && $_[1] >= 0 && $_[1] <= 0x10FFFF ? $_[1] : is_str($_[1]) && length $_[1] == 1 ? ord $_[1] : return 0;
         for my $rule (@rule) {
             return $rule->[0] if @$rule == 2 ? $rule->[1]->(@_) : $rule->[1] <= $cp && $cp <= $rule->[2];
         }

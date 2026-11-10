@@ -43,7 +43,7 @@ sub is_int { created_as_number($_[0]) && $_[0] == int $_[0] && $_[0] - $_[0] == 
 sub is_idx { !defined $_[0] || created_as_number($_[0]) }
 
 # Does data $v match the plain value $p?  HAS semantics unless $exact.
-sub match_lit ($v, $p, $exact) {
+sub match_lit ($v, $p, $exact, $x = undef) {
     my $t = type_of($p);
     return 0 unless $t == type_of($v);
     return $v == $p   if $t == T_NUM;
@@ -52,12 +52,14 @@ sub match_lit ($v, $p, $exact) {
     return !$v == !$p if $t == T_BOOL;
     if ($t == T_ARR) {
         return 0 if $exact ? @$v != @$p : @$v < @$p;
-        match_lit($v->[$_], $p->[$_], $exact) or return 0 for 0 .. $#$p;
+        $x->charge(scalar @$p) if $x;
+        match_lit($v->[$_], $p->[$_], $exact, $x) or return 0 for 0 .. $#$p;
         return 1;
     }
     if ($t == T_OBJ) {
         return 0 if $exact && keys %$v != keys %$p;
-        exists $v->{$_} && match_lit($v->{$_}, $p->{$_}, $exact) or return 0 for keys %$p;
+        $x->charge(scalar keys %$p) if $x;
+        exists $v->{$_} && match_lit($v->{$_}, $p->{$_}, $exact, $x) or return 0 for keys %$p;
         return 1;
     }
     return $t >= T_DATE && $t <= T_TIMESTAMP ? $v->cmp($p) == 0 : 0;

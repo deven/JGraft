@@ -839,6 +839,87 @@ subtest 'Perl matches the characters of strings where it can' => sub {
     is $differ, 0, 'and SPLIT gives the same pieces either way, for 1,500 separators';
 };
 
+subtest 'corners of moving, matching and counting' => sub {
+    my ($T, $F) = (JSON::PP::true, JSON::PP::false);
+    my $N = ['NODE'];
+    my $run = sub ($meta, $in, $actions, @opt) {
+        my $g = eval { JGraft->new([ JGRAFT => { v => 1, %$meta }, @$actions ]) } or return 'new: ' . $@->code;
+        my $r = $g->run($in, @opt);
+        $r->ok ? show($r->output) : $r->error->code;
+    };
+    my $yes = sub ($pattern) { [ COPY => [ CASE => $pattern, $T, $F ], $N ] };
+
+    # MOVE
+    is $run->({}, { n => { q => 1 } }, [ [ AT => 'n', [ MOVE => $N, [ 'STASH', 'a' ], $N, 'x', [ 'STASH', 'a' ], 'y' ] ] ]), 'INVALID_TARGET',
+        'a node that has been moved away cannot be moved again';
+    my $twice = graft([ MOVE => $N, [ 'STASH', 'a' ], $N, [ 'STASH', 'b' ], [ 'STASH', 'a' ], $N ])->run({ q => 1 });
+    is $twice->error->code, 'INVALID_TARGET', 'nor can the document itself';
+    is show($twice->partial), 'null', '... and what is left holds only data';
+    is $run->({}, { a => 1 }, [ [ MOVE => $N, 'x' ] ]), '{"x":{"a":1}}', 'the document can be moved into itself, as any node can';
+    my $s = { sep => [ ANY => ',', ';' ], default => '|' };
+    is $run->({}, { t => 'a;b;c' }, [ [ COPY => [ SPLIT => $s, 'x,y,z' ], [ 'STASH', 's' ] ], [ ATSPLIT => 't', $s, [ MOVE => [ 'STASH', 's', 0 ], -0.5 ] ] ]),
+        '{"t":"x;a;b;c"}', 'an element moved in from another SPLIT does not bring its separators';
+    my $kept = graft([ MOVE => 'a', [ 'NODE', 'b', 'x' ] ])->run({ a => 1, b => 2, c => 3 }, limits => { prop_per_obj => 2 });
+    is show([ $kept->error->code, $kept->partial ]), '["INVALID_TARGET",{"a":1,"b":2,"c":3}]',
+        'a pair that fails takes nothing away, whatever the limits';
+    is $run->({}, { arr => [ { a => 1 } ] }, [ [ AT => [ 'NODE', 'arr', 0 ], [ SPLICE => $N, 1 ] ] ]), 'INVALID_TARGET',
+        'SPLICE cannot remove the node it is working in';
+
+    # common expressions whose names are computed
+    my $p = { expr => [ p => [ HAS => [ [ [ SEQMAX => 'x', ['NUM'] ] ] ] ], d => [ 'NODE', 'b' ] ] };
+    my $named = sub ($name) { [ COPY => $name, [ 'STASH', 'n' ] ] };
+    is $run->($p, { a => [ 1, 2 ] }, [ $named->('p'), [ MATCH => { a => [ EXPR => [ 'STASH', 'n' ] ] }, [ COPY => ['CAP'], $N ] ] ]),
+        '{"x":{"len":1,"lim":1,"ofs":0,"path":["a"]}}', 'one that captures does so by a computed name as by a literal one';
+    is $run->($p, { a => [ [1], [2], [9] ] }, [ $named->('p'),
+        [ MATCH => { a => [ [ [ SEQ => [ REP => 0, -1 ] ], [ EXPR => [ 'STASH', 'n' ] ], [ [9] ] ] ] }, [ COPY => [ 'CAP', 'x', 'path' ], $N ] ] ]),
+        '["a",1]', 'and once only, where the match settles';
+    is $run->($p, { a => 5, b => 5 }, [ $named->('d'), [ COPY => [ IS => [ 'NODE', 'a' ], [ EXPR => [ 'STASH', 'n' ] ] ], $N ] ]), 'true',
+        'one that is a value is compared with, seen from the current node';
+    is $run->({ expr => [ s => [ WITH => 'p', 'x', [ SEQMAX => [ CONCAT => [ 'TEMP', 'p' ], '1' ], ['REP'] ] ] ] }, [ 1, 2, 3 ],
+        [ [ COPY => [ CAPTURE => [ [ [ EXPR => 's' ], [ SEQ => ['REP'] ] ] ] ], $N ] ]), '{"x1":{"len":3,"lim":3,"ofs":0,"path":[]}}',
+        'a length preference is seen through WITH inside a definition';
+    {
+        local $SIG{ALRM} = sub { die "it did not finish\n" };
+        alarm 20;
+        is eval { $run->({ expr => [ a => [ WITH => 't', 1, [ EXPR => 'a' ] ] ] }, 1, [ [ MATCH => [ [ [ EXPR => 'a' ] ] ] ] ]) } // $@, 'NO_MATCH',
+            'a definition that leads back to itself through WITH can be compiled';
+        alarm 0;
+    }
+    is $run->({ expr => [ num => ['NUM'] ] }, 5000000, [ $yes->([ WITH => 'n', 'num', [ CHARS => [ EXPR => [ 'TEMP', 'n' ] ] ] ]) ]), 'false',
+        'CHARS takes only another set by a computed name';
+
+    # characters and sets
+    is join(' ', map { $run->({}, $_, [ $yes->([ CHARS => $F ]) ]) } 65, 65.5, -5, 1e10), 'true false false false', 'only a code point is a character';
+    is join(' ', map { $run->({}, 'axb', [ [ COPY => [ SPLIT => { sep => 'x', element => [ SEQ => ['REP'], [ NONE => $_ ] ] } ], $N ] ]) } 'x', 120, [ CHARS => 'x' ]),
+        '["a","b"] ["a","b"] ["a","b"]', 'a character is the same however it is written';
+    is join(' ', map { $run->({}, 'a,b,c', [ [ COPY => [ SPLIT => { sep => ',', element => $_ } ], $N ] ]) } [ SEQ => ['REP'], ['END'] ], [ SEQ => ['START'], ['REP'] ]),
+        '["a","b","c"] ["a","b","c"]', 'START and END in the pattern for an element are its own ends';
+    is $run->({}, 'a,b', [ [ COPY => [ SPLIT => { sep => ',', keep => "<\n" } ], $N ] ]), 'new: INVALID_GRAFT', 'keep is one of three characters exactly';
+
+    # the same answer from Perl and from the closures
+    my $both = sub ($in, $action) { join ' ', map { $run->({}, $in, [$action], @$_) } [], [ limits => { ops => 1e12 } ] };
+    is $both->('x', $yes->([ STR => [ WITH => 'a', [ 'NODE', 'k' ], 'x' ] ])), 'false false', 'WITH fails if its value cannot be had, whatever its pattern';
+    is $both->('aaa', $yes->([ STR => [ SEQ => ['START'], [ REP => 0, 1e20, 'a' ], ['END'] ] ])), 'true true', 'a limit too large for a regex is not written into one';
+    is $run->({}, '  a,  b', [ [ COPY => [ SPLIT => { sep => ',', ltrim => [ REP => 0, 1e20, ' ' ], discard => $T } ], $N ] ]), '["a","b"]', 'nor into a trim';
+
+    # limits and faults
+    is $run->({}, [1e19], [ [ MATCH => [ [ ['SEQ'], [ REP => $N ] ] ] ] ]), 'NO_MATCH', 'a count beyond any integer is only more than there are';
+    is $run->({}, [1], [ [ MATCH => [ [ ['SEQ'], [ REP => 3, 2 ] ] ] ] ]), 'new: INVALID_GRAFT', 'limits that are written wrongly are a fault';
+    is $run->({}, {}, [ [ IF => [ 'NODE', 'go' ], [ COPY => 1, [ 'NODE', $T, [ 'NODE', 'k' ] ] ] ] ]), 'new: INVALID_GRAFT',
+        'a path element that is written wrongly is a fault, though another beside it is computed';
+    is $run->({}, { big => [ 1 .. 3000 ], list => [ 1 .. 300 ] }, [ [ COPY => [ 'NODE', 'big' ], [ 'STASH', 'big' ] ],
+        [ COPY => [ LENGTH => [ FILTER => [ IS => [ 'STASH', 'big' ], [ 'STASH', 'big' ] ], [ 'NODE', 'list' ] ] ], $N ] ], limits => { ops => 5000 }),
+        'RESOURCE_LIMIT', 'comparing data with data is counted';
+    is $run->({}, [ (1) x 3000 ], [ $yes->([ IS => [ [ [ SEQ => ['REP'], ['NUM'], ['REP'] ] ] ] ]) ], limits => { ops => 40_000 }), 'true',
+        '"anything, then this, then anything" costs in proportion to the array';
+    is $run->({}, [ (0) x 3000 ], [ $yes->([ [ [ SEQ => ['REP'], ['REP'], ['REP'], 'no' ] ] ]) ], limits => { ops => 3000 }), 'RESOURCE_LIMIT',
+        'and what it costs is counted';
+    is $run->({}, 'a' x 3000, [ $yes->([ STR => [ REP => 1, -1, [ NUM => 97, 122 ] ] ]) ], limits => { ops => 20_000 }), 'true',
+        'a search that only asks whether there is a match stops at the first';
+    my $shared = JGraft->new([ JGRAFT => {}, [ COPY => [ LENGTH => [ REDUCE => [ [ [ 'TEMP', 'a' ], [ 'TEMP', 'a' ] ] ], 'a', 0, [ [ 1 .. 60 ] ] ] ], $N ] ]);
+    is $shared->apply(0), 2, 'a constant that holds the same value in many places is made in proportion to what it holds';
+};
+
 subtest 'numbers and dates at their edges' => sub {
     # Each operand is read from the document, so that the run does the work.
     my $of = sub ($expr, $in, @opt) {

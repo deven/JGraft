@@ -23,7 +23,7 @@ sub spec ($c, $ctx, $s) {
         @o{qw(ltrim rtrim)} = ($o{trim}) x 2;
     }
     my $keep = exists $o{keep} ? $o{keep} : '';
-    return $c->fault('invalid keep option') unless is_str($keep) && $keep =~ /^[<>@]$/ || !exists $o{keep};
+    return $c->fault('invalid keep option') unless is_str($keep) && $keep =~ /\A[<>@]\z/ || !exists $o{keep};
     return $c->fault('discard must be a boolean') if exists $o{discard} && type_of($o{discard}) != T_BOOL;
     my $discard = $o{discard} ? 1 : 0;
 
@@ -66,19 +66,20 @@ sub spec ($c, $ctx, $s) {
 # A trimming is nearly always a run of characters from one set, such as
 # spaces.  Perl can find one of those far faster than the closures for the
 # pattern can, so it is given the job: `front` matches the run at the start
-# of a string, and `back` any run at all.  (Nothing is returned if Perl will
-# not have the set or the limits, and the pattern is then used as it is.)
+# of a string, and `back` a run of any length there, for use on a piece that
+# has been reversed.  (Nothing is returned if Perl will not have the set, and
+# the pattern is then used as it is.)
 sub native ($chars, $lo, $hi) {
     my $class = join '', map { sprintf '\\x{%X}-\\x{%X}', @$_ } @$chars;
-    my $most  = $hi == 9**9**9 ? '' : $hi;
-    return eval { no warnings; +{ front => qr/^[$class]{$lo,$most}/, back => qr/^[$class]+/, lo => $lo, hi => $hi } };
+    my $count = sprintf '{%d,%s}', $lo, $hi == 9**9**9 ? '' : sprintf '%d', $hi;
+    return eval { no warnings; +{ front => qr/^[$class]$count/, back => qr/^[$class]+/, lo => $lo, hi => $hi } };
 }
 
 # A separator can be found by Perl if what its regex matches first at a
 # place is the longest match there, as the specification requires, and is
 # never empty.  That is so for a choice of strings and single characters.
 sub separator ($n) {
-    ($n->{fixed} // ($n->{longest} && $n->{least})) or return;
+    ($n->{width} // ($n->{longest} && $n->{least})) or return;
     return eval { no warnings; qr/$n->{re}/ };
 }
 
@@ -104,7 +105,10 @@ sub split_string ($x, $plan, $s) {
     my ($start, $q, $carried) = (0, 0, '');     # start of the element; where a separator is sought
     my $perl = ref $sep eq 'Regexp';                                # which Perl can search for,
     my $literal = !ref $sep && length $sep;                         # or simply look up
-    return [] if !$len && !$perl && defined longest($x, $sep, \$s, 0, 0);       # no characters to tell apart
+    if (!$len && !$perl && defined longest($x, $sep, \$s, 0, 0)) {              # no characters to tell apart
+        $x->charge_obj;
+        return [];
+    }
     while ($q <= $len) {
         my $end;
         if ($perl) {
@@ -117,9 +121,11 @@ sub split_string ($x, $plan, $s) {
             $end = longest($x, $sep, \$s, $q, $len);
         }
         # an empty separator counts only between two characters of an element
+        # and an element must be all that its own pattern says, from its start to its end
+        my $text = defined $end ? substr $s, $start, $q - $start : undef;
         if (defined $end && ($end > $q || $q > $start && $q < $len)
-            && (!defined $element || spans($x, $element, \$s, $start, $q))) {
-            my ($text, $found) = (substr($s, $start, $q - $start), substr($s, $q, $end - $q));
+            && (!defined $element || spans($x, $element, \$text, 0, length $text))) {
+            my $found = substr $s, $q, $end - $q;
             push @part, $keep eq '<' ? $text . $found : $keep eq '>' ? $carried . $text : $text;
             push @part, $found if $keep eq '@';
             push @sep, $found;

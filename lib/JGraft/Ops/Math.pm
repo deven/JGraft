@@ -92,6 +92,7 @@ sub compare ($x, $a, $b) {
     return ($a ? 1 : 0) <=> ($b ? 1 : 0)                     if $t == T_BOOL;
     return $a->cmp($b)                                       if $t >= T_DATE && $t <= T_TIMESTAMP;
     $t == T_ARR or $x->fail_target('values of this type have no order');
+    $x->charge(1 + min($#$a, $#$b));
     for my $i (0 .. min($#$a, $#$b)) {
         my $order = compare($x, $a->[$i], $b->[$i]);
         return $order if $order;

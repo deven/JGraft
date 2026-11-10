@@ -22,7 +22,10 @@ package JGraft::Compiler;
 #   one, zero      ... that consumes exactly one element / none
 #   caps, resolve  it may record captures; code that extracts them (sequences)
 #   pref           'max' or 'min': a length preference (SEQMAX / SEQMIN)
-#   ns, keys, fixed, meta   a path (see `path` and `reader`)
+#   ns, keys, fixed, head, meta   a path (see `path` and `reader`)
+#   inline         (a common expression) it is a constant, to stand for every reference
+#   tails, run, any   (REP) what kind of repetition it is: see Ops::Match
+#   re, width, longest, least, chars   what it is as a Perl regex: see "Patterns as Perl regexes"
 #   poison         it is a fault, and raises it when reached
 #
 # The context is a hash: scope (lexical JGRAFT scope), exact (IS rather than
@@ -34,7 +37,7 @@ package JGraft::Compiler;
 # compiled copies of them, and the values of constants that are known now.
 
 use v5.36;
-use builtin qw(created_as_number is_bool);
+use builtin qw(created_as_number is_bool refaddr);
 no warnings qw(experimental::builtin recursion);
 use JGraft::Util;
 use JGraft::Error;
@@ -74,16 +77,19 @@ sub konst ($v) {
 # become read-only.  An object cannot be kept from gaining or losing
 # properties without also making it an error to read one it lacks, so that
 # is left to the caller.
-sub freeze ($v) {
+sub freeze ($v, $seen = {}) {
     my $r = ref $v;
     return $r eq 'JGraft::Date' unless $r eq 'ARRAY' || $r eq 'HASH';
-    Internals::SvREADONLY(@$v, 1) if $r eq 'ARRAY';
-    my $dated = 0;
-    for ($r eq 'ARRAY' ? @$v : values %$v) {
-        $dated = 1 if freeze($_);
-        Internals::SvREADONLY($_, 1);
-    }
-    return $dated;
+    # a value may hold the same array or object in many places: each is seen to once
+    return $seen->{ refaddr $v } //= do {
+        Internals::SvREADONLY(@$v, 1) if $r eq 'ARRAY';
+        my $dated = 0;
+        for ($r eq 'ARRAY' ? @$v : values %$v) {
+            $dated = 1 if freeze($_, $seen);
+            Internals::SvREADONLY($_, 1);
+        }
+        $dated;
+    };
 }
 
 # A node for $code whose flags are inherited from the nodes it calls.
@@ -323,6 +329,11 @@ sub path ($c, $ctx, $s, $half = 0) {
         my $k = path_keys($ns, $half, map { $_->{value} } @kid);
         return ref $k ? { ns => $ns, keys => sub { @$k }, fixed => $k, head => $k->[0], throws => 1 } : $c->fault($k);
     }
+    # the elements that are literal are checked now, each on its own, though the path as a whole must wait
+    for my $i (grep { $kid[$_]{const} } 0 .. $#kid) {
+        my $k = path_keys('node', $half && $i == $#kid, $kid[$i]{value});
+        return $c->fault($k) unless ref $k;
+    }
     my @code = map { $_->{code} } @kid;
     my $first = $kid[0]{const} ? $kid[0]{value} : undef;
     my $head  = is_str($first) || created_as_number($first) ? "$first" : undef;
@@ -417,7 +428,8 @@ sub matcher ($c, $ctx, $v) {
     $c->reads('node');
     return $c->char_matcher($ctx, $v) if $ctx->{regex};
     my ($exact, $get) = ($ctx->{exact}, $v->{code});
-    return { throws => 1, code => sub { match_lit($_[1], &$get, $exact) } } unless $v->{const};
+    # (a pattern that comes from the data may be of any size, so comparing with it is counted)
+    return { throws => 1, code => sub { match_lit($_[1], &$get, $exact, $_[0]) } } unless $v->{const};
     my $lit = $v->{value};
     my $t   = type_of($lit);
     return { lit => $lit, code =>
@@ -443,8 +455,8 @@ sub char_matcher ($c, $ctx, $v) {
     # `chars`: the characters it matches, where that is known: a list of ranges of code points
     my $chars = $n == 1 ? [ [ (char_code(undef, $lit)) x 2 ] ] : undef;
     my $re    = join '', map { sprintf '\\x{%X}', $_ } is_str($lit) ? map { ord } split //, $lit : $lit;
-    return { seq => 1, one => $n == 1, chars => $chars, re => $re, fixed => $n, code => is_str($lit)
-        ? sub { substr(${ $_[1] }, $_[2], $n) eq $lit ? $_[2] + $n : () }
+    return { seq => 1, one => $n == 1, chars => $chars, re => $re, width => $n, code => is_str($lit)
+        ? sub { $_[2] + $n <= $_[3] && substr(${ $_[1] }, $_[2], $n) eq $lit ? $_[2] + $n : () }
         : sub { $_[2] < $_[3] && ord(substr ${ $_[1] }, $_[2], 1) == $lit ? $_[2] + 1 : () } };
 }
 
@@ -459,7 +471,7 @@ sub char_matcher ($c, $ctx, $v) {
 #
 #   re        a regex that matches, at a place, just the strings the node does.
 #             It can answer whether there is a match at all (STR).
-#   fixed     every string it matches is this long
+#   width     every string it matches is this long
 #   longest   what `re` matches first at a place is the longest the node can
 #   least     and the shortest it can is this long
 #   chars     it matches one character, from this set (ranges of code points)
@@ -480,7 +492,7 @@ sub char_code ($x, $v) {
 sub char_step ($x, $v, $subject, $p, $len) {
     if (is_str($v)) {
         my $n = length $v;
-        return substr($$subject, $p, $n) eq $v ? $p + $n : ();
+        return $p + $n <= $len && substr($$subject, $p, $n) eq $v ? $p + $n : ();
     }
     my $cp = char_code($x, $v);
     return $p < $len && ord(substr $$subject, $p, 1) == $cp ? $p + 1 : ();
@@ -560,11 +572,12 @@ sub weight ($s) {
 # then elements after the pattern are always allowed.
 sub array ($c, $ctx, $items, $from = undef) {
     my $exact = $ctx->{exact} && !$from;
-    my $gone  = sub ($x, @element) { $x->{moving} && grep { ref eq 'JGraft::Missing' } @element };
+    # are any of these elements ones that a MOVE has taken?  (Only asked while there is a MOVE.)
+    my $gone  = sub ($x, $a, $from, $to) { $x->{moving} && grep { ref $a->[$_] eq 'JGraft::Missing' } $from .. $to };
     my $start = sub ($x, $a, $ofs) {
         is_int($ofs) or $x->fail_operand('array offset must be an integer');
         $ofs += @$a if $ofs < 0;
-        return $ofs >= 0 && $ofs <= @$a && !$gone->($x, @$a[ 0 .. $ofs - 1 ]) ? $ofs : undef;    # skipped elements must exist
+        return $ofs >= 0 && $ofs <= @$a && !$gone->($x, $a, 0, $ofs - 1) ? $ofs : undef;    # skipped elements must exist
     };
     if (grep { $c->begins_seq($ctx, $_) } @$items) {
         my @kid = map { $c->match({ %$ctx, seq => 1, top => 1 }, $_) } @$items;
@@ -589,7 +602,7 @@ sub array ($c, $ctx, $items, $from = undef) {
             $test->($x, $i < @$a ? $a->[$i] : $MISSING, $i, $a) or return 0;
             $i++;
         }
-        return !($ctx->{exact} && $gone->($x, @$a[ $i .. $#$a ]));
+        return !($ctx->{exact} && $gone->($x, $a, $i, $#$a));
     }, @kid);
 }
 
@@ -644,10 +657,10 @@ sub matches ($c, $ctx, $s) {
 }
 
 # Does $s, as an item of an array pattern, make that pattern a sequence?
-sub begins_seq ($c, $ctx, $s) {
-    $s = $c->deref($ctx, $s);
+sub begins_seq ($c, $ctx, $s, $seen = {}) {
+    $s = $c->deref($ctx, $s, $seen);        # (a definition that leads back to itself is not followed twice)
     my $row = row(\%EXPR, $s) or return 0;
-    return $row->{name} eq 'WITH' ? $c->begins_seq($ctx, $s->[-1]) : $row->{name} =~ /^SEQ/;
+    return $row->{name} eq 'WITH' ? $c->begins_seq($ctx, $s->[-1], $seen) : $row->{name} =~ /^SEQ/;
 }
 
 defop EXPR => -5, 'ref', 'V', sub ($c, $ctx, $name) {
@@ -683,20 +696,31 @@ defop EXPR => -5, 'ref', 'V', sub ($c, $ctx, $name) {
         return { %{ $fixed->{node} } } if $fixed->{node} && $fixed->{node}{inline};
     }
     else { $c->reads('*') }
-    # a literal reference to SEQMAX / SEQMIN keeps the length preference visible
-    my $pref = $fixed && $ctx->{cap} && $ctx->{top}
-        ? { SEQMAX => 'max', SEQMIN => 'min' }->{ $c->peek($ctx, $fixed->{def}) // '' } : undef;
+    # A reference to a definition that is compiled passes on what is known
+    # of it: its length preference (SEQMAX / SEQMIN, however deep in WITH),
+    # and whether it captures at all.  Otherwise it is taken to capture: a
+    # definition still being compiled is one that refers to itself, and
+    # which definition a computed name means is known only when it is used.
+    my $known = $fixed && $fixed->{node};
+    my $pref  = !($fixed && $ctx->{cap} && $ctx->{top}) ? undef
+              : $known ? $known->{pref}
+              :          { SEQMAX => 'max', SEQMIN => 'min' }->{ $c->peek($ctx, $fixed->{def}) // '' };
+    my $found = sub { $fixed || $cell->(&$which) };     # the definition meant, from the arguments of `code`
     return {
-        throws => 1, seq => $ctx->{seq}, caps => $fixed && $ctx->{cap}, pref => $pref, dated => 1,
+        throws => 1, seq => $ctx->{seq}, caps => $ctx->{cap} && (!$known || $known->{caps}), pref => $pref, dated => 1,
         code   => sub {
             my $x  = $_[0];
-            my $it = $fixed || $cell->(&$which) // $x->fail_operand('unknown common expression');
+            my $it = &$found // $x->fail_operand('unknown common expression');
             --$x->{ops} >= 0 or $x->limit('ops');
             local $x->{depth} = $x->{depth} + 1;
             $x->{depth} <= $x->{max_depth} or $x->limit('depth');
             ($it->{node} //= $compile->($it->{def}))->{code}->(@_);
         },
-        resolve => sub { my $r = $fixed->{node} && $fixed->{node}{resolve}; &$r if $r },
+        resolve => sub ($x, $s, $from, $to, $len) {
+            my $it = $found->($x, $s, $from, $len) or return;
+            my $r  = ($it->{node} //= $compile->($it->{def}))->{resolve};
+            $r->($x, $s, $from, $to, $len) if $r;
+        },
     };
 }, seq => 1;
 

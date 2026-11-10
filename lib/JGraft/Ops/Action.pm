@@ -176,7 +176,7 @@ defop MOVE => 6, 'action', '(XX)+', sub ($c, $ctx, @arg) {
                 next unless $dst;
                 eval { $x->give($dst->{ns}, \@to, $leaving ? $x->outgoing($v) : $v, $meta); 1 } or do {
                     my $error = $@;
-                    $x->give($src->{ns}, \@from, $v, $meta) if $src;    # a failed pair takes nothing away
+                    $x->aside(sub { $x->give($src->{ns}, \@from, $v, $meta) }) if $src;    # a failed pair takes nothing away
                     die $error;
                 };
             }

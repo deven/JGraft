@@ -12,12 +12,31 @@ use List::Util qw(min max);
 # (ending at $end, if that is defined)?
 sub possible ($x, $items, $subject, $len, $starts, $end) {
     my @at = @$starts;
-    for my $item (@$items) {
-        my ($code, %seen) = $item->{code};
-        $x->charge(scalar @at);         # each place it is tried from is work, whether or not it matches there
-        @at = grep { !$seen{$_}++ } map { $code->($x, $subject, $_, $len) } @at or return 0;
-    }
+    @at = advance($x, $_, $subject, $len, \@at) or return 0 for @$items;
     return defined $end ? scalar grep { $_ == $end } @at : 1;
+}
+
+# The places where a match of $item can end, having begun at any of @$at.
+sub advance ($x, $item, $subject, $len, $at) {
+    $x->charge(scalar @$at);        # each place it is tried from is work, whether or not it matches there
+    my $any = $item->{any} or do {
+        my ($code, %seen) = $item->{code};
+        return grep { !$seen{$_}++ } map { $code->($x, $subject, $_, $len) } @$at;
+    };
+    # Any elements at all, $lo to $hi of them ([REP] with no pattern).  From
+    # each place that is a run of places, and the runs overlap: they are
+    # put together, not listed one by one for each place begun from.
+    my ($lo, $hi) = @$any;
+    my ($next, @to) = (0);
+    for my $p (sort { $a <=> $b } @$at) {
+        my ($from, $upto) = ($p + $lo, min($len, $p + $hi));
+        $from = $next if $from < $next;
+        next if $from > $upto;
+        push @to, $from .. $upto;
+        $next = $upto + 1;
+    }
+    $x->charge(scalar @to);
+    return @to;
 }
 
 # Choose among the ways of doing so: find boundaries b[0..m] such that item i
