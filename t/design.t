@@ -1111,6 +1111,34 @@ subtest 'JSON is written back as it was read' => sub {
     }
     is show(\%bad), '{"agree":0,"not the least":0,"unsound":0}', 'two strings are compared soundly, and for the least change between them';
 
+    # Bytes that are not UTF-8 are kept, each as a character of its own beyond Unicode.  The
+    # characters used for that are reserved: bytes that spell one of them, or any code point
+    # past the last of Unicode, are not UTF-8 either, so no text can be mistaken for another.
+    my %stray = (
+        'a code point in the reserved range (U+110081)' => "\xF4\x90\x82\x81",
+        'the last of the reserved range (U+1100FF)'     => "\xF4\x90\x83\xBF",
+        'one just past it'                              => "\xF4\x90\x84\x80",
+        'a five-byte form'                              => "\xF8\x88\x80\x80\x80",
+        'the long form that only Perl has'              => "\xFF\x80\x80\x80\x80\x80\x80\x81\x80\x80\x80\x80\x80",
+        'a surrogate'                                   => "\xED\xA0\x80",
+        'an overlong form'                              => "\xC0\x80",
+        'a continuation byte with nothing to continue'  => "\x80",
+        'a character cut short'                         => "\xE2\x82",
+    );
+    for my $what (sort keys %stray) {
+        my $bytes = $stray{$what};
+        my $text  = qq({"s":"a${bytes}b"});
+        my $read  = JGraft::JSON->parse($text);
+        is join(' ', map { sprintf '%X', ord } split //, substr $read->data->{s}, 1, -1), join(' ', map { sprintf '%X', 0x110000 + ord } split //, $bytes),
+            "bytes that spell $what are read one by one";
+        is $read->write, $text, '... and written back';
+        is $edit->($text, [ COPY => [ CONCAT => [ SLICE => [ 'NODE', 's' ], 1 ], [ SLICE => [ 'NODE', 's' ], 0, 1 ] ], 's' ]), qq({"s":"${bytes}ba"}),
+            '... wherever a graft puts them';
+    }
+    is JGraft::JSON->encode('a' . chr(0x110080) . chr(0x1100FF)), qq("a\x80\xFF"), 'a reserved character is written as its byte';
+    ok !eval { JGraft::JSON->encode('a' . chr $_); 1 } && $@ =~ /which JSON cannot say/, sprintf 'any other character past Unicode (0x%X) cannot be written', $_
+        for 0x110000, 0x110041, 0x11007F, 0x110100, 0x7FFFFFFF;
+
     # Containers that are emptied, or were empty; and documents that are not containers.
     is $edit->('{"a":[ ],"b":{ }}', [ COPY => 1, [ 'NODE', 'a', 0 ], 2, [ 'NODE', 'b', 'k' ] ]), '{"a":[1],"b":{"k":2}}', 'empty containers filled';
     is $edit->('{"a":[ 1 ],"b":{ "k": 1 }}', [ SPLICE => [ 'NODE', 'a', 0 ], 1 ], [ MOVE => [ 'NODE', 'b', 'k' ], undef ]), '{"a":[],"b":{}}', 'and full ones emptied';

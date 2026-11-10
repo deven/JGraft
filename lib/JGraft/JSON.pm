@@ -14,10 +14,17 @@ package JGraft::JSON;
 #
 # The data is ordinary Perl data, except that its objects are ordered hashes
 # (JGraft::Ordered), and that beside every array and object is kept where it
-# came from in the text (JGraft::Source).  A byte in a string that is not
-# UTF-8 is read as a character beyond the last one of Unicode, 0x110000 plus
-# the byte, which nothing else can be taken for and which is written back as
-# that byte.
+# came from in the text (JGraft::Source).
+#
+# A byte in a string that is not UTF-8 is read as a character beyond the
+# last one of Unicode: 0x110000 plus the byte, which is written back as that
+# byte.  Those 128 code points (the byte is 0x80 or more) are thereby
+# reserved, and nothing else may be read as one of them.  Nothing is: UTF-8
+# is taken strictly, so bytes that spell a code point past 0x10FFFF, as
+# older forms of UTF-8 and Perl's own allow, are not UTF-8 here, and each is
+# read as a byte.  The same goes for surrogates and overlong forms.  And a
+# string that holds any other character past 0x10FFFF, which can only have
+# been put there by hand, cannot be written at all.
 
 use v5.36;
 use builtin qw(created_as_number refaddr);
@@ -110,7 +117,7 @@ sub parse ($class, $text) {
 sub unquote ($body) {
     if ($body !~ /\\/) {        # the usual case: no escapes, and (as is then checked) good UTF-8
         my $s = $body;
-        return $s if utf8::decode($s) && $s !~ /[\x{D800}-\x{DFFF}\x{110000}-\x{7FFFFFFF}]/;
+        return $s if utf8::decode($s) && $s !~ /[^\x{0}-\x{D7FF}\x{E000}-\x{10FFFF}]/;
     }
     my $s = '';
     pos($body) = 0;
@@ -123,7 +130,7 @@ sub unquote ($body) {
         elsif ($body =~ /\G\\u([0-9a-fA-F]{4})/gc)  { $s .= chr hex $1 }
         elsif ($body =~ /\G\\(["\\\/bfnrt])/gc)     { $s .= $ESCAPE{$1} }
         elsif ($body =~ /\G\\/gc)                   { return undef }
-        else { $body =~ /\G(.)/gcs; $s .= chr STRAY + ord $1 }      # a byte that is not UTF-8
+        else { $body =~ /\G(.)/gcs; $s .= chr STRAY + ord $1 }      # a byte (0x80 or more) that is not UTF-8
     }
     return $s;
 }
@@ -181,10 +188,17 @@ sub scalar_text ($v) {
 sub quoted ($s) {
     return join '', map {
         my $part = $_;
-        length $part == 1 && $part =~ /[\x{D800}-\x{DFFF}"\\\x00-\x1F]|[\x{110000}-\x{1100FF}]/
-            ? (ord $part >= STRAY ? chr(ord($part) - STRAY) : $ESCAPED{$part} // sprintf '\\u%04x', ord $part)
+        length $part == 1 && $part =~ /[\x{D800}-\x{DFFF}"\\\x00-\x1F]|[^\x{0}-\x{10FFFF}]/
+            ? (ord $part > 0x10FFFF ? stray($part) : $ESCAPED{$part} // sprintf '\\u%04x', ord $part)
             : do { utf8::encode($part); $part };
-    } grep { length } split /([\x{D800}-\x{DFFF}"\\\x00-\x1F]|[\x{110000}-\x{1100FF}])/, $s;
+    } grep { length } split /([\x{D800}-\x{DFFF}"\\\x00-\x1F]|[^\x{0}-\x{10FFFF}])/, $s;
+}
+
+# The byte that a character past the end of Unicode stands for.
+sub stray ($char) {
+    my $byte = ord($char) - STRAY;
+    $byte >= 0x80 && $byte <= 0xFF or die sprintf "JGraft::JSON: a string holds the character 0x%X, which JSON cannot say\n", ord $char;
+    return chr $byte;
 }
 
 # An array, copied (if $from) from one that was read: with $tok, the tokens

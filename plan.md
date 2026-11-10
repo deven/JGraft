@@ -1249,6 +1249,19 @@ changed only where the data changed.
   microseconds a character and so had to be capped at 4,096 characters;
   on the strings themselves a line of 1.2 million characters with three
   changes takes 105 ms, and there is no cap.
+- **Bytes that are not UTF-8 are characters past the end of Unicode**,
+  0x110000 plus the byte, written back as the byte. Those 128 code points
+  (the byte is 0x80 or more) are reserved, and the reader makes sure no
+  text can mean one of them in any other way: UTF-8 is taken strictly, so
+  the old five- and six-byte forms, Perl's own longer ones, surrogates,
+  overlong forms and anything past 0x10FFFF are all "not UTF-8", read byte
+  by byte. Every text therefore reads to something that writes back as
+  itself. The writer refuses any other character past 0x10FFFF, which can
+  only have been put in the data by hand. One thing follows that cannot be
+  helped: if a graft joins two strings so that a stray lead byte comes to
+  stand before its stray continuation, the bytes written are a good
+  character, and read back as one where the run had two. The bytes are
+  right; it is the count of characters that the text cannot keep.
 - **Checked by** every conformance case run again on a document read from
   text (same outcome, and what is written reads back as what the run left),
   20,000 random texts in random layouts written back identically, and some

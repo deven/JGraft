@@ -258,7 +258,12 @@ ordered hashes (L<JGraft::Ordered>, a tied hash that any Perl code can read
 and write as a hash); matching against them costs about half as much again
 as against plain ones.  And a byte in a string that is not UTF-8 is read as
 a character beyond the end of Unicode (0x110000 plus the byte), so that a
-graft sees one character there and the byte can be written back.  A number
+graft sees one character there and the byte can be written back.  UTF-8 is
+taken strictly for this: bytes that spell a surrogate, an overlong form, or
+a code point past 0x10FFFF (those reserved characters among them) are not
+UTF-8, and are read byte by byte, so every text comes back as it was.  A
+string holding some other character past 0x10FFFF cannot have come from a
+text, and C<write> dies if given one.  A number
 too large or too precise for Perl is seen by the graft as the nearest one
 Perl has, and keeps its spelling if the graft leaves it alone.
 
