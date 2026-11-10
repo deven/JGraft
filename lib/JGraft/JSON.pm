@@ -34,11 +34,6 @@ use JGraft::Ordered;
 use JGraft::Source;
 use JGraft::Undo;
 
-use constant STRAY => 0x110000;     # where bytes that are not UTF-8 are kept, as characters
-
-# One well-formed UTF-8 character that is not ASCII.
-my $WIDE = qr/[\xC2-\xDF][\x80-\xBF]|\xE0[\xA0-\xBF][\x80-\xBF]|[\xE1-\xEC\xEE\xEF][\x80-\xBF]{2}|\xED[\x80-\x9F][\x80-\xBF]
-            |\xF0[\x90-\xBF][\x80-\xBF]{2}|[\xF1-\xF3][\x80-\xBF]{3}|\xF4[\x80-\x8F][\x80-\xBF]{2}/x;
 my %ESCAPE  = ('"' => '"', '\\' => '\\', '/' => '/', b => "\b", f => "\f", n => "\n", r => "\r", t => "\t");
 my %ESCAPED = ('"' => '\\"', '\\' => '\\\\', "\b" => '\\b', "\f" => '\\f', "\n" => '\\n', "\r" => '\\r', "\t" => '\\t');
 

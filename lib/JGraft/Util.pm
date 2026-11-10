@@ -5,7 +5,7 @@ package JGraft::Util;
 
 use v5.36;
 use builtin qw(created_as_number is_bool);
-no warnings qw(experimental::builtin recursion);
+no warnings qw(experimental::builtin recursion non_unicode);
 use JSON::PP ();
 use Exporter 'import';
 
@@ -17,11 +17,38 @@ use constant {
 our @EXPORT = qw(
     T_MISSING T_NULL T_BOOL T_NUM T_STR T_ARR T_OBJ T_DATE T_DATETIME T_TIMESTAMP T_OTHER
     $TRUE $FALSE $MISSING type_of is_str is_int is_idx match_lit sizeof
+    STRAY $WIDE mended
 );
 
 our $TRUE    = JSON::PP::true;
 our $FALSE   = JSON::PP::false;
 our $MISSING = bless \(my $nothing = 'nonexistent'), 'JGraft::Missing';
+
+# A byte that is not UTF-8, in a string read by JGraft::JSON, is kept as a
+# character past the end of Unicode: STRAY plus the byte (which is 0x80 or
+# more).  $WIDE is one well-formed UTF-8 character that is not ASCII, as bytes.
+use constant STRAY => 0x110000;
+our $WIDE = qr/[\xC2-\xDF][\x80-\xBF]|\xE0[\xA0-\xBF][\x80-\xBF]|[\xE1-\xEC\xEE\xEF][\x80-\xBF]{2}|\xED[\x80-\x9F][\x80-\xBF]
+             |\xF0[\x90-\xBF][\x80-\xBF]{2}|[\xF1-\xF3][\x80-\xBF]{3}|\xF4[\x80-\x8F][\x80-\xBF]{2}/x;
+
+# A string that has just been made by joining others.  Such bytes may have
+# come to stand side by side that did not before, as when the two halves of
+# a character that was cut in two are put together again; and if they now
+# spell a character, that is what they are.
+sub mended ($s) {
+    $s =~ /[\x{110080}-\x{1100FF}]{2}/ or return $s;
+    $s =~ s{([\x{110080}-\x{1100FF}]{2,})}{
+        my $bytes = join '', map { chr(ord($_) - STRAY) } split //, $1;
+        my $read  = '';
+        pos($bytes) = 0;
+        while (pos($bytes) < length $bytes) {
+            if ($bytes =~ /\G($WIDE)/gc) { my $char = $1; utf8::decode($char); $read .= $char }
+            else                          { $bytes =~ /\G(.)/gcs; $read .= chr STRAY + ord $1 }
+        }
+        $read;
+    }ge;
+    return $s;
+}
 
 my %CLASS_TYPE = ('JSON::PP::Boolean' => T_BOOL, 'JGraft::Missing' => T_MISSING);
 

@@ -195,7 +195,11 @@ sub join_array ($x, $plan, $a, $mark = -1, $begins = undef) {
         $out .= $between // $found // $default if $i < $#$a;
     }
     $x->charge(scalar @$a, 16 + length $out);
-    return $out;
+    return $out unless $x->{src};
+    # bytes that were not UTF-8 may have been brought together (see Util::mended)
+    my $mended = mended($out);
+    $$begins = length mended(substr $out, 0, $$begins) if $begins && defined $$begins && length $mended != length $out;
+    return $mended;
 }
 
 # [SPLIT, spec, string?] and [JOIN, spec, array?]

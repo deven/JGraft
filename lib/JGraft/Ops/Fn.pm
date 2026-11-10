@@ -152,7 +152,7 @@ defop CONCAT => 58, 'fn', 'V+', sub ($c, $ctx, @arg) {
             my $size = 0;
             $size += length for @v;
             $x->charge(scalar @v, 16 + $size);
-            return join '', @v;
+            return $x->{src} ? mended(join '', @v) : join '', @v;
         }
         grep { ref ne 'ARRAY' } @v and $x->fail_target('CONCAT needs strings or arrays');
         $x->charge_obj;

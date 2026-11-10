@@ -1257,11 +1257,18 @@ changed only where the data changed.
   overlong forms and anything past 0x10FFFF are all "not UTF-8", read byte
   by byte. Every text therefore reads to something that writes back as
   itself. The writer refuses any other character past 0x10FFFF, which can
-  only have been put in the data by hand. One thing follows that cannot be
-  helped: if a graft joins two strings so that a stray lead byte comes to
-  stand before its stray continuation, the bytes written are a good
-  character, and read back as one where the run had two. The bytes are
-  right; it is the count of characters that the text cannot keep.
+  only have been put in the data by hand. One thing follows: a graft can
+  join strings so that a stray lead byte comes to stand before its stray
+  continuations (the two halves of a character that something had cut in
+  two), and the bytes then written are a good character. So that the run
+  sees what a reader of its result will, the engine reads such bytes again
+  where it joins strings (CONCAT, JOIN, and the rejoining of an ATSPLIT,
+  through `Util::mended`): they become the character they spell. It costs
+  one search of the joined string for two such bytes side by side, and
+  only for documents read by `JGraft::JSON`. Upgrading the bytes to the
+  code points of the same number was considered and rejected: it is a
+  guess at Latin-1, it changes the bytes, and it is wrong in the likeliest
+  case.
 - **Checked by** every conformance case run again on a document read from
   text (same outcome, and what is written reads back as what the run left),
   20,000 random texts in random layouts written back identically, and some

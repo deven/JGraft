@@ -1139,6 +1139,31 @@ subtest 'JSON is written back as it was read' => sub {
     ok !eval { JGraft::JSON->encode('a' . chr $_); 1 } && $@ =~ /which JSON cannot say/, sprintf 'any other character past Unicode (0x%X) cannot be written', $_
         for 0x110000, 0x110041, 0x11007F, 0x110100, 0x7FFFFFFF;
 
+    # Stray bytes that a graft brings together are the character they then spell: as when
+    # the two halves of a character that something had cut in two are joined again.
+    my $rejoin = sub ($text, @actions) {
+        my $read = JGraft::JSON->parse($text);
+        my $left = graft(@actions)->apply($read->data);
+        my $out  = $read->write($left);
+        return 'what is written is not what the run left' if show(JGraft::JSON->parse($out)->data) ne show($left);
+        return join ' ', map { sprintf '%X', ord } split //, $left->{c};
+    };
+    my $concat = [ COPY => [ CONCAT => [ 'NODE', 'a' ], [ 'NODE', 'b' ] ], 'c' ];
+    is $rejoin->(qq({"a":"x\xC3","b":"\xA9y"}), $concat), '78 E9 79', 'two bytes of one character';
+    is $rejoin->(qq({"a":"\xE2\x82","b":"\xAC"}), $concat), '20AC', 'three, cut after the second';
+    is $rejoin->(qq({"a":"\xF0","b":"\x9F\x98\x80"}), $concat), '1F600', 'four, cut after the first';
+    is $rejoin->(qq({"a":"\xF0\x9F","b":"\x98","z":"\x80"}), [ COPY => [ CONCAT => [ 'NODE', 'a' ], [ 'NODE', 'b' ], [ 'NODE', 'z' ] ], 'c' ]), '1F600',
+        'four, in three pieces';
+    is $rejoin->(qq({"a":"\xC3","b":"\xA9\xA9"}), $concat), 'E9 1100A9', 'with a byte left over';
+    is $rejoin->(qq({"a":"\xC3","b":"\xFF"}), $concat), '1100C3 1100FF', 'but not bytes that spell nothing';
+    is $rejoin->(qq({"a":"\xE2\x82","b":"y"}), $concat), '1100E2 110082 79', 'nor a character still cut short';
+    is $rejoin->(qq({"a":"\xC0","b":"\x80"}), $concat), '1100C0 110080', 'nor an overlong form';
+    is $rejoin->(qq({"a":"x\xC3,\xA9y"}), [ COPY => [ JOIN => ',', [ SPLIT => ',', [ 'NODE', 'a' ] ] ], 'c' ]),
+        '78 1100C3 2C 1100A9 79', 'a JOIN that puts back what was between them leaves them apart';
+    is $rejoin->(qq({"a":"x\xC3,\xA9y"}), [ COPY => [ JOIN => '', [ SPLIT => ',', [ 'NODE', 'a' ] ] ], 'c' ]), '78 E9 79', 'and one that does not brings them together';
+    is $rejoin->(qq({"c":"x\xC3,\xA9y"}), [ ATSPLIT => 'c', { sep => [ ANY => ',' ], default => '' }, [ COPY => [ [ ['NODE', 0], ['NODE', 1] ] ], [ 'STASH', 'p' ] ] ],
+        [ COPY => [ CONCAT => [ 'STASH', 'p', 0 ], [ 'STASH', 'p', 1 ] ], 'c' ]), '78 E9 79', 'pieces taken from an ATSPLIT and joined';
+
     # Containers that are emptied, or were empty; and documents that are not containers.
     is $edit->('{"a":[ ],"b":{ }}', [ COPY => 1, [ 'NODE', 'a', 0 ], 2, [ 'NODE', 'b', 'k' ] ]), '{"a":[1],"b":{"k":2}}', 'empty containers filled';
     is $edit->('{"a":[ 1 ],"b":{ "k": 1 }}', [ SPLICE => [ 'NODE', 'a', 0 ], 1 ], [ MOVE => [ 'NODE', 'b', 'k' ], undef ]), '{"a":[],"b":{}}', 'and full ones emptied';

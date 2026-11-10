@@ -263,7 +263,9 @@ taken strictly for this: bytes that spell a surrogate, an overlong form, or
 a code point past 0x10FFFF (those reserved characters among them) are not
 UTF-8, and are read byte by byte, so every text comes back as it was.  A
 string holding some other character past 0x10FFFF cannot have come from a
-text, and C<write> dies if given one.  A number
+text, and C<write> dies if given one.  If a graft joins strings so that
+such bytes come together and spell a character between them (the two halves
+of one that had been cut in two, say), they become that character.  A number
 too large or too precise for Perl is seen by the graft as the nearest one
 Perl has, and keeps its spelling if the graft leaves it alone.
 
