@@ -911,11 +911,16 @@ say.
 
 Each of these made the code smaller; none changes behaviour the suite can see.
 
-- **No constant folding (§5.5 step 5).** Literal data is still recognised at
-  compile time (for patterns), but computed constants are evaluated each run.
-  Folding would have hidden work from the `mem` and `ops` limits.
-- **Literal containers are rebuilt per evaluation**, not shared. Sharing them
-  would let a caller who edits one run's output corrupt the compiled graft.
+- **Constant folding is narrower than §5.5 step 5.** A function marked `pure`
+  in the table is evaluated at compile time when all its arguments are
+  constant, under a small budget, and only if the result is a scalar or a
+  date. Anything that fails or exceeds the budget is left to raise its error
+  in the run that reaches it. Operands that default to the current node are
+  declared in the table (argument letter `N`), which is how the compiler knows
+  that `[POW, 2]` is not constant.
+- **Arrays and objects are never folded or shared**: literal containers are
+  rebuilt per evaluation. Sharing them would let a caller who edits one run's
+  output corrupt the compiled graft.
 - **`depth` counts EXPR nesting only** (§9). Static nesting is bounded by the
   graft, so there is no per-node depth and no per-action check.
 - **Dates are exported once, when the output is produced** (§7.2), not at each

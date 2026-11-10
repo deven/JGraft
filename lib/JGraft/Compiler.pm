@@ -34,6 +34,7 @@ use builtin qw(created_as_number is_bool);
 no warnings qw(experimental::builtin recursion);
 use JGraft::Util;
 use JGraft::Error;
+use JGraft::Exec;
 use JGraft::Seq;
 use Exporter 'import';
 
@@ -42,12 +43,14 @@ our @EXPORT_OK = qw(defop node trap row %EXPR);
 our (%EXPR, %ACTION);    # operation tables, keyed by both name and ID
 
 # Declare an operation.  $args describes its arguments, one letter each:
-#   V value   T test (a separate match, yielding true/false)   P path
-#   A action  X raw structure, for the builder to compile itself
+#   V value   N value which, if omitted, is the current node
+#   T test (a separate match, yielding true/false)   P path   A action
+#   X raw structure, for the builder to compile itself
 # with ? * + and (..) meaning what they do in a regex.  The builder receives
 # the compiler, the context and the compiled arguments, and returns a node or
 # just its code.  Flags: `safe` (cannot raise a recoverable error of its own),
-# `seq` (the builder handles sequence context itself).
+# `seq` (the builder handles sequence context itself), `pure` (the result
+# depends on nothing but the arguments, so constants can be folded).
 sub defop ($name, $id, $kind, $args, $build, %flag) {
     my $table = $kind eq 'action' ? \%ACTION : \%EXPR;
     $table->{$name} = $table->{$id} = { name => $name, kind => $kind, args => $args, build => $build, %flag };
@@ -89,7 +92,8 @@ sub fault ($c, $message, $code = 'INVALID_GRAFT') {
 #---------------------------------------------------------------------------
 # Arguments
 
-# The argument letters for $n arguments under spec $spec, or undef.
+# The argument letters for $n arguments under spec $spec, or undef.  An
+# omitted N appears as `n`, so arguments keep their positions.
 sub fit ($spec, $n) {
     state %memo;
     return $memo{"$spec $n"} //= do {
@@ -107,7 +111,7 @@ sub _fit ($token, $i, $n) {
     for (my $k = int($n / length $unit); $k >= $min; $k--) {
         next if $k > $max;
         my $rest = _fit($token, $i + 1, $n - $k * length $unit);
-        return $unit x $k . $rest if defined $rest;
+        return ($k || $unit ne 'N' ? $unit x $k : 'n') . $rest if defined $rest;
     }
     return undef;
 }
@@ -117,18 +121,33 @@ sub build ($c, $ctx, $row, $s) {
     my $kinds = fit($row->{args}, scalar @raw)
         // return $c->fault("wrong number of arguments to $row->{name}");
     my (@arg, @kid);
-    for my $i (0 .. $#raw) {
-        my $k = substr $kinds, $i, 1;
-        push @arg, $k eq 'V' ? $c->value($ctx, $raw[$i])
-                 : $k eq 'T' ? $c->root($ctx, $raw[$i])
-                 : $k eq 'P' ? $c->path($ctx, $raw[$i])
-                 : $k eq 'A' ? $c->action($ctx, $raw[$i])
-                 :             $raw[$i];
-        push @kid, $arg[-1] if $k =~ /[VTP]/;
+    for my $k (split //, $kinds) {
+        push @arg, $k eq 'n'    ? $c->cur
+                 : $k =~ /[VN]/ ? $c->value($ctx, shift @raw)
+                 : $k eq 'T'    ? $c->root($ctx, shift @raw)
+                 : $k eq 'P'    ? $c->path($ctx, shift @raw)
+                 : $k eq 'A'    ? $c->action($ctx, shift @raw)
+                 :                shift @raw;
+        push @kid, $arg[-1] if $k =~ /[VNnTP]/;
     }
     my $n = $row->{build}->($c, $ctx, @arg);
     return $n unless ref $n eq 'CODE';      # a builder that returns a whole node sets its own flags
-    return { code => $n, throws => !$row->{safe} || !!grep { $_->{throws} } @kid };
+    my $known = $row->{pure} && !(grep { !$_->{const} } @kid) && fold($n);
+    return $known || { code => $n, throws => !$row->{safe} || !!grep { $_->{throws} } @kid };
+}
+
+# Constant folding: evaluate now what depends on nothing but the graft, and
+# return a constant node.  Returns nothing for whatever fails or costs too
+# much, which will then behave as it should when a run reaches it, and for
+# arrays and objects, because every run must build its own.
+sub fold ($code) {
+    my $x = JGraft::Exec->new(undef, limits => { ops => 10_000, mem => 65_536 });
+    $x->{quiet} = 1;
+    my $v;
+    return unless eval { $v = $code->($x, $MISSING, undef, undef); 1 };
+    return if ref $v eq 'ARRAY' || ref $v eq 'HASH';
+    return konst($v) unless ref $v eq 'JGraft::Date';
+    return { %{ konst($v) }, code => sub { $_[0]{dates}++; $v } };      # a run needs to know it holds a date
 }
 
 sub action ($c, $ctx, $s) {
@@ -177,7 +196,7 @@ sub construct ($c, $ctx, $s) {
     return $n;
 }
 
-# The current node as a value: the default for an omitted operand.
+# The current node as a value: what an omitted N argument becomes.
 sub cur ($c) {
     state $cur = { throws => 1, code => sub { $_[0]->escape($_[1]) } };
     return $cur;

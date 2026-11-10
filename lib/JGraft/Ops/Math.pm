@@ -59,10 +59,10 @@ my %CAST = (
 
 for my $op (sort keys %CAST) {
     my ($id, $cast) = @{ $CAST{$op} };
-    defop $op, $id, 'fn', 'V?', sub ($c, $ctx, $of = $c->cur) {
+    defop $op, $id, 'fn', 'N?', sub ($c, $ctx, $of) {
         my $get = $of->{code};
         sub { $cast->($_[0], &$get) };
-    };
+    }, pure => 1;
 }
 
 # [DATE]: would CASTDATE accept the current node?
@@ -91,11 +91,10 @@ sub compare ($x, $a, $b) {
 # [LESS, b] compares the current node; [LESS, a, b] compares two values.
 for ([ LESS => 72, 0 ], [ LESSEQ => 73, 1 ]) {
     my ($op, $id, $below) = @$_;
-    defop $op, $id, 'fn', 'V?V', sub ($c, $ctx, @arg) {
-        my $b = pop(@arg)->{code};
-        my $a = (shift(@arg) // $c->cur)->{code};
+    defop $op, $id, 'fn', 'N?V', sub ($c, $ctx, $left, $right) {
+        my ($a, $b) = ($left->{code}, $right->{code});
         sub { compare($_[0], &$a, &$b) < $below ? $TRUE : $FALSE };
-    };
+    }, pure => 1;
 }
 
 #---------------------------------------------------------------------------
@@ -118,7 +117,7 @@ for ([ ADD => 74, 0, sub { $_[0] + $_[1] } ], [ MUL => 76, 1, sub { $_[0] * $_[1
             }
             number($x, $result);
         };
-    };
+    }, pure => 1;
 }
 
 my %BINARY = (
@@ -234,22 +233,23 @@ sub round ($x, $o, $v) {
     return "$sign${digits}e$power";
 }
 
-defop ROUND => 81, 'fn', 'V?V?', sub ($c, $ctx, $options = undef, $of = $c->cur) {
-    my ($opt, $get) = ($options ? $options->{code} : sub { {} }, $of->{code});
+defop ROUND => 81, 'fn', 'V?N?', sub ($c, $ctx, @arg) {
+    my $get = pop(@arg)->{code};
+    my $opt = @arg ? $arg[0]{code} : sub { {} };
     sub { my $o = &$opt; round($_[0], $o, &$get) };
-};
+}, pure => 1;
 
 for my $op (sort keys %BINARY) {
     my ($id, $f) = @{ $BINARY{$op} };
     # POW and LOG take their second operand from the current node if omitted
-    defop $op, $id, 'fn', ($op =~ /POW|LOG/ ? 'VV?' : 'VV'), sub ($c, $ctx, $left, $right = $c->cur) {
+    defop $op, $id, 'fn', ($op =~ /POW|LOG/ ? 'VN?' : 'VV'), sub ($c, $ctx, $left, $right) {
         my ($a, $b) = ($left->{code}, $right->{code});
         sub {
             my ($x, $m, $n) = ($_[0], &$a, &$b);
             created_as_number($m) && created_as_number($n) or $x->fail_target("$op needs numbers");
             number($x, $f->($x, $m, $n));
         };
-    };
+    }, pure => 1;
 }
 
 1;

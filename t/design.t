@@ -74,6 +74,38 @@ subtest 'compile-time decisions' => sub {
     is $@->code, 'INVALID_GRAFT', 'as INVALID_GRAFT';
 };
 
+subtest 'constant folding' => sub {
+    my $c   = bless { faults => [] }, 'JGraft::Compiler';
+    my $ctx = { scope => { exprs => {}, cells => {} } };
+    my $folded = sub ($s) { my $n = $c->value($ctx, $s); $n->{const} ? show($n->{value}) : 'not folded' };
+
+    is $folded->([ ADD => 1, 2 ]),                                          '3',        'arithmetic on literals';
+    is $folded->([ CONCAT => 'n=', [ CASTSTR => [ MUL => 2, [ ADD => 1, 2 ] ] ] ]), '"n=6"', 'nested';
+    is $folded->([ LESS => [ CASTDATE => '2024-01-01' ], [ CASTDATE => '2024-06-15' ] ]), 'true', 'dates compared';
+    is $folded->([ LENGTH => [ [ 1, 2, 3 ] ] ]),                            '3',        'a scalar from a literal array';
+    is $folded->([ ROUND => { at => 1 }, '2.25' ]),                         '"2.3"',    'ROUND with both operands';
+
+    is $folded->([ ADD => 1, ['NODE'] ]), 'not folded', 'not when an operand reads the data';
+    is $folded->($_), 'not folded', "not when the current node is implied: $_->[0]"
+        for ['LENGTH'], [ POW => 2 ], [ LESS => 5 ], [ ROUND => 2 ], ['CASTNUM'], ['CURPROP'];
+    is $folded->([ CONCAT => [ [1] ], [ [2] ] ]), 'not folded', 'not an array: each run builds its own';
+    is $folded->([ DIV => 1, 0 ]),                'not folded', 'not what fails';
+    is $folded->([ ROUND => { as => 'STR', at => 1e7 }, '1' ]), 'not folded', 'not what costs too much';
+
+    ok exists $c->match($ctx, { a => [ CONCAT => 'a', 'b' ] })->{lit}, 'a folded value is a literal to a pattern';
+    ok !@{ $c->{faults} }, 'none of which is a fault';
+
+    my $r = graft([ COPY => [ DIV => 1, 0 ], 'a' ])->run({});
+    is $r->error->code, 'INVALID_TARGET', 'a failure is raised by the run that reaches it';
+    is show(graft([ COPY => [ ANY => [ DIV => 1, 0 ], [ IS => [ DIV => 4, 2 ], 2 ] ], ['NODE'] ])->apply(0)), 'true',
+        'and is still only a failed probe inside a match';
+    is graft([ COPY => [ ROUND => { as => 'STR', at => 1e7 }, '1' ], 'a' ])->run({}, limits => { mem => 1e6 })
+        ->error->code, 'RESOURCE_LIMIT', 'and limits still apply to what was not folded';
+    my $date = graft([ COPY => [ CASTDATE => '2024-02-29' ], 'd', [ CASTDATE => '2024-02-29' ], [ 'STASH', 'd' ] ],
+        [ COPY => [ 'STASH', 'd', 'month' ], 'm' ]);
+    is show($date->apply({})), '{"d":"2024-02-29","m":2}', 'a folded date is still a date inside, and a string outside';
+};
+
 subtest 'the public interface' => sub {
     my @seen;
     my $g = graft([ RAISE => 'warn', 'careful', ['NODE'] ], [ MATCH => 1 ], [ COPY => 2, ['NODE'] ]);

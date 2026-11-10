@@ -149,7 +149,7 @@ sub join_array ($x, $plan, $a) {
 for ([ SPLIT => 62, \&split_string, \&is_str, 'a string' ],
      [ JOIN  => 63, \&join_array,   sub { 1 }, '' ]) {
     my ($op, $id, $do, $accepts, $what) = @$_;
-    defop $op, $id, 'fn', 'XV?', sub ($c, $ctx, $s, $of = $c->cur) {
+    defop $op, $id, 'fn', 'XN?', sub ($c, $ctx, $s, $of) {
         my $plan = spec($c, $ctx, $s);
         return $plan if ref $plan eq 'HASH';        # a fault
         my $get = $of->{code};

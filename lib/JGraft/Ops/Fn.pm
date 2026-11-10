@@ -75,19 +75,19 @@ for ([ NOT => 52, 1, 0 ], [ AND => 53, 0, 0 ], [ OR => 54, 1, 1 ]) {
             }
             $yield ? $FALSE : $TRUE;
         };
-    };
+    }, pure => 1;
 }
 
 #---------------------------------------------------------------------------
 # Arrays and strings
 
-defop LENGTH => 55, 'fn', 'V?', sub ($c, $ctx, $of = $c->cur) {
+defop LENGTH => 55, 'fn', 'N?', sub ($c, $ctx, $of) {
     my $get = $of->{code};
     return sub {
         my $v = &$get;
         ref $v eq 'ARRAY' ? scalar @$v : is_str($v) ? length $v : $_[0]->fail_target('LENGTH needs an array or string');
     };
-};
+}, pure => 1;
 
 # The array an iterating function works on, with its elements counted.
 my $elements = sub ($x, $v, $who) {
@@ -105,7 +105,7 @@ my $inherit = sub ($x, $new, $a, @from) {
 };
 
 # [FILTER, spec, array?]: the elements that match.
-defop FILTER => 60, 'fn', 'XV?', sub ($c, $ctx, $spec, $of = $c->cur) {
+defop FILTER => 60, 'fn', 'XN?', sub ($c, $ctx, $spec, $of) {
     my $keep = $c->root({ %$ctx, regex => 0 }, $spec)->{code};
     my $get  = $of->{code};
     return sub {
@@ -117,7 +117,7 @@ defop FILTER => 60, 'fn', 'XV?', sub ($c, $ctx, $spec, $of = $c->cur) {
 };
 
 # [MAP, value, array?]: the value computed with each element as current node.
-defop MAP => 61, 'fn', 'XV?', sub ($c, $ctx, $each, $of = $c->cur) {
+defop MAP => 61, 'fn', 'XN?', sub ($c, $ctx, $each, $of) {
     my $f   = $c->value({ %$ctx, regex => 0 }, $each)->{code};
     my $get = $of->{code};
     return sub {
@@ -150,7 +150,7 @@ defop CONCAT => 58, 'fn', 'V+', sub ($c, $ctx, @arg) {
         }
         \@all;
     };
-};
+}, pure => 1;
 
 # [SLICE, value, offset, length?] or [SLICE, { ofs, len, lim, path }]
 defop SLICE => 57, 'fn', 'VV?V?', sub ($c, $ctx, @arg) {
@@ -201,7 +201,7 @@ defop SLICE => 57, 'fn', 'VV?V?', sub ($c, $ctx, @arg) {
 # Objects
 
 # [PROPS, object?, form?]: names; or [name, value] pairs (1); or [names, values] (2).
-defop PROPS => 64, 'fn', 'V?X?', sub ($c, $ctx, $of = $c->cur, @form) {
+defop PROPS => 64, 'fn', 'N?X?', sub ($c, $ctx, $of, @form) {
     my $form = @form ? $form[0] : 0;
     created_as_number($form) && grep { $form == $_ } 0 + @form .. 2
         or return $c->fault('PROPS option must be 1 or 2');
@@ -241,7 +241,7 @@ defop MKOBJ => 65, 'fn', 'V*', sub ($c, $ctx, @arg) {
 };
 
 # [REDUCE, value, name, initial, array?]: fold, with TEMP name as accumulator.
-defop REDUCE => 59, 'fn', 'XXVV?', sub ($c, $ctx, $each, $name, $initial, $of = $c->cur) {
+defop REDUCE => 59, 'fn', 'XXVN?', sub ($c, $ctx, $each, $name, $initial, $of) {
     is_str($name) || created_as_number($name) or return $c->fault('REDUCE accumulator name must be a string');
     my $f = $c->value({ %$ctx, regex => 0 }, $each)->{code};
     my ($first, $get) = ($initial->{code}, $of->{code});
