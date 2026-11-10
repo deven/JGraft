@@ -91,14 +91,30 @@ C<message>, and says which action failed:
 
     $error->action      # its name: "COPY"
     $error->where       # where it is in the graft: "/3/2"
+    $error->node        # where its current node is in the document: { path => ["orders", 0] }
     $error->partial     # as for the result, so that a caller of apply has them
     $error->logs
-    "$error"            # "INVALID_TARGET: division by zero in COPY at /3/2"
+    "$error"            # "INVALID_TARGET: division by zero in COPY at /3/2, on /orders/0"
 
 C<where> is a JSON Pointer (RFC 6901) into the structure given to C<new>:
 C</3/2> is C<< $struct->[3][2] >>, and the graft as a whole is the empty
 string.  Faults and warnings found by C<new> are placed in the same way, by
 the action they are in.
+
+C<node> says which node the action was working on (the one that C<AT> had
+reached, not one that an expression such as C<MAP> was looking at).  It has
+the form of a capture.  C<path> is the keys that lead to the node from the
+root of C<partial>.  Inside C<ATSPLIT> the nodes are pieces of a string:
+then C<path> leads to the string, and C<ofs>, C<len> and C<lim> say which
+characters of it the piece is.
+
+    my $node  = $error->node;                   # { path => ["text"], ofs => 57, len => 16, lim => 73 }
+    my $piece = substr $error->partial->{text}, $node->{ofs}, $node->{len};
+
+For that to mean anything, a failure inside C<ATSPLIT> leaves the string in
+C<partial> as its pieces stood, put back together.  If they could not be
+(one of them is no longer a string, say), the string is left as it was and
+C<node> has only the path.
 
 =head1 THE OUTPUT IS READ-ONLY
 

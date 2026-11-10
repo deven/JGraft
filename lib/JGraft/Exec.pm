@@ -28,6 +28,7 @@ sub new ($class, $input, %opt) {
         dates => $opt{dates} // \0,     # whether the graft is one that makes dates
         quiet => 0, logs => [], opt => \%opt,
         site => {},                     # the action that is running: { where, action }, as in an error
+        piece => undef,                 # inside ATSPLIT: code that says where a piece is (see `locus`)
         folding => 0,                   # set by the compiler, when evaluating a constant expression
     }, $class;
 }
@@ -65,19 +66,39 @@ my %PROBE = map { $_ => JGraft::Error->new(code => $_, message => 'failed probe'
     qw(INVALID_TARGET INVALID_OPERAND);
 
 sub fail ($x, $code, $message) {
-    die JGraft::Error->new(code => $code, message => $message, %{ $x->{site} });
+    die JGraft::Error->new(code => $code, message => $message, $x->context);
+}
+
+# What an error says of the run: the action that is running, and where the
+# current node is.  (When a constant is being evaluated there is no node.)
+sub context ($x) { (%{ $x->{site} }, $x->{folding} ? () : (node => $x->locus)) }
+
+# Where the current node is in the document, in the form of a capture:
+# { path }, with { ofs, len, lim } as well if it is a piece of the string at
+# that path, which is what the nodes inside an ATSPLIT are.
+sub locus ($x) {
+    my $piece = $x->{piece};
+    return $piece ? $piece->($x->{root}, @{ $x->{at} }) : { path => [ @{ $x->{at} } ] };
+}
+
+# Run $code only to look at what a failure has left: none of it is charged
+# for, and if it fails in its turn it just returns nothing.
+sub aside ($x, $code) {
+    local @$x{qw(quiet ops mem)} = (1, INF, INF);
+    my @found;
+    return eval { @found = $code->(); 1 } ? @found : ();
 }
 
 # The two recoverable errors.  Under a match they are routine, so they cost
 # nothing to raise there.  A failure is `meant` if the graft asks for it.
 sub fail_target ($x, $message, $meant = 0) {
     die $x->{quiet} ? $PROBE{INVALID_TARGET} : JGraft::Error->new(
-        code => 'INVALID_TARGET', message => $message, %{ $x->{site} }, soft => 1, meant => $meant);
+        code => 'INVALID_TARGET', message => $message, $x->context, soft => 1, meant => $meant);
 }
 
 sub fail_operand ($x, $message) {
     die $x->{quiet} ? $PROBE{INVALID_OPERAND}
-        : JGraft::Error->new(code => 'INVALID_OPERAND', message => $message, %{ $x->{site} }, soft => 1);
+        : JGraft::Error->new(code => 'INVALID_OPERAND', message => $message, $x->context, soft => 1);
 }
 
 sub limit ($x, $which) { $x->fail(RESOURCE_LIMIT => "$which limit exceeded") }

@@ -2,11 +2,16 @@ package JGraft::Error;
 
 use v5.36;
 
-# "INVALID_TARGET: division by zero in COPY at /3/2"
+# "INVALID_TARGET: division by zero in COPY at /3/2, on /orders/0/note (ofs 12, len 5)"
 use overload
     '""' => sub ($e, @) {
-        my ($action, $where) = @$e{qw(action where)};
-        "$e->{code}: $e->{message}" . (defined $action ? " in $action" : '') . (length($where // '') ? " at $where" : '');
+        my ($action, $where, $node) = @$e{qw(action where node)};
+        my $on   = $node ? join '', map { '/' . s/~/~0/gr =~ s{/}{~1}gr } @{ $node->{path} } : '';
+        my $span = $node && defined $node->{ofs} ? " (ofs $node->{ofs}, len $node->{len})" : '';
+        return "$e->{code}: $e->{message}"
+            . (defined $action       ? " in $action"                              : '')
+            . (length($where // '')  ? " at $where"                               : '')
+            . (length "$on$span"     ? ', on ' . ($on || 'the document') . $span  : '');
     },
     bool     => sub { 1 },
     fallback => 1;
@@ -24,6 +29,12 @@ sub action  { $_[0]{action} }
 sub where   { $_[0]{where} }
 
 sub expr    { $_[0]{expr} }       # the expression that always fails, if that was found when compiling
+
+# From a run: where the node that the action was working on is in the
+# document, in the form of a capture.  { path } is the keys that lead to it;
+# for a piece of a string (inside ATSPLIT) they lead to the string, and
+# { ofs, len, lim } say which characters of it the piece is.
+sub node    { $_[0]{node} }
 
 # From a run: the document as the failure left it, and the log.
 sub partial { $_[0]{partial} }

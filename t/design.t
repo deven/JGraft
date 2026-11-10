@@ -434,14 +434,14 @@ subtest 'an error says where in the graft it arose' => sub {
     my $g       = JGraft->new($struct);
     my $pointed = sub ($e) { my $at = $struct; $at = $at->[$_] for grep { length } split m{/}, $e->where; $at };
     my $r       = $g->run({ a => { b => 1 } });
-    is "@{[ $r->error ]}", 'NO_MATCH: the data does not match in MATCH at /3/3/4', 'an action inside others';
+    is "@{[ $r->error ]}", 'NO_MATCH: the data does not match in MATCH at /3/3/4, on /a', 'an action inside others';
     is $r->error->action, 'MATCH', 'the action is named';
     ok $pointed->($r->error) == $struct->[3][3][4], 'and the pointer leads to it';
     is show($r->partial), '{"a":{"b":1,"c":2},"x":1}', 'the partial document has what was done before it';
     $r = $g->run({ a => { b => 0 } });
-    is "@{[ $r->error ]}", 'INVALID_TARGET: division by zero in COPY at /3/3/5', 'the last, unconditional action of an IF';
+    is "@{[ $r->error ]}", 'INVALID_TARGET: division by zero in COPY at /3/3/5, on /a', 'the last, unconditional action of an IF';
     $r = $g->run({ a => { b => 2 }, s => 'p,q' });
-    is "@{[ $r->error ]}", 'INVALID_TARGET: JOIN needs an array of strings in ATSPLIT at /4',
+    is "@{[ $r->error ]}", 'INVALID_TARGET: JOIN needs an array of strings in ATSPLIT at /4, on /s',
         'an action that fails after the actions inside it have run';
     $r = JGraft->new([ JGRAFT => {}, [ JGRAFT => { const => [ k => [ DIV => 1, ['NODE'] ] ] } ] ])->run(0);
     is "@{[ $r->error ]}", 'INVALID_TARGET: division by zero in JGRAFT at /2', 'an inner graft';
@@ -478,6 +478,68 @@ subtest 'an error says where in the graft it arose' => sub {
     is show([ $one->error->partial, $two->error->partial ]), '[{"a":1},{"a":1,"z":1}]',
         'the error of each run is its own, though the fault is one';
     is(($fault->faults)[0]->partial, undef, 'and the fault itself is left alone');
+};
+
+subtest 'an error says where in the document the current node is' => sub {
+    # `node` has the form of a capture, and leads to the node in the partial document.
+    my $found = sub ($r) {
+        my ($node, $v) = ($r->error->node, $r->partial);
+        $v = ref $v eq 'HASH' ? $v->{$_} : $v->[$_] for @{ $node->{path} };
+        return defined $node->{ofs} ? substr $v, $node->{ofs}, $node->{len} : $v;
+    };
+    my $fails = [ MATCH => 'no such thing' ];
+
+    my $r = graft([ AT => [ 'NODE', 'a', 1 ], $fails ])->run({ a => [ 1, { b => 2 } ] });
+    is show($r->error->node), '{"path":["a",1]}', 'the path to the node that the action was working on';
+    is show($found->($r)), '{"b":2}', 'which leads to it';
+    like "@{[ $r->error ]}", qr{ in MATCH at /2/2, on /a/1$}, 'and is part of the message';
+    is show(graft($fails)->run(5)->error->node), '{"path":[]}', 'the document itself has the empty path';
+    like "@{[ graft([ AT => 'x/y~z', $fails ])->run({ 'x/y~z' => 1 })->error ]}", qr{, on /x~1y~0z$},
+        'the message gives the path as a JSON Pointer';
+    is show(graft([ COPY => [ MAP => [ DIV => 1, ['NODE'] ] ], 'out' ])->run([ 1, 0 ])->error->node), '{"path":[]}',
+        'it is the node of the action, not one that an expression is looking at';
+
+    # Inside ATSPLIT the nodes are pieces of a string, and the string is where the path leads.
+    my $text = join "\n", map { "line $_ has words" } 1 .. 5;
+    my $doc  = sub { { doc => { text => $text } } };
+    my $at   = [ 'NODE', 'doc', 'text' ];
+    $r = graft([ ATSPLIT => $at, "\n", [ COPY => 'FIRST', 0 ], [ MATCH => [ ARRAY => 2, 'nope' ] ] ])->run($doc->());
+    is show($r->error->node), '{"path":["doc","text"]}', 'all the pieces together are the string';
+    is $r->partial->{doc}{text}, $text =~ s/line 1 has words/FIRST/r, 'which the failure leaves as its pieces stood';
+
+    $r = graft([ ATSPLIT => $at, "\n", [ SPLICE => 0, 1, 'a new and longer first line', 'and another' ], [ AT => 3, $fails ] ])
+        ->run($doc->());
+    is show($r->error->node), '{"len":16,"lim":73,"ofs":57,"path":["doc","text"]}', 'one piece is a span of it';
+    is $found->($r), 'line 3 has words', 'placed in the string as the failure left it';
+    like "@{[ $r->error ]}", qr{, on /doc/text \(ofs 57, len 16\)$}, 'and described in the message';
+
+    $r = graft([ ATSPLIT => $at, "\n", [ COPY => 'FIRST', 0 ],
+        [ ATSPLIT => 2, ' ', [ COPY => 'LINE', 0 ], [ AT => 2, $fails ] ] ])->run($doc->());
+    is $found->($r), 'has', 'a piece of a piece is a span of the same string';
+    is $r->partial->{doc}{text}, "FIRST\nline 2 has words\nLINE 3 has words\nline 4 has words\nline 5 has words",
+        'with the changes made at each level';
+    $r = graft([ ATSPLIT => $at, "\n", [ ATSPLIT => 2, ' ', [ COPY => 'A', 0 ], [ MATCH => [ ARRAY => 9 ] ] ] ])->run($doc->());
+    is $found->($r), 'A 3 has words', 'all the pieces of a piece are that piece, as it has become';
+
+    $r = graft([ ATSPLIT => ['NODE'], { sep => [ ANY => ',', ';' ], trim => [ REP => 0, -1, ' ' ], default => ',' },
+        [ COPY => 'BB', 1 ], [ AT => 2, $fails ] ])->run('a ,  b ;  c');
+    is show([ $r->partial, $found->($r) ]), '["a ,  BB ;  c","c"]', 'whatever is between the pieces is allowed for';
+    like "@{[ $r->error ]}", qr{, on the document \(ofs 11, len 1\)$}, 'and the document may itself be the string';
+
+    $r = graft([ ATSPLIT => 't', ',', [ COPY => 5, 1 ], [ AT => 2, $fails ] ])->run({ t => 'a,b,c' });
+    is show([ $r->error->node, $r->partial ]), '[{"path":["t"]},{"t":"a,b,c"}]',
+        'pieces that no longer make a string leave the string as it was, and only the path';
+
+    # Finding this out must not change the failure.
+    my $costly = graft([ ATSPLIT => 't', ',', [ COPY => [ CONCAT => [ 'NODE', 0 ], [ 'NODE', 0 ] ], 0 ], [ AT => 1, $fails ] ]);
+    my $run    = sub ($ops) { $costly->run({ t => join ',', ('abcdefghij') x 10 }, limits => { ops => $ops }) };
+    my ($just) = grep { $run->($_)->error->code eq 'NO_MATCH' } 1 .. 500;      # enough to reach the failure, and no more
+    is $run->($just - 1)->error->code, 'RESOURCE_LIMIT', 'a run can use up its limits before it fails';
+    is length $run->($just)->partial->{t}, 119, 'and its pieces are still joined again, which is work, for the partial document';
+    is show($run->($just)->error->node), '{"len":10,"lim":31,"ofs":21,"path":["t"]}', 'and to say where the node is';
+
+    my ($warning) = graft([ COPY => [ DIV => 1, 0 ], 'a' ])->warnings;
+    is $warning->node, undef, 'what is found when compiling has no node';
 };
 
 subtest 'the public interface' => sub {

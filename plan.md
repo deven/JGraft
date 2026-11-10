@@ -1022,6 +1022,18 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   Faults and warnings are placed by the action being compiled. A node that
   MOVE takes away and nothing replaces is left as null, so that the partial
   tree never holds the engine's placeholder.
+- **A run-time error also says where the current node is** (`node`), which
+  the spec recommends and the plan did not have. It is in the form of a
+  capture: `{ path }` from the root of the partial document, and inside
+  ATSPLIT, where the nodes are pieces of a string, `{ path, ofs, len, lim }`
+  with the path leading to the string. The offsets are worked out only when
+  an error is made (which outside a match is once in a run), by joining the
+  pieces as they stand; nested ATSPLITs add theirs up through a chain of
+  closures (`$x->{piece}`). So that the offsets refer to something, an
+  ATSPLIT that fails puts its pieces back together into the partial document
+  before passing the error on. All of this looking is done by `aside`, with
+  limits off and failures ignored, so that it can never change which error a
+  run reports.
 - **No native-regex translation** (§11.4). Instead three exact, general
   shortcuts: `index` for literal separators, a run loop in REP when its body
   matches exactly one element, and working back from the end for a right-trim

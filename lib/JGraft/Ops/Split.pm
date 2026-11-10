@@ -131,7 +131,9 @@ sub split_string ($x, $plan, $s) {
     return \@part;
 }
 
-sub join_array ($x, $plan, $a) {
+# The elements of $a as one string.  $$begins, if asked for, is set to where
+# the text of element $mark begins in it.
+sub join_array ($x, $plan, $a, $mark = -1, $begins = undef) {
     my $sep     = $plan->{sep};
     my $between = $plan->{keep} ? '' : ref $sep ? undef : $sep;     # fixed, unless separators were captured
     my $default = $between // $plan->{default}->();
@@ -140,6 +142,7 @@ sub join_array ($x, $plan, $a) {
     my $out   = '';
     for my $i (0 .. $#$a) {
         my ($found, $left, $right) = $split ? @{ $split->{m}[$i] // [] } : ();
+        $$begins = length($out) + ($plan->{discard} ? 0 : length($left // '')) if $i == $mark;
         $out .= $plan->{discard} ? $a->[$i] : ($left // '') . $a->[$i] . ($right // '');
         $out .= $between // $found // $default if $i < $#$a;
     }

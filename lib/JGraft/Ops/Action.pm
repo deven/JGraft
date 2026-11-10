@@ -213,6 +213,8 @@ defop SPLICE => 7, 'action', 'PVV*', sub ($c, $ctx, $path, $count, @new) {
 
 # ['ATSPLIT', path, split_spec, action...]: run actions on the pieces of a
 # string, then put the string back together.
+my ($split, $join) = (\&JGraft::Ops::Split::split_string, \&JGraft::Ops::Split::join_array);
+
 defop ATSPLIT => 2, 'action', 'PXA*', sub ($c, $ctx, $path, $spec, @action) {
     $path->{ns} eq 'node' or return $c->fault('ATSPLIT can only navigate within the current node');
     my $plan = JGraft::Ops::Split::spec($c, $ctx, $spec);
@@ -225,14 +227,33 @@ defop ATSPLIT => 2, 'action', 'PXA*', sub ($c, $ctx, $path, $spec, @action) {
         my $p = $plan->($x, $text, @k ? ($k[-1], $x->walk($x->{node}, @k[ 0 .. $#k - 1 ])) : @$x{qw(nkey nparent)});
         is_str($text) or $x->fail_target('ATSPLIT needs a string');
         $p->{default}->() if ref $p->{sep} && !$p->{keep};      # evaluated now, used when joining
-        my $joined;
+
+        # Where piece $i of $pieces is in the document, or (with no $i) where
+        # all of them are, for an error to report: see `locus`.  The string
+        # may itself be a piece, of the ATSPLIT around this one.
+        my ($outer, $around, @path) = ($x->{piece}, $x->{root}, @{ $x->{at} }, @k);
+        my $piece = sub ($pieces, $i = undef, @) {
+            my $whole = $outer ? $outer->($around, @path) : { path => \@path };
+            my ($joined, $begins) = $x->aside(sub { my $all = $join->($x, $p, $pieces, $i // -1, \my $at); ($all, $at) });
+            defined $joined or return $whole;       # as they stand, the pieces do not make a string
+            defined $begins || defined $whole->{ofs} or return $whole;      # the string itself, which is where it was
+            my $ofs = ($whole->{ofs} // 0) + ($begins // 0);
+            my $len = length(defined $begins ? $pieces->[$i] : $joined);
+            return { path => $whole->{path}, ofs => $ofs, len => $len, lim => $ofs + $len };
+        };
+
+        my ($joined, $done, $error);
         {
-            local @$x{qw(root at)} = (JGraft::Ops::Split::split_string($x, $p, $text), []);
+            local @$x{qw(root at piece)} = ($split->($x, $p, $text), [], $piece);
             $x->refresh;
-            $_->($x) for @action;
-            $joined = JGraft::Ops::Split::join_array($x, $p, $x->{root});
+            $done = eval { $_->($x) for @action; $joined = $join->($x, $p, $x->{root}); 1 };
+            if (!$done) {       # a failure leaves the string as its pieces stand, if they still make one
+                $error = $@;
+                ($joined) = $x->aside(sub { $join->($x, $p, $x->{root}) });
+            }
         }
-        $x->put(node => \@k, $joined);
+        $done ? $x->put(node => \@k, $joined) : $x->aside(sub { $x->put(node => \@k, $joined) if defined $joined });
+        die $error unless $done;
     };
 };
 
