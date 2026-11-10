@@ -56,7 +56,33 @@ sub defop ($name, $id, $kind, $args, $build, %flag) {
     $table->{$name} = $table->{$id} = { name => $name, kind => $kind, args => $args, build => $build, %flag };
 }
 
-sub konst ($v) { +{ code => sub { $v }, const => 1, value => $v } }
+# A node for a value that is known now.  A scalar is simply handed out.  An
+# array or object is copied for each evaluation, so that no result shares
+# structure with the graft; and a run is told of any dates it is given.
+sub konst ($v) {
+    my %tally = (dates => 0, objects => 0, widest => 0);
+    my $copy  = copier($v, \%tally);
+    my ($dates, $objects, $widest) = @tally{qw(dates objects widest)};
+    my $code  = $copy  ? sub { my $x = $_[0]; $x->{dates} += $dates; $x->charge_obj($widest, $objects); $copy->() }
+              : $dates ? sub { $_[0]{dates}++; $v }
+              :          sub { $v };
+    return { code => $code, const => 1, value => $v };
+}
+
+# Code that makes a copy of constant $v: new arrays and objects around the
+# same scalars.  (Nothing, if $v is a scalar.)  Counts what a copy will hold.
+sub copier ($v, $tally) {
+    my $array = ref $v eq 'ARRAY';
+    $tally->{dates}++ if ref $v eq 'JGraft::Date';
+    return undef unless $array || ref $v eq 'HASH';
+    my @key  = $array ? 0 .. $#$v : keys %$v;
+    my @deep = grep { $_->[1] } map { [ $_, copier($array ? $v->[$_] : $v->{$_}, $tally) ] } @key;
+    $tally->{objects}++;
+    $tally->{widest} = @key if @key > $tally->{widest};
+    return $array
+        ? sub { my @new = @$v; $new[ $_->[0] ] = $_->[1]->() for @deep; \@new }
+        : sub { my %new = %$v; $new{ $_->[0] } = $_->[1]->() for @deep; \%new };
+}
 
 # A node for $code whose flags are inherited from the nodes it calls.
 sub node ($code, @kids) {
@@ -138,16 +164,12 @@ sub build ($c, $ctx, $row, $s) {
 
 # Constant folding: evaluate now what depends on nothing but the graft, and
 # return a constant node.  Returns nothing for whatever fails or costs too
-# much, which will then behave as it should when a run reaches it, and for
-# arrays and objects, because every run must build its own.
+# much, which will then behave as it should when a run reaches it.
 sub fold ($code) {
     my $x = JGraft::Exec->new(undef, limits => { ops => 10_000, mem => 65_536 });
     $x->{quiet} = 1;
     my $v;
-    return unless eval { $v = $code->($x, $MISSING, undef, undef); 1 };
-    return if ref $v eq 'ARRAY' || ref $v eq 'HASH';
-    return konst($v) unless ref $v eq 'JGraft::Date';
-    return { %{ konst($v) }, code => sub { $_[0]{dates}++; $v } };      # a run needs to know it holds a date
+    return eval { $v = $code->($x, $MISSING, undef, undef); 1 } ? konst($v) : undef;
 }
 
 sub action ($c, $ctx, $s) {
@@ -178,9 +200,10 @@ sub construct ($c, $ctx, $s) {
     my @key  = $hash ? keys %$s : ();
     my @kid  = map { $c->value($ctx, $_) } $hash ? @$s{@key} : @{ $s->[0] };
     my $make = $hash ? sub { my %h; @h{@key} = @_; \%h } : sub { [@_] };
+    return konst($make->(map { $_->{value} } @kid)) unless grep { !$_->{const} } @kid;
     my @code = map { $_->{code} } @kid;
     my @meta = $hash ? () : map { $_->{meta} } @kid;
-    my $n    = node(sub {
+    return node(sub {
         my $x = $_[0];
         $x->charge_obj(scalar @code);
         my $new = $make->(map { $_->(@_) } @code);
@@ -190,10 +213,6 @@ sub construct ($c, $ctx, $s) {
         }
         $new;
     }, @kid);
-    # Literal data is known now, which patterns use; but each evaluation
-    # builds its own copy, so no result ever shares structure with the graft.
-    @$n{qw(const value)} = (1, $make->(map { $_->{value} } @kid)) unless grep { !$_->{const} } @kid;
-    return $n;
 }
 
 # The current node as a value: what an omitted N argument becomes.

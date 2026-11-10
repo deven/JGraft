@@ -88,7 +88,7 @@ subtest 'constant folding' => sub {
     is $folded->([ ADD => 1, ['NODE'] ]), 'not folded', 'not when an operand reads the data';
     is $folded->($_), 'not folded', "not when the current node is implied: $_->[0]"
         for ['LENGTH'], [ POW => 2 ], [ LESS => 5 ], [ ROUND => 2 ], ['CASTNUM'], ['CURPROP'];
-    is $folded->([ CONCAT => [ [1] ], [ [2] ] ]), 'not folded', 'not an array: each run builds its own';
+    is $folded->([ CONCAT => [ [1] ], [ [ { a => 2 } ] ] ]), '[1,{"a":2}]', 'an array, too';
     is $folded->([ DIV => 1, 0 ]),                'not folded', 'not what fails';
     is $folded->([ ROUND => { as => 'STR', at => 1e7 }, '1' ]), 'not folded', 'not what costs too much';
 
@@ -102,8 +102,17 @@ subtest 'constant folding' => sub {
     is graft([ COPY => [ ROUND => { as => 'STR', at => 1e7 }, '1' ], 'a' ])->run({}, limits => { mem => 1e6 })
         ->error->code, 'RESOURCE_LIMIT', 'and limits still apply to what was not folded';
     my $date = graft([ COPY => [ CASTDATE => '2024-02-29' ], 'd', [ CASTDATE => '2024-02-29' ], [ 'STASH', 'd' ] ],
-        [ COPY => [ 'STASH', 'd', 'month' ], 'm' ]);
-    is show($date->apply({})), '{"d":"2024-02-29","m":2}', 'a folded date is still a date inside, and a string outside';
+        [ COPY => [ 'STASH', 'd', 'month' ], 'm' ], [ COPY => { in => [ [ [ CASTDATE => '2024-03-01' ] ] ] }, 'deep' ]);
+    is show($date->apply({})), '{"d":"2024-02-29","deep":{"in":["2024-03-01"]},"m":2}',
+        'a folded date is still a date inside, and a string outside';
+
+    # A folded array or object is a value each run copies, never one it shares.
+    my $list = graft([ COPY => [ CONCAT => [ [ { n => 1 } ] ], [ [2] ] ], 'a', ['NODE', 'a'], 'b' ]);
+    my $one  = $list->apply({});
+    push @{ $one->{a} }, 3;
+    $one->{a}[0]{n} = 9;
+    is show($list->apply({})), '{"a":[{"n":1},2],"b":[{"n":1},2]}', 'changing one result changes no later one';
+    is $list->run({}, limits => { new_obj => 1 })->error->code, 'RESOURCE_LIMIT', 'and the copy counts as new objects';
 };
 
 subtest 'the public interface' => sub {
