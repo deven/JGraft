@@ -114,6 +114,11 @@ defop NUM => 9, 'match', 'V?V?', sub ($c, $ctx, @bound) {
             $x->fail_operand('NUM bounds out of order') if defined $lo && defined $hi && $above->($lo, $hi);
             return is_num($_[1]) && (ref $_[1] || $_[1] - $_[1] == 0) && !(defined $lo && $above->($lo, $_[1])) && !(defined $hi && $above->($_[1], $hi));
         }
+        if ($JGraft::Number::EXACT) {           # (where a number is what Perl writes it as, and may so be equal to a bound)
+            my $above = sub ($a, $b) { JGraft::Number::ordered($a, $b) > 0 };
+            $x->fail_operand('NUM bounds out of order') if defined $lo && defined $hi && $above->($lo, $hi);
+            return created_as_number($_[1]) && $_[1] == $_[1] && !(defined $lo && $above->($lo, $_[1])) && !(defined $hi && $above->($_[1], $hi));
+        }
         $x->fail_operand('NUM bounds out of order') if defined $lo && defined $hi && $lo > $hi;
         created_as_number($_[1]) && (!defined $lo || $_[1] >= $lo) && (!defined $hi || $_[1] <= $hi);
     };

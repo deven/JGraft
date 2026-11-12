@@ -1148,7 +1148,17 @@ Each of these made the code smaller; none changes behaviour the suite can see.
     not merely if Perl writes it so: 1e15 / 3 prints as an integer). It
     follows that binary noise is dropped (0.30000000000000004 is 0.3), and
     that a number of more than fifteen digits is exact only if it arrives
-    as an object. So an exact
+    as an object.
+  - *Comparison likewise.* In an exact run two of Perl's numbers that are
+    not `==` are still equal if Perl writes them as the same number
+    (`Number::equal`, `ordered`): in `match_lit`, the literal matchers,
+    `compare` (LESS, LESSEQ), `NUM` and `CASTBOOL`. The test costs nothing
+    until `==` has said no. Much of this code has no run to ask, so the
+    run's flag is also `$JGraft::Number::EXACT`, set with `local` by `run`
+    (and to 'fold' while a constant is evaluated, where a comparison that
+    would come out differently dies and is left for the runs). Not done:
+    `is_int`. A number that is nearly whole is not an index or a count in
+    any run; it is refused, which is at least not a wrong answer. So an exact
     run of ordinary data gives ordinary data, and goes on exactly from it.
   - *A whole number has no places*: 1e2 is 100, and 150e28 is 15e29.
   - *The flag is the run's*, not the graft's, so one compiled graft serves

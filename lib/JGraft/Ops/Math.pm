@@ -59,7 +59,7 @@ my %CAST = (
     CASTBOOL => [ 68, sub ($x, $v) {
         my $t = type_of($v);
         return $t == T_BOOL ? ($v ? $TRUE : $FALSE)
-             : $t == T_NUM && ($v == 0 || $v == 1) ? ($v ? $TRUE : $FALSE)
+             : $t == T_NUM && ($v == 0 || $v == 1 || !ref $v && JGraft::Number::equal($v, 1)) ? ($v ? $TRUE : $FALSE)
              : $t == T_STR && $v eq 'true'  ? $TRUE
              : $t == T_STR && $v eq 'false' ? $FALSE
              : $x->fail_target('cannot be cast to a boolean');
@@ -117,7 +117,7 @@ defop DATE => 11, 'match', '', sub ($c, $ctx) {
 sub compare ($x, $a, $b) {
     my $t = type_of($a);
     $t == type_of($b) or $x->fail_target('cannot compare values of different types');
-    return (ref $a || ref $b ? do { finite($x, $a, $b); JGraft::Number::order($a, $b) } : $a <=> $b) // $x->fail_target('cannot compare NaN')
+    return (ref $a || ref $b ? do { finite($x, $a, $b); JGraft::Number::order($a, $b) } : JGraft::Number::ordered($a, $b)) // $x->fail_target('cannot compare NaN')
         if $t == T_NUM;
     return $a cmp $b                                         if $t == T_STR;
     return ($a ? 1 : 0) <=> ($b ? 1 : 0)                     if $t == T_BOOL;

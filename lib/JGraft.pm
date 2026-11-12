@@ -75,6 +75,7 @@ sub run ($self, $input, %opt) {
     options(run => \%RUN, %opt);
     # the limits given to `new` are those of every run, but for what a run is given of its own
     my $x = JGraft::Exec->new($input, %opt, limits => { %{ $self->{limits} }, %{ $opt{limits} // {} } }, dates => $self->{dates});
+    local $JGraft::Number::EXACT = $x->{exact};      # for the comparisons that have no run to ask
     return bless { ok => 1, output => $x->{root}, logs => $x->{logs}, input => $input }, 'JGraft::Result'
         if eval { $self->{code}->($x); 1 };
     my $error = $@;
@@ -408,8 +409,15 @@ writes it as, and never the binary number that Perl holds: the 0.1 of a
 Perl program is a tenth, though what is held is a little more.  Perl writes
 fifteen digits, so a number that some earlier binary arithmetic has left as
 0.30000000000000004 is 0.3 here.  A number with more digits than that has to
-arrive exact to be exact: read by C<JGraft::JSON> with C<exact>, or cast
-from a string by C<CASTNUM>.
+arrive exact to be exact: read by C<JGraft::JSON>, or cast from a string by
+C<CASTNUM>.
+
+Comparison goes the same way.  In an exact run two numbers are equal if
+Perl writes them as the same number, whichever kind each is: so the
+0.30000000000000004 that binary arithmetic made of 0.1 and 0.2 matches 0.3,
+is not less than it, and lies within a bound of it.  (An index or a count
+is another matter.  A number that is nearly whole is not one, in any run,
+and is refused where a whole number is needed.)
 
 It costs time: some tens of times what Perl's own arithmetic does, for each
 operation that is not on whole numbers, and more for numbers longer than

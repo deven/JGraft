@@ -199,6 +199,29 @@ sub div ($a, $b) {
 #---------------------------------------------------------------------------
 # Comparison
 
+# Is the run that is under way exact?  ('fold' while a constant expression is
+# being evaluated, when it is not known which the runs will be.)  JGraft::run
+# sets it for as long as the run lasts.  It is here, and not only in the
+# run's own state, because numbers are compared in places that have no run
+# to ask.
+our $EXACT;
+
+# Two of Perl's own numbers that Perl does not hold to be equal: are they
+# equal all the same?  To an exact run they are if Perl writes them as the
+# same number, for that is what each of them is (see `parts`).
+sub equal ($a, $b) {
+    return 0 unless $EXACT && $a == $a && $b == $b;
+    return 0 unless "$a" eq "$b" || 0 + "$a" == 0 + "$b";
+    die "it depends on whether the run is exact\n" if $EXACT eq 'fold';
+    return 1;
+}
+
+# The order of two of Perl's own numbers, as the run that is under way has it.
+sub ordered ($a, $b) {
+    my $order = $a <=> $b;
+    return $order && $EXACT && equal($a, $b) ? 0 : $order;
+}
+
 # Which of two numbers is the greater: -1, 0 or 1, as <=> gives.
 sub order ($a, $b) {
     # (an infinity, or what is not a number at all, is no decimal; Perl compares those as it does)

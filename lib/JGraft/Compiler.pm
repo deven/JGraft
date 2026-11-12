@@ -238,6 +238,7 @@ sub fold ($c, $ctx, $s, $n) {
     # Whether the runs will be exact is not known yet.  Arithmetic that would
     # come out differently is left for them: it dies here, and is not folded.
     $x->{exact} = 1;
+    local $JGraft::Number::EXACT = 'fold';
     $x->{src} = 1;      # an object it makes keeps its order, in case it is wanted (see Exec::object)
     my $v;
     my $done  = eval { $v = $n->{code}->($x, $MISSING, undef, undef); 1 };
@@ -459,7 +460,11 @@ sub matcher ($c, $ctx, $v) {
     return { lit => $lit, code =>
           $t == T_STR  ? sub { defined $_[1] && !ref $_[1] && !created_as_number($_[1]) && !is_bool($_[1]) && $_[1] eq $lit }
         : $t == T_NUM  ? (ref $lit ? sub { is_num($_[1]) && !JGraft::Number::order($_[1], $lit) }
-                                   : sub { ref $_[1] ? is_num($_[1]) && !JGraft::Number::order($_[1], $lit) : created_as_number($_[1]) && $_[1] == $lit })
+                                   : sub {
+                                         return is_num($_[1]) && !JGraft::Number::order($_[1], $lit) if ref $_[1];
+                                         # (to an exact run, a number is what Perl writes it as)
+                                         created_as_number($_[1]) && ($_[1] == $lit || $JGraft::Number::EXACT && JGraft::Number::equal($_[1], $lit));
+                                     })
         : $t == T_NULL ? sub { !defined $_[1] }
         :                sub { match_lit($_[1], $lit, $exact) } };
 }

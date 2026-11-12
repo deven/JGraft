@@ -81,7 +81,7 @@ sub is_idx { !defined $_[0] || is_num($_[0]) }
 sub match_lit ($v, $p, $exact, $x = undef) {
     my $t = type_of($p);
     return 0 unless $t == type_of($v);
-    return ref $v || ref $p ? !JGraft::Number::order($v, $p) : $v == $p if $t == T_NUM;
+    return ref $v || ref $p ? !JGraft::Number::order($v, $p) : $v == $p || $JGraft::Number::EXACT && JGraft::Number::equal($v, $p) if $t == T_NUM;
     return $v eq $p   if $t == T_STR;
     return 1          if $t == T_NULL;
     return !$v == !$p if $t == T_BOOL;

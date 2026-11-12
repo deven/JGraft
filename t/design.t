@@ -1349,6 +1349,36 @@ subtest 'numbers that are exact' => sub {
     ok JGraft->new([ JGRAFT => {}, [ COPY => [ IS => [ CASTNUM => '0.30' ], ['NODE'] ], ['NODE'] ] ])->apply($near03, exact => 1),
         'and an exact number is compared with what Perl writes';
 
+    # And so two of Perl's numbers are compared, in an exact run, as what Perl writes them as:
+    # though neither is an exact number, each stands for one.
+    my @held = ($near03, 0.3, $near03 + $near03, 0.6);
+    ok $held[0] != $held[1] && $held[2] != $held[3], '(two pairs of numbers that Perl holds to be different, and writes the same)';
+    my $asks = sub ($expr, %opt) {
+        my $v = JGraft->new([ JGRAFT => {}, [ COPY => $expr, ['NODE'] ] ])->apply(\@held, %opt);
+        return ref $v eq 'JSON::PP::Boolean' ? ($v ? 'true' : 'false') : $v;
+    };
+    my @n = map { [ NODE => $_ ] } 0 .. 3;
+    for (
+        [ 'a number that binary arithmetic left near 0.3 is 0.3',      [ IS => $n[0], $n[1] ],                              'true',  'false' ],
+        [ '... matched against one written in the graft',              [ IS => $n[0], 0.3 ],                                'true',  'false' ],
+        [ '... or inside a pattern',                                   [ CASE => [ [ 0.3, 0.3 ] ], 'yes', 'no' ],           'yes',   'no' ],
+        [ '... or inside a value that is compared whole',              [ IS => [ SLICE => ['NODE'], 0, 2 ], [ [ 0.3, 0.3 ] ] ], 'true', 'false' ],
+        [ 'two of them added are the 0.6 in the data',                 [ IS => [ ADD => $n[0], $n[0] ], $n[3] ],            'true',  'false' ],
+        [ '... as is the sum that Perl had made of them',              [ IS => $n[2], $n[3] ],                              'true',  'false' ],
+        [ 'it is not more than 0.3',                                   [ LESS => $n[1], $n[0] ],                            'false', 'true' ],
+        [ '... but no less',                                           [ LESSEQ => $n[0], $n[1] ],                          'true',  'false' ],
+        [ '... and within a bound of 0.3',                             [ CASE => [ [ [ NUM => 0, 0.3 ] ] ], 'in', 'out' ], 'in',    'out' ],
+        [ 'what was different is different still',                     [ IS => $n[1], $n[3] ],                              'false', 'false' ],
+    ) {
+        my ($name, $expr, $exact, $not) = @$_;
+        is $asks->($expr, exact => 1), $exact, $name;
+        is $asks->($expr), $not, '    (and not so in a run that is not exact)';
+    }
+    my $either = JGraft->new([ JGRAFT => {}, [ COPY => [ IS => 0.30000000000000004, 0.3 ], ['NODE'] ] ]);
+    is join(' ', map { $_ ? 'true' : 'false' } $either->apply(undef, exact => 1), $either->apply(undef), $either->apply(undef, exact => 1)), 'true false true',
+        'a comparison written in the graft is each run\'s own to make';
+    ok !$JGraft::Number::EXACT, 'and when no run is under way, numbers are compared as Perl compares them';
+
     # One graft, compiled once, is exact or not as each run is.
     my $both = JGraft->new([ JGRAFT => {}, [ COPY => [ [ [ ADD => 0.1, 0.2 ], [ ADD => 1, 2 ], [ ROUND => { at => 25, as => 'NUM' }, '0.1234567890123456789012345' ] ] ], ['NODE'] ] ]);
     is JGraft::JSON->encode($both->apply(undef, exact => 1)), '[0.3,3,0.1234567890123456789012345]', 'arithmetic written in the graft is exact in a run that is';
