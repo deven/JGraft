@@ -395,12 +395,17 @@ Numbers of that class, and C<Math::BigInt> and C<Math::BigFloat> objects, are
 numbers wherever they are met in the data or in a graft, in any run, and
 arithmetic on one is exact whether or not the run is.
 
+One of Perl's own numbers is, in exact arithmetic, the decimal that Perl
+writes it as, and never the binary number that Perl holds: the 0.1 of a
+Perl program is a tenth, though what is held is a little more.  Perl writes
+fifteen digits, so a number that some earlier binary arithmetic has left as
+0.30000000000000004 is 0.3 here.  A number with more digits than that has to
+arrive exact to be exact: read by C<JGraft::JSON> with C<exact>, or cast
+from a string by C<CASTNUM>.
+
 It costs time: some tens of times what Perl's own arithmetic does, for each
 operation that is not on whole numbers, and more for numbers longer than
-eighteen digits.  One of Perl's own numbers is taken for the shortest
-decimal that reads back as it, so a number that some earlier binary
-arithmetic has left as 1.2899999999999998 is exactly that, with all its
-digits, and sums of such are long.
+eighteen digits.
 
 =head1 THE OUTPUT IS READ-ONLY
 

@@ -1136,9 +1136,17 @@ Each of these made the code smaller; none changes behaviour the suite can see.
     is what `JSON::PP` and `Cpanel::JSON::XS` write: a number of seventeen
     digits made native would have been written by them as fifteen. Nothing
     is lost by the replacement, since an exact run takes one of Perl's
-    numbers for the decimal Perl writes it as, when that reads back as the
-    number (and for the shortest that does, when it does not): the object
-    and its replacement have the same coefficient and exponent. So an exact
+    numbers for the decimal Perl writes it as: the object and its
+    replacement have the same coefficient and exponent.
+  - *A Perl number is what Perl writes, never what it holds*
+    (`Number::parts` scans `"$n"`). The binary value must not reach a
+    calculation that is to be exact, or its error is in the result. This
+    holds on the short way that whole numbers take too (`Math::exactly`
+    computes with `0 + "$a"`, and takes a result for whole only if it is,
+    not merely if Perl writes it so: 1e15 / 3 prints as an integer). It
+    follows that binary noise is dropped (0.30000000000000004 is 0.3), and
+    that a number of more than fifteen digits is exact only if it arrives
+    as an object. So an exact
     run of ordinary data gives ordinary data, and goes on exactly from it.
   - *A whole number has no places*: 1e2 is 100, and 150e28 is 15e29.
   - *The flag is the run's*, not the graft's, so one compiled graft serves

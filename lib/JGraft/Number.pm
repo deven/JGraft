@@ -42,14 +42,6 @@ sub wide ($c)  { require Math::BigInt; ref $c ? $c : Math::BigInt->new("$c") }
 sub lower ($c) { ref $c && $c->length <= $LONG ? 0 + $c->bstr : $c }
 sub len ($c)   { ref $c ? $c->length : length(abs $c) }
 
-# The decimal that one of Perl's numbers stands for: the shortest that reads back as it.
-sub text ($n) {
-    my $text = "$n";
-    return $text if $text == $n;
-    $text = sprintf '%.16g', $n;
-    return $text == $n ? $text : sprintf '%.17g', $n;
-}
-
 # The coefficient and exponent written in a text, just as they are written:
 # "0.30" is 30 and -2.  Nothing, if the text is not a number.
 sub scan ($text) {
@@ -65,13 +57,18 @@ sub scan ($text) {
 }
 
 # The coefficient and exponent of any number.
+#
+# One of Perl's own numbers is the decimal that Perl writes it as, and never
+# the binary number that Perl holds.  That is what makes 0.1 a tenth: held, it
+# is 0.1000000000000000055511151231257827, and what is held must not get into
+# a calculation that is to be exact.  Perl writes fifteen digits, so a number
+# that some binary arithmetic has left as 0.30000000000000004 is 0.3 here.
 sub parts ($n) {
     my $kind = ref $n;
     return @$n if $kind eq __PACKAGE__;
     if (!$kind) {
         my $text = "$n";
-        return (0 + $n, 0) if $text =~ /\A-?[0-9]{1,18}\z/;
-        return scan($text == $n ? $text : text($n));
+        return $text =~ /\A-?[0-9]{1,18}\z/ ? (0 + $text, 0) : scan($text);
     }
     return (lower($n), 0) if $kind eq 'Math::BigInt';
     my ($mantissa, $exponent) = $n->parts;      # Math::BigFloat

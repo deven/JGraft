@@ -1324,6 +1324,25 @@ subtest 'numbers that are exact' => sub {
         '... in another run too, to which it was handed as plain data';
     is ref $chain->([ ADD => [ CASTNUM => '0.30000000000000004' ], 0 ], exact => 1), 'JGraft::Number', 'more digits than Perl writes are kept as they are';
 
+    # One of Perl's numbers is, in exact arithmetic, the decimal that Perl writes: never the
+    # binary number that Perl holds, whose error would otherwise be part of the result.
+    my ($near3, $near03) = (1.5 + 1.5000000000000004, 0.1 + 0.2);
+    ok $near3 != 3 && "$near3" eq '3' && $near03 != 0.3 && "$near03" eq '0.3', '(two numbers that are not what Perl writes them as)';
+    my $from = sub ($expr) {
+        my $v = JGraft->new([ JGRAFT => {}, [ COPY => $expr, ['NODE'] ] ])->apply([ $near3, $near03 ], exact => 1);
+        return (ref $v ? 'object ' : '') . sprintf '%s, held as %.17g', $v, $v;
+    };
+    my ($N3, $N03) = ([ NODE => 0 ], [ NODE => 1 ]);
+    is $from->([ ADD => $N03, 0.6 ]), sprintf('0.9, held as %.17g', 0.9), 'a sum takes a number for what Perl writes';
+    is $from->([ ADD => $N03 ]), sprintf('0.3, held as %.17g', 0.3), '... even a sum of the one number';
+    is $from->([ ADD => $N3, $N3 ]), '6, held as 6', 'so do whole numbers, which go a shorter way';
+    is $from->([ MUL => $N3, 1e15 ]), '3000000000000000, held as 3000000000000000', '... in a product';
+    is $from->([ MOD => 7, $N3 ]), '1, held as 1', '... a remainder';
+    is $from->([ POW => 2, $N3 ]), '8, held as 8', '... and a power';
+    is $from->([ DIV => 1e15, 3 ]), 'object 333333333333333.' . '3' x 25 . ', held as 333333333333333.31', 'a quotient that Perl would write as whole, and is not, is not taken for whole';
+    ok JGraft->new([ JGRAFT => {}, [ COPY => [ IS => [ CASTNUM => '0.30' ], ['NODE'] ], ['NODE'] ] ])->apply($near03, exact => 1),
+        'and an exact number is compared with what Perl writes';
+
     # One graft, compiled once, is exact or not as each run is.
     my $both = JGraft->new([ JGRAFT => {}, [ COPY => [ [ [ ADD => 0.1, 0.2 ], [ ADD => 1, 2 ], [ ROUND => { at => 25, as => 'NUM' }, '0.1234567890123456789012345' ] ] ], ['NODE'] ] ]);
     is JGraft::JSON->encode($both->apply(undef, exact => 1)), '[0.3,3,0.1234567890123456789012345]', 'arithmetic written in the graft is exact in a run that is';

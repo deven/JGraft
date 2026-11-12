@@ -172,7 +172,7 @@ my %STEP = (
         # it is negative.  Any other is Perl's own, and no more exact than that.
         sub ($x, $base, $power) {
             return power($x, 0 + $base, 0 + $power) unless JGraft::Number::whole($power) && abs($power) < 1e15;
-            my $n = abs(0 + $power);
+            my $n = abs(0 + "$power");
             # (what it will cost is known beforehand: a number of $n times as many digits)
             my $size = JGraft::Number::same(1, (JGraft::Number::least($base))[0]) ? 1 : $n * JGraft::Number::digits($base);
             $size <= 1e9 or $x->fail(UNSUPPORTED_GRAFT => 'number out of range');
@@ -232,9 +232,10 @@ sub exactly ($x, $op, $a, $b) {
     else {
         created_as_number($a) && created_as_number($b) && $a - $a == 0 && $b - $b == 0 or $x->fail_target("$op needs numbers");
         $check->($x, $a, $b) if $check;
+        # (the numbers are what Perl writes them as, as they are in decimal: see JGraft::Number::parts)
         if ($WHOLE{$op} && exact($a) && exact($b)) {
-            my $r = $WHOLE{$op}->($a, $b);
-            return $r if exact($r);
+            my $r = $WHOLE{$op}->(0 + "$a", 0 + "$b");
+            return $r if exact($r) && $r == int $r;
         }
         undecided($x);
     }
@@ -256,8 +257,8 @@ for ([ ADD => 74, 0 ], [ MUL => 76, 1 ]) {
             my $result = $identity;
             for my $n (@n) {
                 if (ref $n || ref $result || $x->{exact}) {
-                    # (the first is itself, and not to be thought any the less exact for being added to nothing)
-                    $result = \$n == \$n[0] && is_num($n) && (ref $n || $n - $n == 0) ? $n : exactly($x, $op, $result, $n);
+                    # (the first, if it is exact already, is itself)
+                    $result = ref $n && \$n == \$n[0] && is_num($n) ? $n : exactly($x, $op, $result, $n);
                     finite($x, $n) if ref $n;
                     next;
                 }
