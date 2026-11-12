@@ -1128,10 +1128,18 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   the engine's own, some two hundred lines, with `Math::BigInt` for a
   coefficient of more than eighteen digits and Perl's integers for the rest.
   Decisions:
-  - *The result is Perl's own number wherever that says as much*, and an
-    object only otherwise (0.30; more digits than Perl keeps; out of range).
-    So an exact run of ordinary data gives ordinary data. One of Perl's
-    numbers is taken for the shortest decimal that reads back as it.
+  - *The result is Perl's own number if and only if Perl writes that number
+    as the same digits* (`"$n"` scans to the same coefficient and exponent),
+    and an object otherwise: 0.30; more than the fifteen digits Perl writes,
+    or than an integer holds; out of range. The test is Perl's own
+    stringification and not the shortest text that reads back, because that
+    is what `JSON::PP` and `Cpanel::JSON::XS` write: a number of seventeen
+    digits made native would have been written by them as fifteen. Nothing
+    is lost by the replacement, since an exact run takes one of Perl's
+    numbers for the decimal Perl writes it as, when that reads back as the
+    number (and for the shortest that does, when it does not): the object
+    and its replacement have the same coefficient and exponent. So an exact
+    run of ordinary data gives ordinary data, and goes on exactly from it.
   - *A whole number has no places*: 1e2 is 100, and 150e28 is 15e29.
   - *The flag is the run's*, not the graft's, so one compiled graft serves
     both; it defaults to how the document was read (the root's record says).

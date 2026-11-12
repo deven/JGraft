@@ -378,11 +378,15 @@ billion digits is not attempted (C<UNSUPPORTED_GRAFT>).
 
 =back
 
-The numbers that come out are Perl's own wherever Perl's number says as
-much: 0.3 is, and 12, and whatever else Perl would have got right.  Only one
-that Perl's would not hold is an object, a L<JGraft::Number>: a number
-written to a place that Perl would drop (0.30), one of more digits than
-Perl keeps, or one beyond its range.  Such an object reads as the number
+A number that comes out is one of Perl's own if, and only if, Perl writes
+that number as the same digits: 0.3 is, and 12, and 1e25.  Nothing is lost
+by it.  Whatever then prints or encodes the number says what the exact
+number said, and an exact run that meets it again reads it as those digits,
+so that a calculation goes on from it exactly.  Any other number is an
+object, a L<JGraft::Number>: one written to a place that Perl would drop
+(0.30), one of more than the fifteen digits that Perl writes or of more
+than its integers hold, or one beyond its range.  Such an object reads as
+the number
 (C<"$n"> is C<0.30>), compares as it, and can be calculated with as Perl
 calculates (C<$n + 1>, inexactly); C<< JGraft::JSON->encode >> writes it
 in full, as C<write> does.

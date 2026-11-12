@@ -1300,6 +1300,30 @@ subtest 'numbers that are exact' => sub {
     is JGraft->new([ JGRAFT => {}, [ COPY => [ CASTNUM => '1e400' ], ['NODE'] ] ])->run(undef)->error->code, 'UNSUPPORTED_GRAFT', '... and refuses what Perl cannot hold';
     is $made->([ CASTSTR => [ CASTNUM => '1e400' ] ]), '1e+400', 'which an exact run does not';
 
+    # It is Perl's own number if and only if Perl writes that number as the same digits; and
+    # then nothing is lost by it, for an exact run reads the number back as those digits.
+    for my $text (qw(0.3 12345678901234.5 1e25 1.5e300 1e-300 1e-7 18446744073709551615 -2.5 100)) {
+        my $n = JGraft::Number::read($text);
+        ok !ref $n && join('e', JGraft::Number::scan("$n")) eq join('e', JGraft::Number::scan($text))
+            && join('e', JGraft::Number::scan(JSON::PP->new->allow_nonref->encode($n))) eq join('e', JGraft::Number::scan($text)),
+            "$text is Perl's own number, which Perl and JSON::PP write as the same";
+    }
+    is ref JGraft::Number::read($_), 'JGraft::Number', "$_ is not, for Perl would write it otherwise"
+        for qw(0.30 0.30000000000000004 123456789012345.6 18446744073709551616 5e-324 1e400 100e-2);
+    my $chain = sub ($expr, %opt) { JGraft->new([ JGRAFT => {}, [ COPY => $expr, ['NODE'] ] ])->apply([ 0.1, 0.2, 0.3 ], %opt) };
+    my $tenths  = [ ADD => [ NODE => 0 ], [ NODE => 1 ] ];
+    ok $chain->([ IS => $tenths, [ NODE => 2 ] ], exact => 1), 'a tenth and two tenths, exact, are the three tenths in the data';
+    ok !$chain->([ IS => $tenths, [ NODE => 2 ] ]), '... which in Perl\'s arithmetic they are not';
+    my $ten = $chain->([ ADD => (0.1) x 10 ], exact => 1);
+    ok $ten == 1 && "$ten" eq '1.0', 'ten tenths are one (known to the tenth, and so 1.0)';
+    ok $chain->([ ADD => (0.1) x 10 ]) != 1, '... which in Perl\'s arithmetic they are not either';
+    my $went = $chain->([ SUB => [ MUL => [ ADD => $tenths, 0.61 ], 3 ], 0.01 ], exact => 1);
+    ok !ref $went && "$went" eq '2.72', 'a calculation that goes on from a number of Perl\'s own goes on exactly';
+    my $first = JGraft->new([ JGRAFT => {}, [ COPY => $tenths, 2 ] ])->apply([ 0.1, 0.2, 0 ], exact => 1);
+    ok !ref $first->[2] && JGraft->new([ JGRAFT => {}, [ COPY => [ IS => [ ADD => [ NODE => 2 ], 0.6 ], 0.9 ], ['NODE'] ] ])->apply($first, exact => 1),
+        '... in another run too, to which it was handed as plain data';
+    is ref $chain->([ ADD => [ CASTNUM => '0.30000000000000004' ], 0 ], exact => 1), 'JGraft::Number', 'more digits than Perl writes are kept as they are';
+
     # One graft, compiled once, is exact or not as each run is.
     my $both = JGraft->new([ JGRAFT => {}, [ COPY => [ [ [ ADD => 0.1, 0.2 ], [ ADD => 1, 2 ], [ ROUND => { at => 25, as => 'NUM' }, '0.1234567890123456789012345' ] ] ], ['NODE'] ] ]);
     is JGraft::JSON->encode($both->apply(undef, exact => 1)), '[0.3,3,0.1234567890123456789012345]', 'arithmetic written in the graft is exact in a run that is';

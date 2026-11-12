@@ -11,10 +11,13 @@ package JGraft::Number;
 # to as many places as the finer of its terms, a product to as many as its
 # factors together, and nothing is rounded but a quotient that never ends.
 #
-# The result of a calculation is one of Perl's own numbers wherever that says
-# as much: 0.3 is, and 12.  It is an object of this class only where Perl's
-# number would say less: 0.30, which Perl would make 0.3; a number of more
-# digits than Perl keeps, or beyond its range.  An object is
+# The result of a calculation is one of Perl's own numbers if, and only if,
+# Perl would write that number as the same digits: 0.3 is, and 12.  So
+# whatever is done with it afterwards, by Perl or by a JSON encoder, says what
+# the exact number said.  It is an object of this class where Perl would write
+# something else: 0.30, which Perl would make 0.3; a number of more than the
+# fifteen digits Perl writes, or of more than an integer holds; one beyond
+# Perl's range.  An object is
 # [ coefficient, exponent ], and the coefficient a Math::BigInt if it has
 # more than eighteen digits.  It is never changed once made.
 #
@@ -97,14 +100,16 @@ sub make ($c, $e) {
     }
     elsif (!$e || !$c && $e > 0)             { return $c }
     elsif ($e > 0 && $length + $e <= 20 && fits($c . '0' x $e)) { return 0 + ($c . '0' x $e) }
-    elsif ($length <= 17 && abs($e) < 400) {
+    elsif ($length <= 15 && abs($e) < 400) {
         # As a number of Perl's it must still say the same digits, to the same
-        # place: 1.5 does, and 1.50 does not.  Fifteen digits that do not end
-        # in a zero always do, and are not looked at again.
-        return 0 + "${c}e$e" if $e < 0 && $e > -280 && $length <= 15 && $c % 10;
+        # place, when Perl writes it: 1.5 does, and 1.50 does not; nor does a
+        # number of more than the fifteen digits that Perl writes.  Within its
+        # range, fifteen digits that do not end in a zero always do, and are
+        # not looked at again.
+        return 0 + "${c}e$e" if $e < 0 && $e > -280 && $c % 10;
         my $n = 0 + "${c}e$e";
         if ($n - $n == 0) {
-            my ($c2, $e2) = parts($n);
+            my ($c2, $e2) = scan("$n");
             return $n if $e2 == $e && $c2 == $c;
         }
     }
