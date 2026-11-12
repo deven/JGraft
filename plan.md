@@ -1117,8 +1117,10 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   then would have changed the graft. An error that names an expression
   still names the caller's own (`JGraft::theirs`). The defaults stay
   unlimited, as Perl's own are.
-- **Exact numbers** (`JGraft::Number`; the comparison's item 6). Asked for
-  by `exact => 1`, given to `JGraft::JSON->parse` or to `run`, arithmetic is
+- **Exact numbers** (`JGraft::Number`; the comparison's item 6). The way
+  `JGraft::JSON->parse` reads a text unless given `exact => 0` (a layer
+  whose point is to give the text back has no business rounding its
+  numbers), and asked of a run on other data by `exact => 1`: arithmetic is
   done in decimal on a whole coefficient and a power of ten, by the rules of
   the General Decimal Arithmetic specification: so 0.1 + 0.2 is 0.3, and
   0.10 + 0.20 is 0.30, the places a number was written with being kept.

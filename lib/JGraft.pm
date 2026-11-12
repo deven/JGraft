@@ -299,7 +299,7 @@ whole of the changed stretch is written anew.)
 What is new is written as compactly as JSON allows, between separators like
 those already there.
 
-C<< $doc->data >> is ordinary data, with two differences.  Its objects are
+C<< $doc->data >> is ordinary data, with three differences.  Its objects are
 ordered hashes (L<JGraft::Ordered>, a tied hash that any Perl code can read
 and write as a hash); matching against them costs about half as much again
 as against plain ones.  And a byte in a string that is not UTF-8 is read as
@@ -311,10 +311,16 @@ UTF-8, and are read byte by byte, so every text comes back as it was.  A
 string holding some other character past 0x10FFFF cannot have come from a
 text, and C<write> dies if given one.  If a graft joins strings so that
 such bytes come together and spell a character between them (the two halves
-of one that had been cut in two, say), they become that character.  A number
-too large or too precise for Perl is seen by the graft as the nearest one
-Perl has, and keeps its spelling if the graft leaves it alone; unless the
-text is read with its numbers exact, as the next section describes.
+of one that had been cut in two, say), they become that character.  And
+its numbers are read with every digit they have (L</EXACT NUMBERS>): one
+that Perl would not write as the same digits, such as C<1.50> or an integer
+of thirty digits, is a L<JGraft::Number> and not a number of Perl's own.
+
+    my $doc = JGraft::JSON->parse($bytes, exact => 0);
+
+reads them as Perl reads numbers instead.  A number too large or too
+precise for Perl is then seen by the graft as the nearest one Perl has,
+though it still keeps its spelling if the graft leaves it alone.
 
 The graft may be read the same way, C<< JGraft->new(JGraft::JSON->parse($g)->data) >>,
 and then an object written in it gives its properties to the output in the
@@ -327,17 +333,19 @@ takes an array or object that was read to be still as it was read.
 
 Arithmetic in a graft is Perl's own, as the specification has it, and so
 C<[ADD, 0.1, 0.2]> is 0.30000000000000004, and an integer of thirty digits
-is only nearly itself.  It can be done in decimal instead, as on paper:
+is only nearly itself.  It can be done in decimal instead, as on paper, and
+for a text read by L<JGraft::JSON> it is:
 
-    my $doc  = JGraft::JSON->parse($bytes, exact => 1);
+    my $doc  = JGraft::JSON->parse($bytes);
     my $text = $doc->write($graft->apply($doc->data));
 
-    my $output = $graft->apply($data, exact => 1);      # or for data that is Perl's own
+    my $output = $graft->apply($data, exact => 1);      # for data that is Perl's own, it is asked for
 
-C<exact> given to C<parse> reads every number with every digit it has, and a
-run on a document read so is exact unless told otherwise (C<< exact => 0 >>).
-A document that is nothing but one number or string has nowhere to say how
-it was read: give C<exact> to the run.
+C<parse> reads every number with every digit it has, unless it is given
+C<< exact => 0 >>; and a run on a document read so is exact, unless the run
+is given C<< exact => 0 >>.  A run on any other data is exact if it is given
+C<< exact => 1 >>.  A document that is nothing but one number or string has
+nowhere to say how it was read: give C<exact> to the run.
 
 In an exact run:
 

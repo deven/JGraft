@@ -48,7 +48,7 @@ our $EXACT;      # is the text being written one whose numbers were read exactly
 sub parse ($class, $text, %opt) {
     my @unknown = grep { $_ ne 'exact' } sort keys %opt;
     die "JGraft::JSON->parse: unknown option @unknown\n" if @unknown;
-    my $exact = $opt{exact};
+    my $exact = $opt{exact} // 1;       # numbers are read with every digit they have, unless it is asked otherwise
     utf8::downgrade($text, 1) or utf8::encode($text);       # bytes, however they were handed over
     my $src   = \$text;
     my $fail  = sub ($what) { die sprintf "JGraft::JSON: %s at byte %d\n", $what, pos($text) // 0 };

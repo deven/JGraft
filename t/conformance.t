@@ -89,7 +89,9 @@ sub check ($t, $strict) {
     }
     # The same graft on the same document, read from a text.
     if ($result) {
-        my $doc   = JGraft::JSON->parse($json->encode($t->{input}));
+        # (its numbers read with every digit, as they are unless it is asked otherwise, in one of the two passes;
+        # and as Perl reads them in the other)
+        my $doc   = JGraft::JSON->parse($json->encode($t->{input}), exact => $strict);
         my $again = eval { JGraft->new($t->{jgraft}, strict => $strict, limits => $t->{limits} // {})->run($doc->data, limits => $t->{limits} // {}) }
             or return "from a text, it died: $@";
         my ($left, $now) = map { $_->ok ? $_->output : $_->partial } $result, $again;

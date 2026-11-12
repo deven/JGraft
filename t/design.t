@@ -1063,8 +1063,11 @@ subtest 'JSON is written back as it was read' => sub {
         '{"b": 1, "a": 2, "when": "2024-02-29", "o": {"a":1,"z":"2024-03-01"}}', 'dates on their way out do not disturb it';
     my $undone = JGraft::JSON->parse('{"b": 1.0, "a": [1, 2]}');
     my $run    = graft([ MOVE => 'b', 'c' ], [ SPLICE => [ 'NODE', 'a', 0 ], 1 ])->run($undone->data);
-    is $undone->write(JGraft->new($run->undo)->apply($run->output)), '{"a": [1, 2], "b": 1}',
-        'an undo graft applies to such a document as to any other (though what it puts back, it writes anew)';
+    is $undone->write(JGraft->new($run->undo)->apply($run->output)), '{"a": [1, 2], "b": 1.0}',
+        'an undo graft applies to such a document as to any other (what it puts back it writes anew, a number with the places it had)';
+    my $plainly = JGraft::JSON->parse('{"b": 1.0, "a": [1, 2]}', exact => 0);
+    $run = graft([ MOVE => 'b', 'c' ], [ SPLICE => [ 'NODE', 'a', 0 ], 1 ])->run($plainly->data);
+    is $plainly->write(JGraft->new($run->undo)->apply($run->output)), '{"a": [1, 2], "b": 1}', '... which are not known if the text was read as Perl reads numbers';
 
     # A value that moves takes its spelling with it.
     is $edit->('{"x":1.50,"y":[]}', [ MOVE => 'x', [ 'NODE', 'y', 0 ] ]), '{"y":[1.50]}', 'a number moved';
@@ -1078,7 +1081,8 @@ subtest 'JSON is written back as it was read' => sub {
     is $edit->('{"x":1.0}', [ COPY => { z => [ 'NODE', 'x' ], a => 2 }, 'o' ]), '{"x":1.0,"o":{"a":2,"z":1.0}}', 'a member of an object that is built';
     is $edit->('{"a": {"k": [1.0, 2]}}', [ MOVE => 'a', 'b' ], [ COPY => 3, [ 'NODE', 'b', 'k', 1 ] ]), '{"b": {"k": [1.0, 3]}}',
         'and what is moved and then changed keeps the rest of itself';
-    is $edit->('{"a":1.0}', [ COPY => [ ADD => [ 'NODE', 'a' ], 1 ], 'a' ]), '{"a":2}', 'a value that is worked out is written plainly';
+    is $edit->('{"a":1.0}', [ COPY => [ ADD => [ 'NODE', 'a' ], 1 ], 'a' ]), '{"a":2.0}', 'a value that is worked out is written to the places it is known to';
+    is $edit->('{"a":1.0}', [ COPY => [ LENGTH => 'abc' ], 'a' ]), '{"a":3}', '... and plainly, if it has none';
     my ($one, $two) = map { JGraft::JSON->parse($_) } '{"from": [1.50, "\u0041"]}', '{"to": []}';
     is $two->write(graft([ COPY => [ 'TEMP', 'other', 'from', 0 ], [ 'NODE', 'to', 0 ], [ 'TEMP', 'other', 'from', 1 ], [ 'NODE', 'to', 1 ] ])
         ->apply($two->data, temp => { other => $one->data })), '{"to": [1.50,"\u0041"]}', 'even from one text to another';
@@ -1235,7 +1239,9 @@ subtest 'JSON is written back as it was read' => sub {
         my $r    = graft($action)->run($read->data);
         my $left = $r->ok ? $r->output : $r->partial;
         $count{written}++;
-        $count{wrong}++ unless eval { show(JGraft::JSON->parse($read->write($left))->data) eq show($left) };
+        my $again = eval { JGraft::JSON->parse($read->write($left))->data };
+        $count{wrong}++ unless !$@ && JGraft::Util::match_lit($again, $left, 1) && JGraft::Util::match_lit($left, $again, 1)
+            && JGraft::JSON->encode($again) eq JGraft::JSON->encode($left);
     }
     is $count{identical}, 2000, 'every one of 2,000 random texts is written as it was read';
     is $count{wrong}, 0, "and after a random change each says what the run left ($count{written} of them)";
@@ -1356,8 +1362,15 @@ subtest 'numbers that are exact' => sub {
     is $doc->write($sum->apply($doc->data)), '{"a":0.1,"b":0.2,"c":0.3}', 'a document read exactly is run exactly';
     is $doc->write($sum->apply($sum->apply($doc->data))), '{"a":0.1,"b":0.2,"c":0.3}', '... and so is what a run made of it';
     is $doc->write($sum->apply($doc->data, exact => 0)), '{"a":0.1,"b":0.2,"c":0.30000000000000004}', '... unless the run is told not to be';
-    is JGraft::JSON->parse('{"a":0.1,"b":0.2}')->write($sum->apply(JGraft::JSON->parse('{"a":0.1,"b":0.2}')->data)), '{"a":0.1,"b":0.2,"c":0.30000000000000004}',
-        'a document read as usual is not';
+    my $usual = JGraft::JSON->parse('{"a":0.1,"b":0.2}');
+    is $usual->write($sum->apply($usual->data)), '{"a":0.1,"b":0.2,"c":0.3}', 'a document is read exactly unless it is asked otherwise';
+    my $binary = JGraft::JSON->parse('{"a":0.1,"b":0.2}', exact => 0);
+    is $binary->write($sum->apply($binary->data)), '{"a":0.1,"b":0.2,"c":0.30000000000000004}', '... and one read as Perl reads numbers is run with Perl\'s arithmetic';
+    is $binary->write($sum->apply($binary->data, exact => 1)), '{"a":0.1,"b":0.2,"c":0.3}', '... unless the run is told to be exact';
+    my $longer = '{"n":12345678901234567890123,"m":1.50}';
+    is ref JGraft::JSON->parse($longer)->data->{n}, 'JGraft::Number', 'read exactly, a number that Perl does not hold is an object';
+    ok !ref JGraft::JSON->parse($longer, exact => 0)->data->{n} && !ref JGraft::JSON->parse($longer, exact => 0)->data->{m}, '... and otherwise the nearest that Perl has';
+    is JGraft::JSON->parse($longer, exact => 0)->write, $longer, '... though either way what is not touched is written as it was';
     ok !eval { JGraft::JSON->parse('1', exactly => 1); 1 } && $@ =~ /unknown option exactly/, 'parse refuses an option it does not know';
     is $doc->write($sum->apply($doc->data, exact => 0)), '{"a":0.1,"b":0.2,"c":0.30000000000000004}', 'the document is none the worse';
 
