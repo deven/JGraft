@@ -1917,19 +1917,31 @@
     },
     {
       "name": "One-argument HAS and IS bodies",
-      "desc": "One-argument HAS/IS probes advance exactly one element regardless of child width; alternate-target forms are zero-width assertions and use ordinary matching for their alternate targets.",
+      "desc": "One-argument HAS/IS matches one element and cannot have SEQ as its direct child. Multi-element matches place HAS/IS inside SEQ; alternate-target forms remain zero-width assertions against their alternate targets.",
       "tests": [
         {
-          "name": "One-argument HAS body counts repetitions separately from its lookahead width",
+          "name": "REP cannot hide a SEQ directly under HAS",
           "input": [1,1,1],
           "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2,0,["HAS",["SEQ",1,1]]],1]]]]]],
-          "output": [1,1,1]
+          "errors": {"INVALID_GRAFT":true}
         },
         {
-          "name": "One-argument IS body advances one after each sequence test",
+          "name": "REP cannot hide a SEQ directly under IS",
           "input": [1,1,1],
           "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2,0,["IS",["SEQ",1,1]]],1]]]]]],
-          "output": [1,1,1]
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "REP repeats a two-element sequence of HAS matches",
+          "input": [1,1,1,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2,0,["SEQ",["HAS",1],["HAS",1]]],2]]]]]],
+          "output": [1,1,1,1,2]
+        },
+        {
+          "name": "REP repeats a two-element sequence of IS matches",
+          "input": [1,1,1,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["REP",2,0,["SEQ",["IS",1],["IS",1]]],2]]]]]],
+          "output": [1,1,1,1,2]
         }
       ]
     },

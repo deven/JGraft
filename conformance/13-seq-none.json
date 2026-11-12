@@ -204,7 +204,7 @@
     },
     {
       "name": "Alternate targets",
-      "desc": "One-argument HAS/IS probes advance exactly one element regardless of child width; alternate-target forms are zero-width assertions and use ordinary matching for their alternate targets.",
+      "desc": "One-argument HAS/IS matches one element and cannot have SEQ as its direct child. Multi-element matches place HAS/IS inside SEQ; alternate-target forms remain zero-width assertions against their alternate targets.",
       "tests": [
         {
           "name": "Alternate-target HAS is a zero-width assertion",
@@ -446,19 +446,31 @@
     },
     {
       "name": "HAS and IS assertions",
-      "desc": "One-argument HAS/IS probes advance exactly one element regardless of child width; alternate-target forms are zero-width assertions and use ordinary matching for their alternate targets.",
+      "desc": "One-argument HAS/IS matches one element and cannot have SEQ as its direct child. Multi-element matches place HAS/IS inside SEQ; alternate-target forms remain zero-width assertions against their alternate targets.",
       "tests": [
         {
-          "name": "One-argument IS advances one element after a successful sequence test",
+          "name": "NONE cannot suppress a SEQ directly under IS",
           "input": [1,2],
           "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["NONE",["IS",["SEQ",1,2]]],1,2]]]]]],
-          "errors": {"NO_MATCH":true}
+          "errors": {"INVALID_GRAFT":true}
         },
         {
-          "name": "One-argument HAS advances one element after a successful sequence test",
+          "name": "NONE cannot suppress a SEQ directly under HAS",
           "input": [1,2],
           "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["NONE",["HAS",["SEQ",1,2]]],1,2]]]]]],
-          "errors": {"NO_MATCH":true}
+          "errors": {"INVALID_GRAFT":true}
+        },
+        {
+          "name": "NONE succeeds without consuming when a sequence of IS element matches fails",
+          "input": [1,3],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["NONE",["SEQ",["IS",1],["IS",2]]],1,3]]]]]],
+          "output": [1,3]
+        },
+        {
+          "name": "NONE succeeds without consuming when a sequence of HAS element matches fails",
+          "input": [1,3],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["SEQ",["NONE",["SEQ",["HAS",1],["HAS",2]]],1,3]]]]]],
+          "output": [1,3]
         }
       ]
     },

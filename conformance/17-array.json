@@ -2236,6 +2236,180 @@
       ]
     },
     {
+      "name": "Adjacent element and variable-width sequence matches",
+      "desc": "Sequence context is local to explicit SEQ-family expressions, not enabled for every sibling merely because the array uses sequence matching. Ordinary NONE, ANY, ALL, and alternate-target HAS/IS consume one element; their sequence-context counterparts keep their documented successor semantics. Empty spans, repeated transitions, nested arrays, and named capture offsets expose cursor and context leaks.",
+      "tests": [
+        {
+          "name": "Structural array",
+          "desc": "Escaped-array element patterns alternate between ordinary matches and explicitly enabled sequence context under exact matching.",
+          "tests": [
+            {
+              "name": "Literal and numeric element matches separate variable-width sequences",
+              "input": ["head",0,0,7,1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[["head",["SEQ",["REP",0,-1,0]],["NUM",7,7],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Ordinary NONE consumes an element before a variable-width sequence",
+              "input": ["head",0,0,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["NONE","blocked"],["SEQ",["REP",0,-1,0]],"tail",["SEQ",["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Ordinary NONE consumes an element after a variable-width sequence",
+              "input": [0,0,"middle","tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",["REP",0,-1,0]],["NONE","blocked"],"tail",["SEQ",["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Ordinary NONE separates two variable-width sequences",
+              "input": [0,0,"middle",1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",["REP",0,-1,0]],["NONE","blocked"],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Empty sequences leave the intervening ordinary element to consume",
+              "input": ["middle","tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",["REP",0,-1,0]],["NONE","blocked"],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "An ordinary element mismatch cannot be skipped between sequences",
+              "input": [0,0,"blocked",1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",["REP",0,-1,0]],["NONE","blocked"],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]]],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Ordinary ANY does not inherit sequence context from its neighbors",
+              "input": [0,0,"middle",1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",["REP",0,-1,0]],["ANY",["NONE","blocked"],"fallback"],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Ordinary ALL does not inherit sequence context from its neighbors",
+              "input": [0,0,"middle",1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",["REP",0,-1,0]],["ALL",["NONE","blocked"],["NONE",9]],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Alternate-target HAS consumes outside SEQ and asserts inside SEQ",
+              "input": ["head",0,0,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["HAS","x","x"],["SEQ",["REP",0,-1,0],["HAS","x","x"]],["HAS","x","x"],["SEQ",["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Alternate-target IS consumes outside SEQ and asserts inside SEQ",
+              "input": ["head",0,0,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["IS","x","x"],["SEQ",["REP",0,-1,0],["IS","x","x"]],["IS","x","x"],["SEQ",["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Nested array restores both its own element context and the parent context",
+              "input": [0,0,["left",1,1,"right"],2,2,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",["REP",0,-1,0]],[[["NONE","blocked"],["SEQ",["REP",0,-1,1]],["NONE","blocked"]]],["SEQ",["REP",0,-1,2]],"tail",["SEQ",["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "REP after a sibling SEQ still requires its own explicit sequence context",
+              "input": [0,0,1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",["REP",0,-1,0]],["REP",0,-1,1],"tail",["SEQ",["END"]]]]],["NODE"]]],
+              "errors": {"INVALID_GRAFT":true}
+            },
+            {
+              "name": "Element matches between named sequences preserve capture offsets",
+              "input": ["head",0,0,"middle",1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",[[["NONE","blocked"],["SEQMIN","left",["REP",0,-1,0]],["NONE","blocked"],["SEQMAX","right",["REP",0,-1,1]],["NONE","blocked"],["SEQ",["END"]]]]],["COPY",["CAP"],["NODE"]]]],
+              "output": {"left":{"path":[],"ofs":1,"len":2,"lim":3},"right":{"path":[],"ofs":4,"len":2,"lim":6}}
+            }
+          ]
+        },
+        {
+          "name": "ARRAY subset",
+          "desc": "ARRAY element patterns alternate between ordinary matches and explicitly enabled sequence context, with END requiring the full input to be consumed.",
+          "tests": [
+            {
+              "name": "Literal and numeric element matches separate variable-width sequences",
+              "input": ["head",0,0,7,1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,"head",["SEQ",["REP",0,-1,0]],["NUM",7,7],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Ordinary NONE consumes an element before a variable-width sequence",
+              "input": ["head",0,0,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,["NONE","blocked"],["SEQ",["REP",0,-1,0]],"tail",["SEQ",["END"]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Ordinary NONE consumes an element after a variable-width sequence",
+              "input": [0,0,"middle","tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,["SEQ",["REP",0,-1,0]],["NONE","blocked"],"tail",["SEQ",["END"]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Ordinary NONE separates two variable-width sequences",
+              "input": [0,0,"middle",1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,["SEQ",["REP",0,-1,0]],["NONE","blocked"],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Empty sequences leave the intervening ordinary element to consume",
+              "input": ["middle","tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,["SEQ",["REP",0,-1,0]],["NONE","blocked"],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "An ordinary element mismatch cannot be skipped between sequences",
+              "input": [0,0,"blocked",1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,["SEQ",["REP",0,-1,0]],["NONE","blocked"],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Ordinary ANY does not inherit sequence context from its neighbors",
+              "input": [0,0,"middle",1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,["SEQ",["REP",0,-1,0]],["ANY",["NONE","blocked"],"fallback"],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Ordinary ALL does not inherit sequence context from its neighbors",
+              "input": [0,0,"middle",1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,["SEQ",["REP",0,-1,0]],["ALL",["NONE","blocked"],["NONE",9]],["SEQ",["REP",0,-1,1]],"tail",["SEQ",["END"]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Alternate-target HAS consumes outside SEQ and asserts inside SEQ",
+              "input": ["head",0,0,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,["HAS","x","x"],["SEQ",["REP",0,-1,0],["HAS","x","x"]],["HAS","x","x"],["SEQ",["END"]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Alternate-target IS consumes outside SEQ and asserts inside SEQ",
+              "input": ["head",0,0,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,["IS","x","x"],["SEQ",["REP",0,-1,0],["IS","x","x"]],["IS","x","x"],["SEQ",["END"]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Nested array restores both its own element context and the parent context",
+              "input": [0,0,["left",1,1,"right"],2,2,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,["SEQ",["REP",0,-1,0]],[[["NONE","blocked"],["SEQ",["REP",0,-1,1]],["NONE","blocked"]]],["SEQ",["REP",0,-1,2]],"tail",["SEQ",["END"]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "REP after a sibling SEQ still requires its own explicit sequence context",
+              "input": [0,0,1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ARRAY",0,["SEQ",["REP",0,-1,0]],["REP",0,-1,1],"tail",["SEQ",["END"]]]],["NODE"]]],
+              "errors": {"INVALID_GRAFT":true}
+            },
+            {
+              "name": "Element matches between named sequences preserve capture offsets",
+              "input": ["head",0,0,"middle",1,1,"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS",["ARRAY",0,["NONE","blocked"],["SEQMIN","left",["REP",0,-1,0]],["NONE","blocked"],["SEQMAX","right",["REP",0,-1,1]],["NONE","blocked"],["SEQ",["END"]]]],["COPY",["CAP"],["NODE"]]]],
+              "output": {"left":{"path":[],"ofs":1,"len":2,"lim":3},"right":{"path":[],"ofs":4,"len":2,"lim":6}}
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Evaluated operands and references",
       "desc": "The length/offset expression evaluates on the current array before selecting elements. References and common expressions may supply integers or literal patterns without becoming target aliases or being evaluated as syntax twice.",
       "tests": [

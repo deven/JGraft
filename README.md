@@ -25,12 +25,13 @@ The specific design goals were:
   * Easy to apply
   * Likely to "do the right thing" when applied
   * Easy to compose JGrafts into a larger JGraft
-  * Highly portable / easy to implement
+  * Highly portable
+  * Highly expressive
   * Replicate the "fuzzy match" behavior of Unix `patch`
 
 The result is basically a small language with Lisp-like functions, where a
-small collection of processing functions are guided by a small collection of
-pattern-matching functions.
+small collection of tree-mutating operations are guided by a moderate
+collection of pattern-matching and value-construction expressions.
 
 ## Examples
 
@@ -48,7 +49,7 @@ If you wanted to apply this diff output of `diff -U1 a b`
 to a string within a JSON structure, you can describe the equivalent operation
 with JGraft:
 
-    ["SPLIT", "\n",
+    ["ATSPLIT", ["NODE"], "\n",
       ["MATCH",
         ["ARRAY", 9, // 0-based 9 is 1-based "line 10"
           "Line ten",
@@ -60,7 +61,7 @@ with JGraft:
           "New Line eleven"
           // no line 12
         ]
-      ],
+      ]
     ]
 
 #### Record re-ordering
@@ -80,7 +81,7 @@ they were still found in their original locations, you could describe it as:
 
     ["MATCH",
       [[{"id":"abcd"},{"id":"efgh"},{"id":"ijkl"}]],
-      ["MOVE",0,3]
+      ["MOVE",0,2.5]
     ]
 
 and the result would be:

@@ -28,7 +28,7 @@ This directory contains JSON files describing many instances of
       }
     }
 
-Since the actual error produced may depend on the degree of static anaysis
+Since the actual error produced may depend on the degree of static analysis
 performed by an implementation, the structure lists which errors *may* occur
 rather than mandating a specific outcome.  However, the tests that are designed
 to hit a RESOURCE_LIMIT should always hit that limit, and the rest should never
@@ -48,15 +48,15 @@ to that outcome. As with output and errors, log expectations belong to leaf
 cases and are never inherited from groups.
 
 An implementation which does *no* static analysis and interprets the JGraft
-structure on the fly should always expect to produce the `output` or if one is
+structure on the fly should always expect to produce the `output` if one is
 specified for the test, or NO_MATCH if that is a possibility.  Otherwise it
 should fail with one of the permitted errors.  An implementation which does
 extensive static analysis should aim to detect the first available of
-INVALID_GRAFT, INVALID_OPERAND, INVALID_TARGET, or NO_MATCH, and only match
-`output` when no errors are permitted.  Test suites for advanced implementations
-should not fail overall if a new test for a semantic error is introduced which
-the engine detects as a lesser error; this merely indicates that more static
-analysis *could* be done, not that it must be done.
+`INVALID_GRAFT`, `INVALID_OPERAND`, `INVALID_TARGET`, or `NO_MATCH`, and only
+match `output` when no errors are permitted.  Test suites for advanced
+implementations should not fail overall if a new test for a semantic error is
+introduced which the engine detects as a lesser error; this merely indicates
+that more static analysis *could* be done, not that it must be done.
 
 The `needProto` flag indicates when a test requires use of the `__proto__`
 property.  Some implementations (e.g. JavaScript environments with old JSON

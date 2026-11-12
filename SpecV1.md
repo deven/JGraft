@@ -43,7 +43,8 @@ In other words, in the JSON representation of JGraft in a context that allows
 data and expressions, an array containing exactly one element which is also an
 array means a literal array having the elements of the inner array.
 The elements may then recursively contain expressions or array literals by this
-convention.
+convention.  An unescaped array with no elements represents a directive
+lacking an operation, and is illegal.
 
 Implementations may choose to use host-language objects of some sort to
 represent actions and expressions at runtime, then perform the array encoding
@@ -203,14 +204,14 @@ Actions and expressions can make references to data in six namespaces:
   * Common Expressions - a read-only collection of parsed/validated expression
                          trees declared in the [`JGRAFT` action](#act-jgraft)
                          and referenced by the [`EXPR` expression](#ex-expr).
-  * Stash              - a read/write tree of temporaries shared between
-                         actions in the scope of the same `JGRAFT` action,
-                         referenced by the [`STASH` expression](#ex-stash).
   * Match Captures     - a read-only tree of data captured by the named
                          sequences in an enclosing `MATCH` or `IF` action,
                          referenced by the [`CAP` expression](#ex-cap).
-  * Temporaries        - a read/write tree of temporaries that only exists for
-                         the duration of one action, referenced by the
+  * Stash              - a read/write tree of temporaries shared between
+                         actions in the scope of the same `JGRAFT` action,
+                         referenced by the [`STASH` expression](#ex-stash).
+  * Temporaries        - a read/write tree of temporaries created fresh for
+                         each action, referenced by the
                          [`TEMP` expression](#ex-temp) and which may be
                          localized during expressions using [`WITH`](#ex-with)
                          or [`LOCAL`](#ex-local).
@@ -413,8 +414,8 @@ array match is handled according to the rules described in
 
 Sequence matching is based on a regular language automata theme.  Expressions
 evaluated in sequence context (initiated implicitly by
-[regexes](#regex-matching) or by applying a [`SEQ`](#ex-seq) /
-[`SEQMIN`](#ex-seqmin) / [`SEQMAX` expression](#ex-seqmax) to array elements)
+[regular expression context](#regex-matching) or within explicit
+[`SEQ`](#ex-seq) / [`SEQMIN`](#ex-seqmin) / [`SEQMAX`](#ex-seqmax) expressions)
 have behavior defined in terms of "initial state" and "generated successor
 states", with the initial state being a position within [0,length] where a
 match needs to occur, and successor states being all the ways that the match
@@ -443,13 +444,14 @@ Sequence context can be configured to resolve in one of three ways:
   * shortest - The algorithm finds the fewest number of elements which can be
               matched by the specification.
 
-Sequence context is only resolved in terms of the whole array, not as decisions
-within individual expressions or named sequences.  Various regex contexts will
-set either `boolean` or `longest` resolution.  When performing structural
-matches, there is normally no preference for the overall length matched unless
-one is explicitly requested.  As `SEQMAX` / `SEQMIN` are designed, making the
-match observable with a capture also requires specifying the longest/shortest
-preference.  When no captures are observable, implementations may stop as soon
+The sequence contexts of an array are resolved with respect to the entire match
+of the array, not as decisions within individual sequence expressions.
+Various regex contexts will set either `boolean` or `longest` resolution.
+When performing structural matches, there is normally no preference for the
+overall length matched unless one is explicitly requested.
+As `SEQMAX` / `SEQMIN` are designed, making the match observable with a capture
+also requires specifying the longest/shortest preference.
+When no captures are observable, implementations may stop as soon
 as any complete match succeeds, without resolving length or position
 preferences.  When captures are observable, of all the final states which can
 match the complete specification for the array, the algorithm chooses one
@@ -507,6 +509,7 @@ A `SEQMIN` / `SEQMAX` expression may only be used at the root of a match
 specification being applied to an array's elements, and a `SEQ` expression may
 only initiate sequence context there (though `SEQ` may be used in any existing
 sequence context as a general way to specify sequential matches).
+Invalid placement of these expressions counts as `INVALID_GRAFT`.
 The restrictions on entering sequence context ensure that `NONE`, `ANY`, and
 `ALL` don't gain surprising semantics without directly requesting them, and the
 specific restriction on `SEQMIN` and `SEQMAX` ensures that named sequences are
@@ -596,6 +599,8 @@ When matching against a virtual character array,
   * Strings of zero or multiple characters are interpreted as `SEQ` expressions
     with empty string meaning an empty sequence.
   * No other types can match anything within the virtual array of characters.
+  * Accessing an element of the array in value context returns the codepoint as
+    a number.
   * If the current node is changed to something other than a virtual array
     of characters (via 2-argument `HAS` or 2-argument `IS`), the algorithm
     switches back to Non-Regex Matching for the duration of that scope.
@@ -815,9 +820,14 @@ burden on the generators to eliminate those from generated expressions.
 Implementations must trap `INVALID_TARGET` or `INVALID_OPERAND` errors in
 match expressions and convert them to simple failed-to-match conditions, unless
 static analysis can prove that `INVALID_OPERAND` is actually `INVALID_GRAFT`,
-in which case it may be upgraded.  Additionally, for expressions `ANY` and
-`NONE`, these errors get trapped for each individual argument and converted to
-false subexpressions rather than causing the outer expression to fail.
+in which case it may be upgraded.  The error trapping conceptually occurs at
+the innermost match expression, including any implied `IS` or `HAS` expression
+within a structural match or where a match expression calls a value expression.
+However, since failed matches propagate upward through other match expressions
+where the subexpression was not optional, an implementation really only needs
+to trap errors around each argument of `ANY` and `NONE`, for each successor
+state being investigated during a sequence match, and for the outermost match
+expression that initiated the match state.
 If an implementation can prove that a match expression always generates an
 `INVALID_TARGET` error, it may emit warnings about this, but must not upgrade
 them to `INVALID_GRAFT`.
@@ -834,10 +844,11 @@ into a fatal error.  For example:
       [IS, [SLICE, "abcdef", [NODE, "offset"]], "c"]
     ]
 
-The first condition establishes that the second condition will trigger an
-`INVALID_OPERAND`, but in isolation the second expression's correctness still
-depends on input data, so in a match context this is not considered an invalid
-graft, just one that never matches.  A more intelligent generator could
+The first condition only passes when `offset` is the string "2", which
+guarantees that the second condition will trigger an `INVALID_OPERAND`, but in
+isolation the second expression's correctness still depends on input data,
+so in a match context this is not considered an invalid graft,
+just one that never matches.  A more intelligent generator could
 eliminate this subexpression, but is not required to, regardless of the
 configured JGraft validation level.
 
@@ -1049,17 +1060,17 @@ to repeatedly act on `[STASH,0]`:
     [ATSPLIT, [NODE],
       { sep: [ANY, "\n", "\r\n"], default: "\n", trim: [REP,0,-1," "] },
       [MATCH,
-        [ARRAY, 10,
+        [ARRAY, 9,
           "Line ten",
           "Line eleven",
           "Line twelve",
           "Line thirteen"
         ],
-        [SPLICE, 11, 2,
+        [SPLICE, 10, 2,
           "New Line eleven"
           // no line 12
         ]
-      ],
+      ]
     ]
 
 ### <span id="act-match">MATCH</span>
@@ -1389,18 +1400,24 @@ the form:
       lim:   // ofs + len
     }
 
-These may be used as the argument for [`SLICE`](#ex-slice).  For example, to
-select the captured array elements of "example" as a new array value,
-you can use:
+These objects may be used as the argument to the [`SLICE` function](#ex-slice).
+For example, to select the captured array elements of "example" as a new array
+value, you can use:
 
     [SLICE, [CAP, 'example'] ]
 
 Note that this works for both arrays and strings that were matched in the tree
-of the current node, but not for matches that applied against a temporary
-current node.  It may also fail or return unintended results if used after
-actions that re-alias the current node or modify data along the target path.
-JGraft generators need to be mindful of these problems and should probably
-copy slices to `STASH` or `TEMP` in the first action under a match.
+of the current node, since SLICE can operate on both strings and arrays.
+
+The captured `path` is computed at capture time and is not a "magic" property
+that adapts to changes.  It reaches back as far as the current node when the
+match began, but not beyond the most recent graft-specified override to the
+current node.  So, captures inside a two-argument `IS` or `HAS` describe a
+path from the root of the value argument to the node captured, not from the
+root of the overall match.  Changes to the tree by actions like `MOVE` can also
+render a path unusable.  JGraft generators need to be mindful of these
+limitations; a good pattern is to copy the slices of interest to the `STASH` in
+the first action under a match, before altering the tree.
 
 #### <span id="ex-temp">TEMP</span>
 
@@ -1488,9 +1505,11 @@ Examples:
                                           && node.a[4] === 7
     [HAS, [TEMP,0], { a: 1 }]           temp['0'].a === 1
 
-In [sequence context](#sequence-matching), the successor state produced is the
-position following the current element, unless 2-argument form was used in
-which case it becomes a zero-width assertion.
+In [sequence context](#sequence-matching), the one-argument `HAS` expression
+still matches only one element, and the successor state produced is the
+position following the current element.  The two-argument form of `HAS` becomes
+a zero-width assertion. The root of the `match_spec` may not be a `SEQ`
+expression as that would constitute re-initiating sequence context.
 
 #### <span id="ex-is">IS</span>
 
@@ -1672,16 +1691,17 @@ With no arguments, this matches when the current node is a string.
 
 With one argument (specified in [regex context](#regex-context) ) it asserts
 that the node is a string and matches a regular expression.  The regex is not
-implicitly anchored and will iterate through the characters of the string
-looking for the "leftmost" match.  (engines may be optimized to perform
-different search strategies so long as they derive the same leftmost match)
-This expression is the primary way of invoking regular
-expression matching on a string.  Captures within this regex *do* become
-available in the capture results of the match expression containing this `STR`
-expression, but subject to the normal capture-suppression rules when `ANY`,
-`REP`, or `NONE` are involved.  If you want to locate named capture bounds
-in a string during evaluation of a larger expression, wrap this expression with
-the [`CAPTURE` function](#ex-capture).
+implicitly anchored (even within `IS` scope) and will iterate through the
+characters of the string looking for the "leftmost" match.
+(engines may be optimized to perform different search strategies so long as
+they derive the same leftmost match)
+This expression is the primary way of invoking regular expression matching on a
+string.  Captures within this regex *do* become available in the capture
+results of the match expression containing this `STR` expression, but subject
+to the normal capture-suppression rules when `ANY`, `REP`, or `NONE` are
+involved.  If you want to locate named capture bounds in a string during
+evaluation of a larger expression, wrap this expression with the
+[`CAPTURE` function](#ex-capture).
 
 #### <span id="ex-num">NUM</span>
 
@@ -2033,6 +2053,8 @@ MAP / REDUCE / FILTER expression to know which array index is being processed.
 It can be used to help generate capture names or look up parallel paths from
 another array or object.
 
+It returns `null` when the current node refers to the root of a namespace.
+
 #### <span id="ex-slice">SLICE</span>
 
     [SLICE, value_expr, ofs]
@@ -2219,28 +2241,12 @@ defined here since the specification is shared with `JOIN`.
 The split operation iterates through the characters of the string looking for
 [the longest match](#regex-context) of the separator pattern.  If you specify
 an `element` regex, a test for a separator will only match when the element
-characters (from the end of the previous separator until the current match
-position) also match the `element` pattern.   The `element` pattern is
-implicitly anchored to the start and end of the element characters.
+characters (from the limit of the previous separator (or start of string) up
+to the current match position) also match the `element` pattern.  The `element`
+pattern is implicitly anchored to the start and end of the element characters.
 This gives you a way to pass over escape sequences without accidentally
 detecting a separator, and without requiring the complexity of "look-behind"
 or "look-ahead" or capture groups in the separator pattern.
-
-A zero-length separator (including a successful zero-length regex match)
-is considered to match at every boundary between characters except the current
-position (meaning the boundary between the end of the previous separator and
-the following character) which prevents an infinite loop of empty
-elements.  This means the separator of `''` can be used to split the string
-into its individual characters.  It also means that a regular expression which
-can match the empty string will generate a single-character element any time
-none of the alternatives matched.
-
-For example, the pattern `/a*/` applied to the string "baabca" results in:
-
-    ['b', 'b',  'c', '']
-
-(Note that splitting a string into an array of individual characters is a
-quick way to reach a `RESOURCE_LIMIT` error)
 
 Once a separator is found, it uses the value of `keep` to determine what to do
 with it.  The default is to hide the separator from the resulting array but
@@ -2248,10 +2254,36 @@ store it (attached invisibly to the preceding element) until it is time to
 reconstruct the string.
 The value "<" means to keep the separator as part of the current element in
 the generated array, and likewise ">" means to keep it as part of the
-following element.  The value '@' means to include the separator as its own
+following element.  The value "@" means to include the separator as its own
 element of the resulting array.  In all three cases, separator metadata is not
 used, and elements get reassembled with an empty string as the separator since
 the actual separator is part of the data.
+
+The search for a separator repeats while characters remain in the string.
+When a separator is not found, the substring from the limit of the final
+separator (or start of string) is returned as the final element, even if it is
+empty or does not match the `element` regex.  If the input is an empty string,
+no search is required, and the empty string is returned as the only element.
+
+A zero-length separator (including a successful zero-length regex match)
+is considered to match at every character-array index (including the
+character-array length) other than the limit of the previous separator, which
+prevents an infinite loop of empty elements.
+This means the separator of `""` can be used to split the string
+into its individual characters.  It also means that a regular expression which
+can match the empty string will generate a single-character element any time
+none of the alternatives matched.
+
+For example, consider the pattern `/a*/` applied to the following strings:
+
+    [SPLIT, [REP,0,-1,"a"], "baabc"]
+      => ["b", "b", "c"]
+    
+    [SPLIT, [REP,0,-1,"a"], "baabca"]
+      => ["b", "b", "c", ""]
+    
+    [SPLIT, { sep: [REP,0,-1,"a"], keep: "@" }, "baabca"]
+      => ["b", "aa", "b", "", "c", "a", ""]
 
 `ltrim` and `rtrim` are used to hide unimportant characters from the resulting
 array element strings, such as leading/trailing whitespace (like `diff -b`)
@@ -2273,17 +2305,18 @@ in parallel as described below.
 
 ##### Split Metadata
 
-"SPLIT metadata" carries the hidden separators and end-trimmings from `SPLIT`.
-It is associated *with the array* as a parallel array of per-element data, rather
-than being bound to the values themselves.  The separator is paired to the
-element it *followed* and the final element will not logically have one since
-a string ending with a separator receives a final element of the empty string,
-though for the purposes of this algorithm it receives a copy of the separator
-of the preceding element.
+"SPLIT metadata" carries the hidden separators and end-trimmings from the
+[`SPLIT` function](#ex-split).  It is associated *with the array* as a parallel
+array of per-element data, rather than being bound to the values themselves.
+The separator is paired to the element it *followed* and the final element will
+not logically have one since a string ending with a separator receives a final
+element of the empty string, though for the purposes of this algorithm it
+receives a copy of the separator of the preceding element.
 Only one instance of `SPLIT` metadata may be associated with any one array.
-It also contains an `origin` tag; in any case where values are transferred
-between element references, the `SPLIT` metadata will only carry over when both
-arrays have metadata of the same `origin`.
+It also contains an `origin` tag, unique to each execution of the `SPLIT`
+function; in any case where values are transferred between element references,
+the `SPLIT` metadata will only carry over when both arrays have metadata of the
+same `origin`.
 
 Actions and expressions that operate on an array need to do a bit of extra work
 when `SPLIT` metadata is present in order to keep it associated with the
@@ -2672,7 +2705,7 @@ Invalid values for either argument count as `INVALID_TARGET`.
 For valid arguments, when `exponent` is zero, the result is always one.
 If `base` and `exponent` are both integers, implementations must check to see
 if the result can be represented exactly in an available number storage type,
-and if so, use an exact power caluclation instead of floating point math.
+and if so, use an exact power calculation instead of floating point math.
 
 Overflow and underflow count as `UNSUPPORTED_GRAFT`.  A nonzero mathematical
 result must not be returned as zero due to floating-point underflow.
@@ -2743,8 +2776,8 @@ specified.  Rounding is applied at the `at`-th digit below the decimal point as
 if multiplying by `10**at`, rounding to an integer, then dividing by that
 same multiplier.  `at` may be negative to round within the whole portion
 of the number.  The parameter `shift` works in a similar manner, but actually
-does pre-multiply the number by `10**shift`.  The overall effect can described
-as
+does pre-multiply the number by `10**shift`.  The overall effect can be
+described as
 
     round_to_int(number * 10**shift * 10**at) * 10**(-at)
 
@@ -2766,7 +2799,7 @@ When the input is a string, `as` defaults to "STR".  When applied to numbers,
 `as` defaults to "NUM".  Negative zero is preserved if that information is
 available and can be preserved in the desired format.  (host JSON decoders
 often discard it, but it will be known if the input was a string)
-When returned as `"NUM"`, casting to a number is permitted to lose precsion.
+When returned as `"NUM"`, casting to a number is permitted to lose precision.
 When returned as `"INT"` the implementation must store the value in a container
 without loss of precision, failing with `INVALID_TARGET` if the number is not
 an integer and `UNSUPPORTED_GRAFT` if the integer is too large to store without
