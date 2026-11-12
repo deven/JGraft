@@ -365,7 +365,9 @@ sub path_keys ($ns, $half, @element) {
         my $t = type_of($k[$i]);
         if    ($t == T_STR) { }
         elsif ($t == T_NUM) {
-            is_int($k[$i]) || $half && $i == $#k && is_int($k[$i] * 2) or return 'fractional array index';
+            my $index = whole($k[$i]);
+            my $twice = defined $index || !($half && $i == $#k) ? undef : whole($k[$i] * 2);      # a place between two elements
+            $k[$i] = $index // (defined $twice ? $twice / 2 : return 'fractional array index');
         }
         elsif ($t == T_BOOL && !$k[$i]) { $k[$i] = undef }      # false: the append position
         else                            { return 'invalid path element' }
@@ -515,7 +517,8 @@ sub re_set ($chars) {
 }
 
 sub char_code ($x, $v) {
-    return is_int($v) && $v >= 0 ? $v : is_str($v) ? (length $v == 1 ? ord $v : -1)
+    my $code = whole($v);
+    return defined $code && $code >= 0 ? $code : is_str($v) ? (length $v == 1 ? ord $v : -1)
          : $x->fail_operand('not a character');
 }
 
@@ -620,7 +623,7 @@ sub array ($c, $ctx, $items, $from = undef) {
     # are any of these elements ones that a MOVE has taken?  (Only asked while there is a MOVE.)
     my $gone  = sub ($x, $a, $from, $to) { $x->{moving} && grep { ref $a->[$_] eq 'JGraft::Missing' } $from .. $to };
     my $start = sub ($x, $a, $ofs) {
-        is_int($ofs) or $x->fail_operand('array offset must be an integer');
+        $ofs = whole($ofs) // $x->fail_operand('array offset must be an integer');
         $ofs += @$a if $ofs < 0;
         return $ofs >= 0 && $ofs <= @$a && !$gone->($x, $a, 0, $ofs - 1) ? $ofs : undef;    # skipped elements must exist
     };

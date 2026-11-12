@@ -415,9 +415,16 @@ C<CASTNUM>.
 Comparison goes the same way.  In an exact run two numbers are equal if
 Perl writes them as the same number, whichever kind each is: so the
 0.30000000000000004 that binary arithmetic made of 0.1 and 0.2 matches 0.3,
-is not less than it, and lies within a bound of it.  (An index or a count
-is another matter.  A number that is nearly whole is not one, in any run,
-and is refused where a whole number is needed.)
+is not less than it, and lies within a bound of it.  And where a whole
+number is needed (an index, a count, a length, the code of a character) a
+number that Perl writes as whole is whole: the 3.0000000000000004 that
+binary arithmetic left is the index 3, which in a run that is not exact is
+refused as a fraction.
+
+An index worked out by exact arithmetic is therefore as good as the
+arithmetic: C<[MUL, [ADD, 0.1, 0.2], 10]> is 3.  The exception is a quotient
+that does not end.  It has forty digits, and so ten thirds times 0.9 is a
+hair less than 3, and is not an index; nor is a third, three times, quite 1.
 
 It costs time: some tens of times what Perl's own arithmetic does, for each
 operation that is not on whole numbers, and more for numbers longer than

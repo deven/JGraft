@@ -1379,6 +1379,43 @@ subtest 'numbers that are exact' => sub {
         'a comparison written in the graft is each run\'s own to make';
     ok !$JGraft::Number::EXACT, 'and when no run is under way, numbers are compared as Perl compares them';
 
+    # An index or a count may be the result of arithmetic, and is as whole as that arithmetic is exact.
+    my $at = sub ($index, %opt) {
+        my $r = JGraft->new([ JGRAFT => {}, [ COPY => [ NODE => 'list', $index ], ['NODE'] ] ])->run({ list => [ 'a' .. 'h' ], n => 10 }, %opt);
+        return $r->ok ? $r->output : $r->error->code;
+    };
+    is $at->([ MUL => [ ADD => 0.1, 0.2 ], 10 ], exact => 1), 'd', 'three tenths ten times is the index 3';
+    is $at->([ MUL => [ ADD => 0.1, 0.2 ], 10 ]), 'INVALID_OPERAND', '... which in Perl\'s arithmetic it is not quite';
+    is $at->([ MUL => [ DIV => [ NODE => 'n' ], 4 ], 2 ], exact => 1), 'f', 'so is a quotient that ends, multiplied up again';
+    is $at->([ SUB => [ LENGTH => [ NODE => 'list' ] ], 1 ], exact => 1), 'h', 'and whole-number arithmetic, as ever';
+    is $at->([ POW => 27, [ DIV => 1, 3 ] ], exact => 1), 'd', 'a root that Perl writes as whole is whole';
+    is $at->([ MUL => [ DIV => [ NODE => 'n' ], 3 ], 0.9 ], exact => 1), 'INVALID_OPERAND', 'a quotient that does not end is forty digits, and three times it is not quite the whole';
+
+    # And one that binary arithmetic has left a hair away from whole is, to an exact run, the whole number Perl writes.
+    my $hair = sub ($data, $opt, @actions) {
+        my $r = JGraft->new([ JGRAFT => {}, @actions ])->run($data, temp => { n => $near3, h => 2.5000000000000004, c => 65.00000000000001 }, %$opt);
+        return $r->ok ? show($r->output) : $r->error->code;
+    };
+    my @list = ('a' .. 'f');
+    for (
+        [ 'an index',                 [ COPY => [ NODE => [ TEMP => 'n' ] ], ['NODE'] ],                                        '"d"' ],
+        [ 'an index written to',      [ COPY => 'X', [ NODE => [ TEMP => 'n' ] ] ],                                             '["a","b","c","X","e","f"]' ],
+        [ 'a place between two',      [ MOVE => 0, [ NODE => [ TEMP => 'h' ] ] ],                                               '["b","c","a","d","e","f"]' ],
+        [ 'where a SLICE begins',     [ COPY => [ SLICE => ['NODE'], [ TEMP => 'n' ] ], ['NODE'] ],                             '["d","e","f"]' ],
+        [ '... and how long it is',   [ COPY => [ SLICE => ['NODE'], 0, [ TEMP => 'n' ] ], ['NODE'] ],                          '["a","b","c"]' ],
+        [ '... given as a capture',   [ COPY => [ SLICE => { ofs => [ TEMP => 'n' ] } ], ['NODE'] ],                            '["d","e","f"]' ],
+        [ 'how many a SPLICE takes',  [ SPLICE => 0, [ TEMP => 'n' ] ],                                                         '["d","e","f"]' ],
+        [ 'the length of an array',   [ COPY => [ CASE => [ IS => [ ARRAY => [ ADD => [ TEMP => 'n' ], [ TEMP => 'n' ] ] ] ], 'six', 'not' ], ['NODE'] ], '"six"' ],
+        [ 'an offset into one',       [ COPY => [ CASE => [ ARRAY => [ TEMP => 'n' ], 'd', 'e' ], 'there', 'not' ], ['NODE'] ], '"there"' ],
+        [ 'how often a REP repeats',  [ COPY => [ CASE => [ [ [ SEQ => [ REP => [ TEMP => 'n' ], [ TEMP => 'n' ], ['STR'] ] ], 'd', 'e', 'f' ] ], 'thrice', 'not' ], ['NODE'] ], '"thrice"' ],
+        [ 'where ROUND rounds',       [ COPY => [ ROUND => { at => [ TEMP => 'n' ], as => 'STR' }, 1.23456 ], ['NODE'] ],       '"1.235"' ],
+    ) {
+        my ($name, $action, $want) = @$_;
+        is $hair->([@list], { exact => 1 }, $action), $want, "$name may be a number that Perl writes as whole";
+        like $hair->([@list], {}, $action), qr/^(?:INVALID_OPERAND|"not")$/, '    (and not in a run that is not exact)';
+    }
+    is $hair->('xAy', { exact => 1 }, [ COPY => [ CASE => [ STR => [ SEQ => ['START'], 'x', [ TEMP => 'c' ], 'y', ['END'] ] ], 'A', 'not' ], ['NODE'] ]), '"A"', 'and so may a character be, given as its code';
+
     # One graft, compiled once, is exact or not as each run is.
     my $both = JGraft->new([ JGRAFT => {}, [ COPY => [ [ [ ADD => 0.1, 0.2 ], [ ADD => 1, 2 ], [ ROUND => { at => 25, as => 'NUM' }, '0.1234567890123456789012345' ] ] ], ['NODE'] ] ]);
     is JGraft::JSON->encode($both->apply(undef, exact => 1)), '[0.3,3,0.1234567890123456789012345]', 'arithmetic written in the graft is exact in a run that is';

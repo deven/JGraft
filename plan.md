@@ -1156,9 +1156,16 @@ Each of these made the code smaller; none changes behaviour the suite can see.
     until `==` has said no. Much of this code has no run to ask, so the
     run's flag is also `$JGraft::Number::EXACT`, set with `local` by `run`
     (and to 'fold' while a constant is evaluated, where a comparison that
-    would come out differently dies and is left for the runs). Not done:
-    `is_int`. A number that is nearly whole is not an index or a count in
-    any run; it is refused, which is at least not a wrong answer. So an exact
+    would come out differently dies and is left for the runs).
+  - *And whole numbers likewise.* `Util::whole` gives the whole number that
+    a value is, as one of Perl's own, or nothing; in an exact run a number
+    that Perl writes as whole is that number. Every place that needs an
+    index or a count takes the value from it, not only the yes or no
+    (`is_int` is now `defined whole`): path elements and half-indices,
+    SLICE, SPLICE, ARRAY length and offset, REP, ROUND's options, character
+    codes. What is left inexact is the quotient that does not end: at forty
+    digits, (1/3) x 3 is not 1. A coefficient over a denominator would make
+    division exact as well; not done. So an exact
     run of ordinary data gives ordinary data, and goes on exactly from it.
   - *A whole number has no places*: 1e2 is 100, and 150e28 is 15e29.
   - *The flag is the run's*, not the graft's, so one compiled graft serves

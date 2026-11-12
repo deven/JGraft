@@ -71,8 +71,7 @@ defop ARRAY => 7, 'match', 'V?X*', sub ($c, $ctx, $n = undef, @items) {
     return { %{ $c->array($ctx, \@items, $n->{code}) }, throws => 1 } if @items;
     my ($exact, $get) = ($ctx->{exact}, $n->{code});
     return { throws => 1, code => sub {
-        my $want = &$get;
-        is_int($want) or $_[0]->fail_operand('array length must be an integer');
+        my $want = whole(&$get) // $_[0]->fail_operand('array length must be an integer');
         ref $_[1] eq 'ARRAY' && ($exact ? @{ $_[1] } == $want : @{ $_[1] } >= $want);
     } };
 };
@@ -266,7 +265,8 @@ defop REP => 16, 'match', 'V?V?X?', sub ($c, $ctx, @arg) {
     $ctx->{seq} or return $c->fault('REP is only meaningful in a sequence');
     my ($min, $max) = map { $_ < @arg ? $c->here($ctx, $arg[$_]{code}) : undef } 0, 1;
     my $limits = sub ($lo, $hi) {       # the range of counts, or nothing if the bounds are invalid
-        return unless is_int($lo) && $lo >= 0 && is_int($hi) && $hi >= -1;
+        ($lo, $hi) = (whole($lo), whole($hi));
+        return unless defined $lo && $lo >= 0 && defined $hi && $hi >= -1;
         $hi = $hi == 0 ? $lo : $hi < 0 ? INF : $hi;
         return $hi >= $lo ? ($lo, $hi) : ();
     };
@@ -341,7 +341,7 @@ defop END => 18, 'match', '', sub ($c, $ctx) {
 # refers to another set.  A character is a code point or one-character string.
 defop CHARS => 19, 'match', 'X*', sub ($c, $ctx, @spec) {
     my $single = sub ($e) {     # the code point of an element that denotes exactly one character
-        return !defined $e ? 0x10FFFF : is_int($e) ? $e : is_str($e) && length $e == 1 ? ord $e : undef;
+        return !defined $e ? 0x10FFFF : whole($e) // (is_str($e) && length $e == 1 ? ord $e : undef);
     };
     my $not_a_set = sub { $_[0]->fail_operand('not a character set') };
     my $adding    = 1;
@@ -384,7 +384,8 @@ defop CHARS => 19, 'match', 'X*', sub ($c, $ctx, @spec) {
     @rule = reverse @rule;      # the last rule that mentions a character decides
     my %re = $chars ? (re => JGraft::Compiler::re_set($chars), width => 1) : ();
     return { chars => $chars, %re, throws => !!(grep { @$_ == 2 } @rule), code => sub {
-        my $cp = is_int($_[1]) && $_[1] >= 0 && $_[1] <= 0x10FFFF ? $_[1] : is_str($_[1]) && length $_[1] == 1 ? ord $_[1] : return 0;
+        my $cp = whole($_[1]);
+        $cp = defined $cp && $cp >= 0 && $cp <= 0x10FFFF ? $cp : is_str($_[1]) && length $_[1] == 1 ? ord $_[1] : return 0;
         for my $rule (@rule) {
             return $rule->[0] if @$rule == 2 ? $rule->[1]->(@_) : $rule->[1] <= $cp && $cp <= $rule->[2];
         }

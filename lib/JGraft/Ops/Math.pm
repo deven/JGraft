@@ -286,6 +286,7 @@ sub round ($x, $o, $v) {
     $o = { shift => $o } if is_int($o);
     ref $o eq 'HASH' && !grep { !/^(?:mode|at|shift|as)$/ } keys %$o or $x->fail_operand('invalid ROUND options');
     !exists $o->{$_} || is_int($o->{$_}) or $x->fail_operand("ROUND $_ must be an integer") for qw(at shift);
+    $o = { %$o, map { $_ => whole($o->{$_}) } grep { exists $o->{$_} } qw(at shift) };
     abs($o->{$_} // 0) < 1e15 or $x->fail(UNSUPPORTED_GRAFT => 'exponent out of range') for qw(at shift);
     my $mode = exists $o->{mode} ? choice($x, \%MODE, $o->{mode}) : 1;
     my $as   = exists $o->{as}   ? choice($x, \%AS,   $o->{as})   : is_num($v) ? 0 : 2;

@@ -17,7 +17,7 @@ use constant {
 
 our @EXPORT = qw(
     T_MISSING T_NULL T_BOOL T_NUM T_STR T_ARR T_OBJ T_DATE T_DATETIME T_TIMESTAMP T_OTHER
-    $TRUE $FALSE $MISSING type_of is_str is_num is_int is_idx match_lit sizeof
+    $TRUE $FALSE $MISSING type_of is_str is_num is_int whole is_idx match_lit sizeof
     STRAY $WIDE mended
 );
 
@@ -67,11 +67,24 @@ sub type_of {
 sub is_str { defined $_[0] && !ref $_[0] && !created_as_number($_[0]) && !is_bool($_[0]) }
 sub is_num { created_as_number($_[0]) || ref $_[0] && $NUMBER{ ref $_[0] } }
 
-# A finite number with no fractional part.
-sub is_int {
-    return $_[0] == int $_[0] && $_[0] - $_[0] == 0 if created_as_number($_[0]);
-    return ref $_[0] && $NUMBER{ ref $_[0] } && JGraft::Number::whole($_[0]);
+# A number that has no fractional part, as one of Perl's own; or nothing, if
+# the value is not such a number.  This is what an index or a count is
+# checked with, and what is then used.  To an exact run one of Perl's numbers
+# is what Perl writes it as (see JGraft::Number::parts), so one that binary
+# arithmetic has left a hair away from 3 is 3.
+sub whole {
+    my $n = $_[0];
+    if (created_as_number($n)) {
+        return $n if $n == int $n && $n - $n == 0;
+        return undef unless $JGraft::Number::EXACT && "$n" =~ /\A-?[0-9]+\z/;
+        die "it depends on whether the run is exact\n" if $JGraft::Number::EXACT eq 'fold';
+        return 0 + "$n";
+    }
+    return ref $n && $NUMBER{ ref $n } && JGraft::Number::whole($n) ? 0 + "$n" : undef;
 }
+
+# Is it a finite number with no fractional part?
+sub is_int { defined whole($_[0]) }
 
 # Path keys are validated before use: strings name object properties, while
 # numbers and undef (the "append position", written `false`) index arrays.

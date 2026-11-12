@@ -186,7 +186,7 @@ defop SLICE => 57, 'fn', 'VV?V?', sub ($c, $ctx, @arg) {
             ref $o eq 'HASH' && !grep { !/^(?:ofs|len|lim|path)$/ } keys %$o
                 or $x->fail_operand('SLICE needs a value and offset, or an object');
             my %given = %$o;        # a copy: the object itself must not be touched
-            is_int($_) && $_ >= 0 or $x->fail_operand('SLICE positions must be non-negative integers')
+            $_ = whole($_) // -1, $_ >= 0 || $x->fail_operand('SLICE positions must be non-negative integers')
                 for @given{ grep { exists $given{$_} } qw(ofs len lim) };
             my $path = exists $given{path} ? $given{path} : [];
             my $keys = ref $path eq 'ARRAY' ? JGraft::Compiler::path_keys('node', 0, @$path) : 'not a path';
@@ -201,7 +201,8 @@ defop SLICE => 57, 'fn', 'VV?V?', sub ($c, $ctx, @arg) {
         }
         else {
             ($v, my $o, my $n) = map { $_->(@_) } @get;
-            is_int($o) && (@get < 3 || is_int($n)) or $x->fail_operand('SLICE offset and length must be integers');
+            ($o, $n) = (whole($o), @get < 3 ? undef : whole($n));
+            defined $o && (@get < 3 || defined $n) or $x->fail_operand('SLICE offset and length must be integers');
             $measure->();
             $ofs = $o < 0 ? $size + $o : $o;
             $lim = @get < 3 ? $size : $n < 0 ? $size + $n : $ofs + $n;

@@ -207,7 +207,7 @@ defop SPLICE => 7, 'action', 'PVV*', sub ($c, $ctx, $path, $count, @new) {
         local $x->{temp} = $x->{temp};
         my @k = $keys->($x->env);
         my $n = $howmany->($x->env);
-        !defined $n || is_int($n) or $x->fail_operand('SPLICE count must be an integer');
+        $n = whole($n) // $x->fail_operand('SPLICE count must be an integer') if defined $n;
         my @v = map { $_->($x->env) } @value;
         my @m = map { $_->($x->env) } @carried;
         my @t = $x->{src} ? map { $_ && $_->($x->env) } @from : ();
