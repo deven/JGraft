@@ -1163,9 +1163,7 @@ Each of these made the code smaller; none changes behaviour the suite can see.
     index or a count takes the value from it, not only the yes or no
     (`is_int` is now `defined whole`): path elements and half-indices,
     SLICE, SPLICE, ARRAY length and offset, REP, ROUND's options, character
-    codes. What is left inexact is the quotient that does not end: at forty
-    digits, (1/3) x 3 is not 1. A coefficient over a denominator would make
-    division exact as well; not done. So an exact
+    codes. So an exact
     run of ordinary data gives ordinary data, and goes on exactly from it.
   - *A whole number has no places*: 1e2 is 100, and 150e28 is 15e29.
   - *The flag is the run's*, not the graft's, so one compiled graft serves
@@ -1179,8 +1177,23 @@ Each of these made the code smaller; none changes behaviour the suite can see.
     `Math::BigInt` and `Math::BigFloat`, though none is made.
   - *Equality is of value* (0.30 matches 0.3); only the JSON writer and undo
     ask whether two numbers are the same to the place (`Number::same`).
-  - *Division* is exact when it ends and otherwise 40 digits; `LOG` and
-    fractional `POW` stay Perl's.
+  - *Division is exact too.* A quotient that ends is the decimal. One that
+    does not is a fraction: the object is then `[ Math::BigRat, places ]`,
+    and arithmetic that meets one is done on fractions (`Number::rat`,
+    `settle`), giving a decimal again as soon as one says the result. So
+    (1/3) x 3 is 1, where forty digits of a third gave 0.999...; that had
+    made exact arithmetic worse than Perl's own at the one thing, and broke
+    indices worked out by division. Digits are given only when a fraction is
+    written, 34 of them (`$DIGITS`: decimal128; the 40 it was at first were
+    only `Math::BigFloat`'s default). The places ride along: 1.00/3 x 3 is
+    1.00. Storing the digits that repeat, as on paper, was considered: it is
+    the same information as the fraction, but a divisor of n digits can
+    repeat every 10^n (1/65537: 65,536 digits), so it is offered only as a
+    way of writing (`repeating`: `0.(3)`, `0.1(6)`). `Math::BigRat` does
+    the fractions because it is there; it is not used for decimals, where it
+    is ten times slower than the coefficients (25 to 80 µs an operation
+    against 8) and would lose the places. `LOG` and fractional `POW` stay
+    Perl's.
   - *Cost is charged*: a digit of a kept object, the zeros between two
     numbers added, the digits of a power, with a cap of a billion.
   The whole conformance suite gives the same results exact as not, except

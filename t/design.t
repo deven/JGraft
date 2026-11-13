@@ -1269,8 +1269,36 @@ subtest 'numbers that are exact' => sub {
     is $calc->('6.0', '2', [ DIV => $A, $B ]), '3.0', 'a quotient that ends keeps the places of what was divided';
     is $calc->('1', '4', [ DIV => $A, $B ]), '0.25', '... and has those it needs';
     is $calc->('1', '1024', [ DIV => $A, $B ]), '0.0009765625', '... all of them';
-    is $calc->('1', '3', [ DIV => $A, $B ]), '0.' . '3' x 40, 'one that does not end is given forty digits';
-    is $calc->('2', '-3', [ DIV => $A, $B ]), '-0.' . '6' x 39 . '7', '... the last of them rounded';
+    is $calc->('1', '3', [ DIV => $A, $B ]), '0.' . '3' x 34, 'one that does not end is written with thirty-four digits';
+    is $calc->('2', '-3', [ DIV => $A, $B ]), '-0.' . '6' x 33 . '7', '... the last of them rounded';
+    {
+        local $JGraft::Number::DIGITS = 10;
+        is $calc->('1', '7', [ DIV => $A, $B ]), '0.1428571429', '... or with as many as are asked for';
+    }
+    # But it is not those digits.  It is the fraction, until it is written.
+    is $calc->('1', '3', [ MUL => [ DIV => $A, $B ], $B ]), '1', 'a third, three times, is one';
+    is $calc->('1.00', '3', [ MUL => [ DIV => $A, $B ], $B ]), '1.00', '... to the places it started with';
+    is $calc->('10', '3', [ MUL => [ DIV => $A, $B ], 0.9 ]), '3.0', 'ten thirds of nine tenths are three';
+    is $calc->('1', '3', [ ADD => [ DIV => $A, $B ], [ DIV => 1, 6 ] ]), '0.5', 'a third and a sixth are a half';
+    is $calc->('1', '3', [ SUB => [ DIV => $A, $B ], [ DIV => 2, 6 ] ]), '0', 'a third less two sixths is nothing';
+    is $calc->('1', '3', [ DIV => [ DIV => $A, $B ], [ DIV => 2, 3 ] ]), '0.5', 'a third of two thirds... is a half of it';
+    is $calc->('1', '3', [ POW => [ DIV => $A, $B ], -2 ]), '9', 'a third to the power -2 is nine';
+    is $calc->('7', '3', [ MOD => $A, [ DIV => 1, $B ] ]), '0', 'seven is a whole number of thirds';
+    is $calc->('1', '3', [ MOD => [ DIV => $A, $B ], 0.25 ]), '0.08' . '3' x 33, 'and a third leaves a twelfth over a quarter';
+    is $calc->('1', '3', [ CASE => [ IS => [ DIV => $A, $B ], [ DIV => 2, 6 ] ], 'equal', 'not' ]), '"equal"', 'a third is two sixths';
+    is $calc->('1', '3', [ CASE => [ IS => [ DIV => $A, $B ], [ CASTNUM => '0.' . '3' x 34 ] ], 'equal', 'not' ]), '"not"', '... and is not the digits it is written with';
+    is $calc->('1', '3', [ CASE => [ IS => [ LESS => 0.3333, [ DIV => $A, $B ] ], $JGraft::Util::TRUE ], 'more', 'not' ]), '"more"', '... but more than any fewer of them';
+    is $calc->('1e400', '3', [ MUL => [ DIV => $A, $B ], $B ]), '1e+400', 'a third of a number beyond Perl\'s range, and back';
+    is $calc->('1e1000000000000', '3', [ DIV => $A, $B ]), 'UNSUPPORTED_GRAFT', '... unless there are more zeros to it than can be written';
+    is $calc->('1', '3', [ CASTSTR => [ DIV => $A, $B ] ]), '"0.' . '3' x 34 . '"', 'CASTSTR writes what would be written';
+    is $calc->('2', '3', [ ROUND => { at => 2 }, [ DIV => $A, $B ] ]), '0.67', 'and ROUND rounds it';
+    # As it is written in school.
+    my $school = sub ($a, $b) { JGraft->new([ JGRAFT => {}, [ COPY => [ DIV => $a, $b ], ['NODE'] ] ])->apply(undef, exact => 1)->repeating };
+    is join(' ', map { $school->(@$_) } [ 1, 3 ], [ 1, 6 ], [ 1, 7 ], [ -22, 7 ], [ 1, 12 ], [ 100, 3 ], [ 1, 300 ]), '0.(3) 0.1(6) 0.(142857) -3.(142857) 0.08(3) 33.(3) 0.00(3)',
+        'a fraction can be had with the digits that repeat marked';
+    is length $school->(1, 97), length('0.()') + 96, '... all ninety-six of them, for a ninety-seventh';
+    is $school->(1, 65537), undef, '... but not sixty-five thousand';
+    is JGraft::Number::read('0.30')->repeating, '0.30', 'a number that ends is written as ever';
     is $calc->('7', '0', [ DIV => $A, $B ]), 'INVALID_TARGET', 'nothing is divided by zero';
     is $calc->('7.5', '-2', [ MOD => $A, $B ]), '-0.5', 'a remainder takes the sign of the divisor';
     is $calc->('1e30', '7', [ MOD => $A, $B ]), '1', '... and is right however large the number';
@@ -1295,7 +1323,7 @@ subtest 'numbers that are exact' => sub {
     ok !ref $made->([ ADD => 2, 3 ]) && !ref $made->([ MUL => 1.5, 1.5 ]) && !ref $made->([ DIV => 7, 2 ]), 'so is what Perl would have got right';
     my $third = $made->([ DIV => 1, 3 ]);
     is ref $third, 'JGraft::Number', 'a third is not: it is an object';
-    is "$third", '0.' . '3' x 40, '... which reads as the number';
+    is "$third", '0.' . '3' x 34, '... which reads as the number';
     ok $third < 0.34 && $third > 0.33 && abs($third * 3 - 1) < 1e-15 && $third == $made->([ DIV => 2, 6 ]), '... and can be compared and calculated with, as Perl does';
     is ref $made->([ POW => 2, 64 ]), 'JGraft::Number', 'an integer that Perl does not hold is one';
     ok !ref $made->([ SUB => [ POW => 2, 64 ], 1 ]), 'and the widest that it does is not';
@@ -1345,7 +1373,7 @@ subtest 'numbers that are exact' => sub {
     is $from->([ MUL => $N3, 1e15 ]), '3000000000000000, held as 3000000000000000', '... in a product';
     is $from->([ MOD => 7, $N3 ]), '1, held as 1', '... a remainder';
     is $from->([ POW => 2, $N3 ]), '8, held as 8', '... and a power';
-    is $from->([ DIV => 1e15, 3 ]), 'object 333333333333333.' . '3' x 25 . ', held as 333333333333333.31', 'a quotient that Perl would write as whole, and is not, is not taken for whole';
+    is $from->([ DIV => 1e15, 3 ]), 'object 333333333333333.' . '3' x 19 . ', held as 333333333333333.31', 'a quotient that Perl would write as whole, and is not, is not taken for whole';
     ok JGraft->new([ JGRAFT => {}, [ COPY => [ IS => [ CASTNUM => '0.30' ], ['NODE'] ], ['NODE'] ] ])->apply($near03, exact => 1),
         'and an exact number is compared with what Perl writes';
 
@@ -1389,7 +1417,8 @@ subtest 'numbers that are exact' => sub {
     is $at->([ MUL => [ DIV => [ NODE => 'n' ], 4 ], 2 ], exact => 1), 'f', 'so is a quotient that ends, multiplied up again';
     is $at->([ SUB => [ LENGTH => [ NODE => 'list' ] ], 1 ], exact => 1), 'h', 'and whole-number arithmetic, as ever';
     is $at->([ POW => 27, [ DIV => 1, 3 ] ], exact => 1), 'd', 'a root that Perl writes as whole is whole';
-    is $at->([ MUL => [ DIV => [ NODE => 'n' ], 3 ], 0.9 ], exact => 1), 'INVALID_OPERAND', 'a quotient that does not end is forty digits, and three times it is not quite the whole';
+    is $at->([ MUL => [ DIV => [ NODE => 'n' ], 3 ], 0.9 ], exact => 1), 'd', 'and one that does not end, for it is a fraction until it is written';
+    is $at->([ DIV => [ NODE => 'n' ], 3 ], exact => 1), 'INVALID_OPERAND', '... though a fraction is itself no index';
 
     # And one that binary arithmetic has left a hair away from whole is, to an exact run, the whole number Perl writes.
     my $hair = sub ($data, $opt, @actions) {

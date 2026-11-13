@@ -354,8 +354,9 @@ In an exact run:
 
 =item *
 
-Sums, differences, products, remainders and whole powers are exact,
-whatever their size.  0.1 and 0.2 make 0.3.
+Sums, differences, products, quotients, remainders and whole powers are
+exact, whatever their size.  0.1 and 0.2 make 0.3, and a third, three times,
+is 1.
 
 =item *
 
@@ -369,8 +370,12 @@ difference to what a number is worth: 0.30 matches 0.3.
 
 =item *
 
-A quotient is exact if it ends (1 by 8 is 0.125), and is otherwise rounded
-to 40 significant digits (C<$JGraft::Number::DIGITS>).
+A quotient that ends is the decimal (1 by 8 is 0.125).  One that does not
+is kept as the fraction it is, and calculated with as a fraction: so 10 by
+3, times 0.9, is 3.0.  It is given digits only when it is written, by
+C<CASTSTR> or C<ROUND> or into a text: 34 significant digits, or as many as
+C<$JGraft::Number::DIGITS> says.  It keeps count of the places meanwhile:
+1.00 by 3, times 3, is 1.00.
 
 =item *
 
@@ -394,7 +399,10 @@ number said, and an exact run that meets it again reads it as those digits,
 so that a calculation goes on from it exactly.  Any other number is an
 object, a L<JGraft::Number>: one written to a place that Perl would drop
 (0.30), one of more than the fifteen digits that Perl writes or of more
-than its integers hold, or one beyond its range.  Such an object reads as
+than its integers hold, one beyond its range, or a fraction that no decimal
+says.  (Of a fraction, C<< $n->repeating >> gives the form taught in school,
+with the digits that repeat marked: C<0.(3)>, C<0.1(6)>, C<0.(142857)>; or
+nothing, if more than a thousand digits repeat.)  Such an object reads as
 the number
 (C<"$n"> is C<0.30>), compares as it, and can be calculated with as Perl
 calculates (C<$n + 1>, inexactly); C<< JGraft::JSON->encode >> writes it
@@ -422,9 +430,8 @@ binary arithmetic left is the index 3, which in a run that is not exact is
 refused as a fraction.
 
 An index worked out by exact arithmetic is therefore as good as the
-arithmetic: C<[MUL, [ADD, 0.1, 0.2], 10]> is 3.  The exception is a quotient
-that does not end.  It has forty digits, and so ten thirds times 0.9 is a
-hair less than 3, and is not an index; nor is a third, three times, quite 1.
+arithmetic: C<[MUL, [ADD, 0.1, 0.2], 10]> is 3, and so is
+C<[MUL, [DIV, 10, 3], 0.9]>.
 
 It costs time: some tens of times what Perl's own arithmetic does, for each
 operation that is not on whole numbers, and more for numbers longer than

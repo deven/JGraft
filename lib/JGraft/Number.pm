@@ -9,7 +9,12 @@ package JGraft::Number;
 # 0.30 is 30 and -2.  The rules are those of the General Decimal Arithmetic
 # specification, which other languages' decimal types follow: a sum is known
 # to as many places as the finer of its terms, a product to as many as its
-# factors together, and nothing is rounded but a quotient that never ends.
+# factors together, and nothing is rounded.
+#
+# A quotient that never ends is kept as what it is, a fraction, with the
+# number of places it would have been known to (see "Fractions" below): a
+# third is 1/3, and three of them are 1.  It is given digits only when it is
+# written, $DIGITS of them.
 #
 # The result of a calculation is one of Perl's own numbers if, and only if,
 # Perl would write that number as the same digits: 0.3 is, and 12.  So
@@ -17,9 +22,10 @@ package JGraft::Number;
 # the exact number said.  It is an object of this class where Perl would write
 # something else: 0.30, which Perl would make 0.3; a number of more than the
 # fifteen digits Perl writes, or of more than an integer holds; one beyond
-# Perl's range.  An object is
+# Perl's range; a fraction.  An object is
 # [ coefficient, exponent ], and the coefficient a Math::BigInt if it has
-# more than eighteen digits.  It is never changed once made.
+# more than eighteen digits; or, for a fraction, [ Math::BigRat, places ].
+# It is never changed once made.
 #
 # Math::BigInt and Math::BigFloat objects are read as numbers too, wherever a
 # number is, though none is ever made.
@@ -34,8 +40,9 @@ use overload
 
 my $LONG = 18;          # an integer of this many digits is one that Perl holds, whatever they are
 
-# How many significant digits a quotient that never ends is given.
-our $DIGITS = 40;
+# How many significant digits a fraction is given when it is written: those
+# of the widest decimal number that IEEE 754 defines.
+our $DIGITS = 34;
 
 # The coefficient as Math::BigInt, or as Perl's own integer if it is short enough to be.
 sub wide ($c)  { require Math::BigInt; ref $c ? $c : Math::BigInt->new("$c") }
@@ -65,7 +72,7 @@ sub scan ($text) {
 # that some binary arithmetic has left as 0.30000000000000004 is 0.3 here.
 sub parts ($n) {
     my $kind = ref $n;
-    return @$n if $kind eq __PACKAGE__;
+    return ratio($n) ? scan($n->[0]->as_float($DIGITS)->bsstr) : @$n if $kind eq __PACKAGE__;     # (a fraction, as nearly as digits say it)
     if (!$kind) {
         my $text = "$n";
         return $text =~ /\A-?[0-9]{1,18}\z/ ? (0 + $text, 0) : scan($text);
@@ -136,16 +143,33 @@ sub level ($a, $b) {
 #---------------------------------------------------------------------------
 # Arithmetic.  Each takes numbers of any kind, and returns one as `make` does.
 
-sub add ($a, $b) { my ($c1, $c2, $e) = level($a, $b); make($c1 + $c2, $e) }
-sub sub ($a, $b) { my ($c1, $c2, $e) = level($a, $b); make($c1 - $c2, $e) }
+sub add ($a, $b) {
+    return settle(rat($a) + rat($b), most(places($a), places($b))) if ratio($a) || ratio($b);
+    my ($c1, $c2, $e) = level($a, $b);
+    return make($c1 + $c2, $e);
+}
+
+sub sub ($a, $b) {
+    return settle(rat($a) - rat($b), most(places($a), places($b))) if ratio($a) || ratio($b);
+    my ($c1, $c2, $e) = level($a, $b);
+    return make($c1 - $c2, $e);
+}
 
 sub mul ($a, $b) {
+    return settle(rat($a) * rat($b), places($a) + places($b)) if ratio($a) || ratio($b);
     my ($c1, $e1, $c2, $e2) = (parts($a), parts($b));
     return make(!ref $c1 && !ref $c2 && length(abs $c1) + length(abs $c2) <= $LONG ? $c1 * $c2 : wide($c1) * $c2, $e1 + $e2);
 }
 
 # The remainder, which takes the sign of the divisor (which is not zero).
-sub mod ($a, $b) { my ($c1, $c2, $e) = level($a, $b); make(ref $c1 || ref $c2 ? wide($c1) % $c2 : $c1 % $c2, $e) }
+sub mod ($a, $b) {
+    if (ratio($a) || ratio($b)) {
+        my ($p, $q) = (rat($a), rat($b));
+        return settle($p - $q * ($p / $q)->bfloor, most(places($a), places($b)));
+    }
+    my ($c1, $c2, $e) = level($a, $b);
+    return make(ref $c1 || ref $c2 ? wide($c1) % $c2 : $c1 % $c2, $e);
+}
 
 # A whole number as the least coefficient it can have: 1000 as 1 and 3.
 sub least ($n) {
@@ -154,19 +178,22 @@ sub least ($n) {
     return (length $digits <= $LONG ? 0 + $digits : wide($digits), $e + length $1);
 }
 
-# How far apart two numbers' last places are: what it costs to add them.
-sub apart ($a, $b) { abs((parts($a))[1] - (parts($b))[1]) }
+# How far apart two numbers' last places are: what it costs to add them, or
+# to make a fraction of them.  (A fraction's own is where the point is.)
+sub apart ($a, $b) { abs((ratio($a) ? 0 : (parts($a))[1]) - (ratio($b) ? 0 : (parts($b))[1])) }
 
 # $a to the power $n: a whole number of Perl's own, and not negative.
 sub pow ($a, $n) {
+    return settle(rat($a)->bpow(wide($n)), places($a) * $n) if ratio($a);
     my ($c, $e) = least($a);
     return make(!ref $c && len($c) * $n <= 15 ? 0 + sprintf('%d', $c**$n) : wide($c)->copy->bpow($n), $e * $n);
 }
 
-# The quotient (of a divisor that is not zero).  It is exact if it ends, and
-# is then written with as few places as it needs beyond those of the numbers
-# divided; one that does not end is rounded to $DIGITS significant digits.
+# The quotient (of a divisor that is not zero).  If it ends it is a decimal,
+# written with as few places as it needs beyond those of the numbers
+# divided; if it does not, it is the fraction.
 sub div ($a, $b) {
+    return settle(rat($a) / rat($b), most(0, places($a) - places($b))) if ratio($a) || ratio($b);
     my ($c1, $e1, $c2, $e2) = (parts($a), parts($b));
     my $e = $e1 - $e2;
     return make(0, $e < 0 ? $e : 0) if !$c1;
@@ -174,26 +201,83 @@ sub div ($a, $b) {
         use integer;
         return make($c1 / $c2, $e);
     }
-    my ($n, $d) = (wide($c1), wide($c2));
-    ($n, $d) = (-$n, -$d) if $d < 0;
-    my $common = Math::BigInt::bgcd($n, $d);
-    ($n, $d) = ($n / $common, $d / $common);
-    # It ends if the divisor, in lowest terms, is made of twos and fives alone:
-    # then some power of ten is a multiple of it.
-    my ($rest, %times) = ($d->copy);
+    # (the powers of ten are kept out of the fraction, which may then be far smaller than the number)
+    require Math::BigRat;
+    return settle(Math::BigRat->new(wide($c1), wide($c2)), most(0, places($a) - places($b)), $e);
+}
+
+#---------------------------------------------------------------------------
+# Fractions
+#
+# A fraction is [ Math::BigRat, places ]: a number in lowest terms whose
+# divisor is not made of twos and fives alone, so that no decimal says it;
+# and the number of places it would be known to if one did.  1.00 / 3 is a
+# third, of two places, and three times that is 1.00.  Arithmetic on a
+# fraction is arithmetic on fractions, and the result is a decimal again as
+# soon as there is a decimal that says it.
+
+sub ratio ($n)  { ref $n eq __PACKAGE__ && ref $n->[0] eq 'Math::BigRat' }
+sub most ($a, $b) { $a > $b ? $a : $b }
+
+# The places after the point that a number is known to.
+sub places ($n) {
+    return $n->[1] if ratio($n);
+    my $e = (parts($n))[1];
+    return $e < 0 ? -$e : 0;
+}
+
+# Any number as a fraction (which is the caller's to change).
+sub rat ($n) {
+    return $n->[0]->copy if ratio($n);
+    require Math::BigRat;
+    my ($c, $e) = parts($n);
+    my $rat = Math::BigRat->new(wide($c));
+    return $rat unless $e;
+    my $power = Math::BigInt->new(10)->bpow(abs $e);
+    return $e > 0 ? $rat->bmul($power) : scalar $rat->bdiv($power);        # (in a list, bdiv gives a quotient and a remainder)
+}
+
+# The number that is $rat times ten to the power $e, known to $places: a
+# decimal if one says it, and otherwise a fraction.
+sub settle ($rat, $places, $e = 0) {
+    my ($rest, %times) = ($rat->denominator);
     for my $p (2, 5) {
         $times{$p} = 0;
-        $rest /= $p, $times{$p}++ while $rest % $p == 0;
+        $rest->bdiv($p), $times{$p}++ while ($rest % $p)->is_zero;
     }
-    if ($rest == 1) {
-        my $k = $times{2} > $times{5} ? $times{2} : $times{5};
-        return make(up($n, $k) / $d, $e - $k);
+    if ($rest->is_one) {
+        # Some power of ten is a multiple of the divisor: the least such gives the places it needs.
+        my $needs = most($times{2}, $times{5});
+        my $c     = $rat->copy->bmul(Math::BigInt->new(10)->bpow($needs))->numerator;
+        $e -= $needs;
+        ($c, $e) = least(bless [ $c, $e ]) if $e >= 0;          # (a whole number: its zeros are not places)
+        ($c, $e) = (up($c, $e + $places), -$places) if $e > -$places && $e <= 0;       # the places it is known to, beyond those
+        return make($c, $e);
     }
-    my $k = $DIGITS - ($n->length - $d->length);
-    $k = 0 if $k < 0;
-    my ($quotient, $left) = up($n, $k)->bdiv($d);       # rounded down, with what is left over
-    $quotient->binc if $left * 2 > $d;
-    return make($quotient, $e - $k);
+    $rat = rat(bless [ $rat ]) * rat(make(1, $e)) if $e;
+    return bless [ $rat, $places ], __PACKAGE__;
+}
+
+# A fraction as it is written in school, with the digits that repeat marked:
+# 0.(3) for a third, 0.1(6) for a sixth, 0.(142857) for a seventh.  Nothing,
+# if it would take more than $most digits to say.  A number that is not a
+# fraction is written as it always is.
+sub repeating ($n, $most = 1000) {
+    return str($n) unless ratio($n);
+    my ($p, $q) = ($n->[0]->numerator, $n->[0]->denominator);
+    my $sign    = $p->is_neg ? '-' : '';
+    my ($whole, $left) = $p->babs->bdiv($q);
+    ($q, $left) = (0 + $q->bstr, 0 + $left->bstr) if $q->length <= 17;      # long division, in Perl's integers if they will do
+    my ($digits, %at) = ('');
+    until (exists $at{$left}) {
+        return undef if length $digits >= $most;
+        $at{$left} = length $digits;
+        $left *= 10;
+        my $digit = ref $left ? $left / $q : do { use integer; $left / $q };
+        $left -= $digit * $q;
+        $digits .= $digit;
+    }
+    return sprintf '%s%s.%s(%s)', $sign, $whole->bstr, substr($digits, 0, $at{$left}), substr($digits, $at{$left});
 }
 
 #---------------------------------------------------------------------------
@@ -226,6 +310,7 @@ sub ordered ($a, $b) {
 sub order ($a, $b) {
     # (an infinity, or what is not a number at all, is no decimal; Perl compares those as it does)
     return 0 + $a <=> 0 + $b if grep { !ref && $_ - $_ != 0 } $a, $b;
+    return rat($a)->bcmp(rat($b)) if ratio($a) || ratio($b);
     my ($c1, $e1, $c2, $e2) = (parts($a), parts($b));
     my ($s1, $s2) = ($c1 <=> 0, $c2 <=> 0);
     return $s1 <=> $s2 if $s1 != $s2 || !$s1;
@@ -241,12 +326,14 @@ sub order ($a, $b) {
 # equal, and `order` says so, but they are not the same.)
 sub same ($a, $b) {
     return $a == $b if !ref $a && !ref $b;
+    return ratio($a) && ratio($b) && $a->[1] == $b->[1] && $a->[0] == $b->[0] if ratio($a) || ratio($b);
     my ($c1, $e1, $c2, $e2) = (parts($a), parts($b));
     return $e1 == $e2 && $c1 == $c2;
 }
 
 # Is a number whole?
 sub whole ($n) {
+    return 0 if ratio($n);          # (or it would be a decimal)
     my ($c, $e) = parts($n);
     return 1 if $e >= 0 || !$c;
     my ($zeros) = (ref $c ? $c->bstr : "$c") =~ /(0*)\z/;
@@ -255,13 +342,14 @@ sub whole ($n) {
 
 # How many digits a number has: what it costs to keep.  (Those of a whole
 # number that are zeros at its end cost nothing.)
-sub digits ($n) { len((least($n))[0]) }
+sub digits ($n) { ratio($n) ? $n->[0]->numerator->length + $n->[0]->denominator->length : len((least($n))[0]) }
 
 #---------------------------------------------------------------------------
 # Writing
 
-# A number as JSON writes one, with every digit it has.  A very small or a
-# very large one is written with an exponent.
+# A number as JSON writes one, with every digit it has (and a fraction, which
+# has no end of them, with $DIGITS).  A very small or a very large one is
+# written with an exponent.
 sub str ($n, @) {
     my ($c, $e) = parts($n);
     my $digits = ref $c ? $c->bstr : "$c";

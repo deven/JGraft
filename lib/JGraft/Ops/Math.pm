@@ -223,8 +223,10 @@ sub exactly ($x, $op, $a, $b) {
         is_num($a) && is_num($b) or $x->fail_target("$op needs numbers");
         finite($x, $a, $b) if ref $a ne 'JGraft::Number' || ref $b ne 'JGraft::Number';
         $check->($x, $a, $b) if $check;
-        # To add 1 to 1e400 is to write the four hundred zeros out, and for more zeros than can be written there is no sum.
-        if ($op =~ /ADD|SUB|MOD/ && (my $apart = JGraft::Number::apart($a, $b)) > 100) {
+        # To add 1 to 1e400 is to write the four hundred zeros out, and for more zeros than can be written there is
+        # no sum.  The same goes for a third of it, and for anything done to it with a fraction.
+        my $zeros = $op =~ /ADD|SUB|MOD|DIV/ || JGraft::Number::ratio($a) || JGraft::Number::ratio($b);
+        if ($zeros && (my $apart = JGraft::Number::apart($a, $b)) > 100) {
             $apart <= 1e9 or $x->fail(UNSUPPORTED_GRAFT => 'number out of range');
             $x->charge($apart, $apart);
         }
