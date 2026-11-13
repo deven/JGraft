@@ -636,24 +636,24 @@ subtest 'a run can be undone' => sub {
     my @case = (
         [ 'nothing, if nothing was done' => '', [ MATCH => { name => 'x' } ] ],
         [ 'what was added is removed, and what was replaced put back' =>
-            '["MOVE",["NODE","new"],null] ["COPY","x",["NODE","name"],"v",["NODE","user","roles",1,"k"]]',
+            '["MOVE","new",null] ["COPY","x","name","v",["NODE","user","roles",1,"k"]]',
             [ COPY => 1, 'new', 'y', 'name', 9, [ 'NODE', 'user', 'roles', 1, 'k' ] ] ],
-        [ 'a path that was created is removed where it began' => '["MOVE",["NODE","a"],null]', [ COPY => 1, [ 'NODE', 'a', 'b', 0, 'c' ] ] ],
+        [ 'a path that was created is removed where it began' => '["MOVE","a",null]', [ COPY => 1, [ 'NODE', 'a', 'b', 0, 'c' ] ] ],
         [ 'a splice is undone by a splice' => '["SPLICE",["NODE","tags",1],3,"b","c"]', [ SPLICE => [ 'NODE', 'tags', 1 ], 2, 'X', 'Y', 'Z' ] ],
         [ 'and so is an element added at the end' => '["SPLICE",["NODE","tags",4],1]', [ COPY => 'e', [ 'NODE', 'tags', 4 ] ] ],
         [ 'an element that moved goes back' => '["SPLICE",["NODE","tags",3],1] ["SPLICE",["NODE","tags",0],0,"a"]',
             [ MOVE => [ 'NODE', 'tags', 0 ], [ 'NODE', 'tags', 3.5 ] ] ],
         [ 'in a string of several lines, the lines that changed are put back' =>
-            '["ATSPLIT",["NODE","text"],"\\n",["COPY","two",["NODE",1]]]', [ ATSPLIT => 'text', "\n", [ SPLICE => 1, 1, '2' ] ] ],
-        [ 'however the string came to change' => '["ATSPLIT",["NODE","text"],"\\n",["SPLICE",["NODE",3],1]]',
+            '["ATSPLIT","text","\\n",["COPY","two",1]]', [ ATSPLIT => 'text', "\n", [ SPLICE => 1, 1, '2' ] ] ],
+        [ 'however the string came to change' => '["ATSPLIT","text","\\n",["SPLICE",3,1]]',
             [ COPY => [ CONCAT => [ 'NODE', 'text' ], "\nfour" ], 'text' ] ],
-        [ 'a string with no line in common is put back whole' => '["COPY","one\\ntwo\\nthree",["NODE","text"]]',
+        [ 'a string with no line in common is put back whole' => '["COPY","one\\ntwo\\nthree","text"]',
             [ COPY => "1\n2", 'text' ] ],
-        [ 'and so is one of a single line' => '["COPY","x",["NODE","name"]]', [ COPY => 'y', 'name' ] ],
-        [ 'arrays in what is put back are written as a graft writes them' => '["COPY",[["a","b","c","d"]],["NODE","tags"]]',
+        [ 'and so is one of a single line' => '["COPY","x","name"]', [ COPY => 'y', 'name' ] ],
+        [ 'arrays in what is put back are written as a graft writes them' => '["COPY",[["a","b","c","d"]],"tags"]',
             [ COPY => 'none', 'tags' ] ],
         [ 'several changes to one array are undone one by one, the last first' =>
-            '["COPY","",["NODE",29]] ["SPLICE",["NODE",20],0,"line 20"] ["SPLICE",["NODE",6],1] ["COPY","line 5",["NODE",4]]',
+            '["COPY","",29] ["SPLICE",20,0,"line 20"] ["SPLICE",6,1] ["COPY","line 5",4]',
             [ SPLICE => 4, 2, 'new', '', 'newer' ], [ SPLICE => 20, 1 ], [ COPY => 'end', 29 ] ],
     );
     for (@case) {
@@ -676,13 +676,13 @@ subtest 'a run can be undone' => sub {
     }
     cmp_ok $looked, '<', 10, "and an array or object that a run left alone is not looked into ($looked comparisons, beside 10,000 values)";
     is $undo->([ 1 .. 500 ], [ COPY => [ MAP => [ ADD => ['NODE'], 0.5 ] ], ['NODE'] ]),
-        '["SPLICE",["NODE",0],500,' . join(',', 1 .. 500) . ']', 'an array that changed throughout is put back in one action';
+        '["SPLICE",0,500,' . join(',', 1 .. 500) . ']', 'an array that changed throughout is put back in one action';
 
     my $text  = join "\n", map { $_ % 7 ? "line $_ of the text" : '' } 1 .. 10_000;
     my $lines = $undo->({ doc => $text }, [ ATSPLIT => 'doc', "\n", [ SPLICE => 9000, 2, 'new' ], [ SPLICE => 5000, 0, 'inserted', '' ],
         [ COPY => 'CHANGED', 12 ], [ SPLICE => 3, 1 ] ]);
-    is $lines, '["ATSPLIT",["NODE","doc"],"\\n",["SPLICE",["NODE",9001],1,"line 9001 of the text",""],["SPLICE",["NODE",4999],2],'
-        . '["COPY","line 13 of the text",["NODE",11]],["SPLICE",["NODE",3],0,"line 4 of the text"]]',
+    is $lines, '["ATSPLIT","doc","\\n",["SPLICE",9001,1,"line 9001 of the text",""],["SPLICE",4999,2],'
+        . '["COPY","line 13 of the text",11],["SPLICE",3,0,"line 4 of the text"]]',
         'a handful of changes among 10,000 lines are undone by as many actions';
 
     # Arrays are compared for the least change there can be: checked here against the textbook
@@ -737,7 +737,7 @@ subtest 'a run can be undone' => sub {
     my $fails = graft([ COPY => 1, 'new' ], [ SPLICE => [ 'NODE', 'tags', 0 ], 1 ], [ MATCH => 0 ]);
     my $r     = $fails->run($doc->());
     is show($r->partial->{tags}), '["b","c","d"]', 'a run that fails has made changes';
-    is show([ @{ $r->undo }[ 2, 3 ] ]), '[["MOVE",["NODE","new"],null],["SPLICE",["NODE","tags",0],0,"a"]]', 'and says how to undo them';
+    is show([ @{ $r->undo }[ 2, 3 ] ]), '[["MOVE","new",null],["SPLICE",["NODE","tags",0],0,"a"]]', 'and says how to undo them';
     is show(JGraft->new($r->undo)->apply($r->partial)), show($doc->()), 'which gives back the input';
     ok !eval { $fails->apply($doc->()); 1 }, 'apply dies';
     is show(JGraft->new($@->undo)->apply($@->partial)), show($doc->()), 'and its error has the same';
@@ -749,7 +749,7 @@ subtest 'a run can be undone' => sub {
     my @keep  = (date_export => sub ($d) { $d });
     my $dated = graft([ COPY => [ CASTDATE => '2024-02-29' ], 'd', [ CASTDATE => '2024-02-29T10:00:00+0100' ], 't' ])->apply({}, @keep);
     $r = graft([ COPY => 1, 'd' ], [ MOVE => 't', undef ])->run($dated, @keep);
-    is show($r->undo->[2]), '["COPY",["CASTDATE","2024-02-29"],["NODE","d"],["CASTDATE","2024-02-29T10:00:00+0100"],["NODE","t"]]',
+    is show($r->undo->[2]), '["COPY",["CASTDATE","2024-02-29"],"d",["CASTDATE","2024-02-29T10:00:00+0100"],"t"]',
         'a date is put back by CASTDATE';
     my $back = JGraft->new($r->undo)->apply($r->output, @keep);
     is join(' ', map { ref($back->{$_}) . ' ' . $back->{$_}->str } 'd', 't'), 'JGraft::Date 2024-02-29 JGraft::Date 2024-02-29T10:00:00+0100',
@@ -769,16 +769,16 @@ subtest 'a run can be undone' => sub {
     for (
         [ 'a thing that was renamed is moved back',
             [ [ MOVE => 'a', 'b' ] ],
-            '["MOVE",["NODE","b"],["NODE","a"]]' ],
+            '["MOVE","b","a"]' ],
         [ 'one renamed and then changed inside is moved back, and changed back there',
             [ [ MOVE => 'a', 'b' ], [ COPY => 0, [ 'NODE', 'b', 'k7', 'id' ] ] ],
-            '["MOVE",["NODE","b"],["NODE","a"]] ["COPY",7,["NODE","a","k7","id"]]' ],
+            '["MOVE","b","a"] ["COPY",7,["NODE","a","k7","id"]]' ],
         [ '... and one changed and then renamed',
             [ [ COPY => 0, [ 'NODE', 'a', 'k7', 'id' ] ], [ MOVE => 'a', 'b' ] ],
-            '["MOVE",["NODE","b"],["NODE","a"]] ["COPY",7,["NODE","a","k7","id"]]' ],
+            '["MOVE","b","a"] ["COPY",7,["NODE","a","k7","id"]]' ],
         [ 'one that went into an element of an array is copied aside first, for an element may not keep its number',
             [ [ MOVE => 'a', [ 'NODE', 'list', 0, 'held' ] ] ],
-            '["COPY",["NODE","list",0,"held"],["STASH","0"],["STASH","0"],["NODE","a"]] ["MOVE",["NODE","list",0,"held"],null]' ],
+            '["COPY",["NODE","list",0,"held"],["STASH","0"],["STASH","0"],"a"] ["MOVE",["NODE","list",0,"held"],null]' ],
         [ 'an element sent to the end of its array comes back from there',
             [ [ MOVE => [ 'NODE', 'list', 0 ], [ 'NODE', 'list', $F ] ] ],
             '["COPY",["NODE","list",199],["STASH","0"]] ["SPLICE",["NODE","list",199],1] ["SPLICE",["NODE","list",0],0,["STASH","0"]]' ],
@@ -787,22 +787,22 @@ subtest 'a run can be undone' => sub {
             '["COPY",["NODE","a","k9","moved"],["STASH","0"]] ["MOVE",["NODE","a","k9","moved"],null] ["SPLICE",["NODE","list",3],0,["STASH","0"]]' ],
         [ 'a thing wrapped in something new is found inside it',
             [ [ COPY => { data => [ NODE => 'a' ], meta => 1 }, 'envelope' ], [ MOVE => 'a', undef ] ],
-            '["COPY",["NODE","envelope","data"],["STASH","0"]] ["MOVE",["NODE","envelope"],null] ["COPY",["STASH","0"],["NODE","a"]]' ],
+            '["MOVE",["NODE","envelope","data"],"a","envelope",null]' ],
         [ 'a long string that was renamed is moved back',
             [ [ MOVE => 's', 't' ] ],
-            '["MOVE",["NODE","t"],["NODE","s"]]' ],
-        [ 'a short value is only written out, which is shorter',
+            '["MOVE","t","s"]' ],
+        [ 'a short value that was renamed is moved back as well',
             [ [ MOVE => 'n', 'm' ] ],
-            '["MOVE",["NODE","m"],null] ["COPY",1,["NODE","n"]]' ],
+            '["MOVE","m","n"]' ],
         [ 'a thing moved back to where something else now is takes its place',
             [ [ MOVE => 'a', 'b' ], [ COPY => 1, 'a' ] ],
-            '["MOVE",["NODE","b"],["NODE","a"]]' ],
+            '["MOVE","b","a"]' ],
     ) {
         my ($name, $actions, $want) = @$_;
         is $moved->($large->(), @$actions), $want, $name;
     }
     is $moved->({ wrap => { inner => { map { ("k$_" => [$_]) } 1 .. 300 }, n => 1 } }, [ MOVE => [ 'NODE', 'wrap', 'inner' ], 'a' ], [ MOVE => 'wrap', undef ]),
-        '["COPY",["NODE","a"],["STASH","0"]] ["MOVE",["NODE","a"],null] ["COPY",{"inner":["STASH","0"],"n":1},["NODE","wrap"]]',
+        '["COPY",["NODE","a"],["STASH","0"]] ["MOVE","a",null] ["COPY",{"inner":["STASH","0"],"n":1},"wrap"]',
         'a thing whose wrapping was taken off is put back inside a wrapping written out';
     is $moved->({ p => { x => [1] }, q => { y => [2] } }, [ MOVE => 'p', [ 'TEMP', 't' ], 'q', 'p', [ 'TEMP', 't' ], 'q' ]) =~ /does not/ ? 'wrong' : 'restored', 'restored', 'two things that changed places are put back';
     my $onto = JGraft::JSON->parse('{"a": 1, "b": {"big": [1, 2]}, "c": 3}');
@@ -810,7 +810,7 @@ subtest 'a run can be undone' => sub {
     is $moved->({ "a\0b" => { deep => [ 1 .. 30 ] }, a => { b => { deep => [ 31 .. 60 ] } } }, [ MOVE => "a\0b", 'x', [ 'NODE', 'a', 'b' ], 'y' ]) =~ /does not/ ? 'wrong' : 'restored', 'restored',
         'places are not confused whose paths read alike';
     my $failed = graft([ MOVE => 'a', 'b' ], [ MATCH => { nothing => 1 } ])->run($large->());
-    is show([ @{ $failed->undo }[ 2 .. $#{ $failed->undo } ] ]), '[["MOVE",["NODE","b"],["NODE","a"]]]', 'what a failure left is undone the same way';
+    is show([ @{ $failed->undo }[ 2 .. $#{ $failed->undo } ] ]), '[["MOVE","b","a"]]', 'what a failure left is undone the same way';
     is show(graft([ MOVE => 'a', 'b' ], [ COPY => 0, [ 'NODE', 'b', 'k7', 'id' ] ])->run($large->(), clone => 1)->undo), show(graft([ MOVE => 'a', 'b' ], [ COPY => 0, [ 'NODE', 'b', 'k7', 'id' ] ])->run($large->())->undo),
         'and so is a run whose output was copied for the caller';
 
@@ -822,7 +822,7 @@ subtest 'a run can be undone' => sub {
         no warnings 'redefine';
         local *JGraft::Undo::found = sub { $looked++; goto &$found };
         my $r = graft([ COPY => [ NODE => 'big' ], 'dup' ], [ MOVE => 'small', 'tiny' ])->run($wide);
-        is show($r->undo->[2]), '["MOVE",["NODE","dup"],null,["NODE","tiny"],["NODE","small"]]', 'a copy of something large, and a small thing moved, are both undone';
+        is show($r->undo->[2]), '["MOVE","dup",null,"tiny","small"]', 'a copy of something large, and a small thing moved, are both undone';
     }
     ok $looked < 2500, "... without looking through all of the copy for the small thing ($looked places looked at, of 16,400)";
 
@@ -1231,11 +1231,11 @@ subtest 'JSON is written back as it was read' => sub {
         '{"b": 1, "a": 2, "when": "2024-02-29", "o": {"a":1,"z":"2024-03-01"}}', 'dates on their way out do not disturb it';
     my $undone = JGraft::JSON->parse('{"b": 1.0, "a": [1, 2]}');
     my $run    = graft([ MOVE => 'b', 'c' ], [ SPLICE => [ 'NODE', 'a', 0 ], 1 ])->run($undone->data);
-    is $undone->write(JGraft->new($run->undo)->apply($run->output)), '{"a": [1, 2], "b": 1.0}',
-        'an undo graft applies to such a document as to any other (what it puts back it writes anew, a number with the places it had)';
+    is $undone->write(JGraft->new($run->undo)->apply($run->output)), '{"b": 1.0, "a": [1, 2]}',
+        'an undo graft applies to such a document as to any other, and what was only moved goes back as it was written: the text is the same again';
     my $plainly = JGraft::JSON->parse('{"b": 1.0, "a": [1, 2]}', exact => 0);
     $run = graft([ MOVE => 'b', 'c' ], [ SPLICE => [ 'NODE', 'a', 0 ], 1 ])->run($plainly->data);
-    is $plainly->write(JGraft->new($run->undo)->apply($run->output)), '{"a": [1, 2], "b": 1}', '... which are not known if the text was read as Perl reads numbers';
+    is $plainly->write(JGraft->new($run->undo)->apply($run->output)), '{"b": 1.0, "a": [1, 2]}', '... even a number that Perl would spell otherwise, in a text read as Perl reads numbers';
 
     # A value that moves takes its spelling with it.
     is $edit->('{"x":1.50,"y":[]}', [ MOVE => 'x', [ 'NODE', 'y', 0 ] ]), '{"y":[1.50]}', 'a number moved';

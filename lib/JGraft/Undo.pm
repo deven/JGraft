@@ -24,7 +24,7 @@ use JGraft::Util;
 # ($origin says which copies were made of what: see JGraft::Exec::clone); in
 # that case it is put back as it is now, and then changed back inside.
 sub graft ($now, $was, $origin = undef) {
-    my $u  = { origin => $origin // {}, spare => [], wanted => 0, aside => [], named => {}, uses => [], mend => [] };
+    my $u  = { origin => $origin // {}, spare => [], wanted => 0, aside => [], named => {}, uses => [], mend => [], plain => [] };
     my @do = changes($u, $now, $was, [], [], []);
     seek_spare($u) if $u->{wanted} && @{ $u->{spare} };
     @do = map { written($u, $_) } @do;
@@ -34,9 +34,23 @@ sub graft ($now, $was, $origin = undef) {
         push @do, map { written($u, $_) } changes($u, $copy, $original, $final, $from, $final);
     }
     my %moved;
-    @do = straight($u, \%moved, @do) if @{ $u->{aside} };
+    @do = straight($u, \%moved, @do);
     my @aside = map { [ COPY => [ NODE => @{ $u->{aside}[$_] } ], [ STASH => "$_" ] ] } grep { !$moved{$_} } 0 .. $#{ $u->{aside} };
-    return [ JGRAFT => { v => 1 }, together(@aside, @do) ];
+    return [ JGRAFT => { v => 1 }, map { brief($_) } together(@aside, @do) ];
+}
+
+# An action with its paths written as briefly as they can be: a path of one
+# step from the current node is that step, "a" for ["NODE", "a"].  Only where
+# a path is expected, that is: the same string where a value is expected is
+# the string.
+sub brief ($do) {
+    my ($action, @rest) = @$do;
+    my $step = sub ($path) { ref $path eq 'ARRAY' && @$path == 2 && $path->[0] eq 'NODE' ? $path->[1] : $path };
+    return [ MOVE    => map { $step->($_) } @rest ]                                         if $action eq 'MOVE';
+    return [ COPY    => map { $_ % 2 ? $step->($rest[$_]) : $rest[$_] } 0 .. $#rest ]       if $action eq 'COPY';
+    return [ SPLICE  => $step->($rest[0]), @rest[ 1 .. $#rest ] ]                           if $action eq 'SPLICE';
+    return [ ATSPLIT => $step->($rest[0]), $rest[1], map { brief($_) } @rest[ 2 .. $#rest ] ] if $action eq 'ATSPLIT';
+    return $do;
 }
 
 # To copy a thing aside, remove it where it is, and put the copy where it
@@ -47,24 +61,51 @@ sub graft ($now, $was, $origin = undef) {
 # (an element's number may not be what it was by the time the MOVE is made).
 # Such are made MOVEs here, and what was copied aside for them is noted in
 # %$moved as not needed.
+#
+# A value that is neither array nor object, nor a long string, is not looked
+# for among what is spare, since to write it out is shorter than to refer to
+# a copy of it.  But a MOVE is shorter still, and keeps the value as it is
+# written in a text: so where one is wanted at a property of an object, and
+# its like is being removed from another, that too is a MOVE.
 sub straight ($u, $moved, @do) {
     my $place = sub (@path) { join '', map { length($_) . ':' . $_ } @path };
-    my (%removal, %drop);
+    my (%removal, %drop, %like);
     for my $i (0 .. $#do) {
         my ($action, $path, $to) = @{ $do[$i] };
         $removal{ $place->(@$path[ 1 .. $#$path ]) } = $i if $action eq 'MOVE' && @{ $do[$i] } == 3 && !defined $to;
     }
+    # the plain values that are removed by an action of their own, by what they are
+    for (@{ $u->{plain} }) {
+        my ($what, $from) = @$_;
+        push @{ $like{$what} }, $from if exists $removal{ $place->(@$from) } && !grep { !is_str($_) } @$from;
+    }
+    my %first;      # the MOVEs that must be made before an action: those out of something that it removes
     for my $i (0 .. $#do) {
         my ($action, $value, $to) = @{ $do[$i] };
-        next unless $action eq 'COPY' && @{ $do[$i] } == 3 && ref $value eq 'ARRAY' && @$value == 2 && $value->[0] eq 'STASH';
-        my $n    = $value->[1];
-        my $from = $u->{aside}[$n];
-        next unless $u->{uses}[$n] == 1 && !grep { !is_str($_) } @$from, @$to[ 1 .. $#$to ];
-        my $at = $removal{ $place->(@$from) } // next;
-        $do[$i] = [ MOVE => [ NODE => @$from ], $to ];
-        $drop{$at} = $moved->{$n} = 1;
+        next unless $action eq 'COPY' && @{ $do[$i] } == 3 && !grep { !is_str($_) } @$to[ 1 .. $#$to ];
+        my ($from, $within);
+        if (ref $value eq 'ARRAY' && @$value == 2 && $value->[0] eq 'STASH') {
+            my $n = $value->[1];
+            $from = $u->{aside}[$n];
+            next unless $u->{uses}[$n] == 1 && !grep { !is_str($_) } @$from;
+            # It is removed by an action of its own, or is inside something that is: the nearest such.
+            my ($holder) = grep { exists $removal{ $place->(@$from[ 0 .. $_ ]) } } reverse 0 .. $#$from;
+            my $at = defined $holder ? $removal{ $place->(@$from[ 0 .. $holder ]) } : next;
+            next if $drop{$at};
+            $moved->{$n} = 1;
+            $within = $at if $holder < $#$from;
+        }
+        elsif (type_of($value) < T_ARR) {
+            my $same = $like{ key($value) } or next;
+            ($from) = grep { !$drop{ $removal{ $place->(@$_) } } } @$same or next;
+        }
+        else { next }
+        my $move = [ MOVE => [ NODE => @$from ], $to ];
+        if    (!defined $within) { $do[$i] = $move; $drop{ $removal{ $place->(@$from) } } = 1 }
+        elsif ($within > $i)     { $do[$i] = $move }                            # (it is made before the removal as it is)
+        else                     { push @{ $first{$within} }, $move; $drop{$i} = 1 }
     }
-    return @do[ grep { !$drop{$_} } 0 .. $#do ];
+    return map { (@{ $first{$_} // [] }, $drop{$_} ? () : $do[$_]) } 0 .. $#do;
 }
 
 # Actions, with consecutive copies made one action, and removals likewise.
@@ -143,7 +184,9 @@ sub wanted ($u, $v, $final) {
 
 # A note that $now has a value at $from which the undoing will remove or write over.
 sub spare ($u, $v, $from) {
-    return if $u->{quiet} || !(ref $v eq 'ARRAY' || ref $v eq 'HASH' || is_str($v) && length $v >= $LONG);
+    return if $u->{quiet};
+    push @{ $u->{plain} }, [ key($v), $from ] if type_of($v) < T_ARR;       # (for `straight`)
+    return unless ref $v eq 'ARRAY' || ref $v eq 'HASH' || is_str($v) && length $v >= $LONG;
     push @{ $u->{spare} }, [ $v, $from ];
     found($u, $v, $from) if $u->{at};       # (a later one, when the search has already been made)
 }

@@ -230,15 +230,22 @@ This does not depend on how the string came to change.
 =item *
 
 What the run took from its place and put somewhere else is taken back from
-there, and not written out: an array or object, whether it is as it was or
-was changed after it was moved (it is then put back, and changed back
-inside), and a string of 64 characters or more.  Where that is all there is
-to it, one property of an object going back to be another, the undo graft
-has a C<MOVE> from the one to the other.  Otherwise it copies the thing
-aside to C<STASH> before doing anything else, and puts it back from there.
-So a thing of two thousand items that was renamed is undone in a hundred
-bytes or so, as it is if it was wrapped in something new, or had a wrapping
-taken off, or went from an array into an object.
+there, and not written out.  A property of an object that became another
+property, of that object or of some other, is moved back by a C<MOVE>,
+whatever its value is: C<["MOVE", "b", "a"]> undoes a rename, in a text
+leaving the value written as it was.  So is a thing taken out of something
+that the run made and the undo removes.
+
+An array or object that went somewhere a C<MOVE> cannot simply reach back
+from (into or out of an array, or inside something that has to be written
+out) is copied aside to C<STASH> before anything else is done, and put back
+from there; so is a string of 64 characters or more.  This holds whether the
+thing is as it was or was changed after it was moved: it is then put back,
+and changed back inside.  A thing of two thousand items is undone in a
+hundred bytes or so whichever of these happened to it.
+
+Paths in an undo graft are written as briefly as JGraft allows: a path of one
+step is the step, C<"a"> for C<["NODE", "a"]>.
 
 =back
 

@@ -1168,16 +1168,23 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   copies aside are made while the document is still as the run left it.
   Where copying aside, removing and putting back is all there is to it
   (the thing wanted once, as the whole of what goes to its place; removed by
-  an action of its own; both places reached through objects alone, since an
-  element's number may have changed by then), the three are made one MOVE
-  (`Undo::straight`).
+  an action of its own, or inside something that is; both places reached
+  through objects alone, since an element's number may have changed by
+  then), the three are made one MOVE (`Undo::straight`), which if it comes
+  out of something that is removed is made before the removal. A plain
+  value (a number, a short string) is not looked for among what is spare,
+  since a reference to a copy is longer than the value; but one that is
+  wanted at a property, and whose like is removed from another, is a MOVE
+  too. So the undo of a move is a move whatever was moved, and in a text
+  the value keeps the spelling it had. Paths of one step are written as the
+  step (`brief`): `["MOVE","b","a"]`.
   A thing that was moved and then changed is not the same object: the
   engine now records, for each copy it makes (`Exec::clone`), what it is a
   copy of (`origin`, which the result keeps), so that the copy can be put
   back and then changed back inside (`mend`), by the same comparison at the
   place it will then be. Long strings are found by their text. Sizes now, on
-  the document the comparison used: rename 53 bytes; rename and change
-  inside, 96; an element sent to the end of its array, 139 (JGraft-perl:
+  the document the comparison used: rename 35 bytes; rename and change
+  inside, 78; an element sent to the end of its array, 139 (JGraft-perl:
   129, 204 and 192). Undo of ordinary edits takes as long as before.
 - **`JGraft::JSON->parse` can be told how long and how deep a text may be**
   (`max_size`, `max_depth`; the comparison's item 7), and is not limited
