@@ -80,7 +80,8 @@ my %CAST = (
         my $t = type_of($v);
         return $t == T_STR  ? $v
              : $t == T_BOOL ? ($v ? 'true' : 'false')
-             : $t == T_NUM  ? (ref $v ? spelt($x, $v) : !is_int($v) || "$v" =~ /^-?\d+\z/ ? "$v" : sprintf '%.0f', $v)
+             : $t == T_NUM  ? (ref $v ? spelt($x, $v) : JGraft::Number::negative_zero($v) ? '-0'
+                                : !is_int($v) || "$v" =~ /^-?\d+\z/ ? "$v" : sprintf '%.0f', $v)
              : $t >= T_DATE && $t <= T_TIMESTAMP ? $v->str
              : $x->fail_target('cannot be cast to a string');
     } ],

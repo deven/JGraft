@@ -104,7 +104,7 @@ sub parse ($class, $text, %opt) {
         }
         elsif (substr($text, $start, 1) eq '"') { $v = $string->() }
         elsif ($text =~ /\G(-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)/gc) {
-            $v = $exact ? JGraft::Number::read($1) // $fail->('a number is beyond all reason') : 0 + $1;
+            $v = $exact ? JGraft::Number::read($1) // $fail->('a number is beyond all reason') : JGraft::Number::native($1);
         }
         elsif ($text =~ /\Gtrue\b/gc)   { $v = $TRUE }
         elsif ($text =~ /\Gfalse\b/gc)  { $v = $FALSE }
@@ -181,7 +181,7 @@ sub emit ($v, $hint) {
         if ($token !~ /^[\[{]/) {
             # (a number is read as it was when the text was: with every digit, if that is how it is kept)
             my $was = $token =~ /^"/ ? unquote(substr $token, 1, -1) : $token eq 'true' ? $TRUE : $token eq 'false' ? $FALSE
-                    : $token eq 'null' ? undef : $EXACT || ref $v ? JGraft::Number::read($token) : 0 + $token;
+                    : $token eq 'null' ? undef : $EXACT || ref $v ? JGraft::Number::read($token) : JGraft::Number::native($token);
             return $token                                                                   # it says what the value still is
                 if type_of($was) == type_of($v) && (is_num($v) ? JGraft::Number::same($v, $was) : match_lit($v, $was, 1));
             return '"' . patched($token, $was, $v) . '"' if is_str($v) && is_str($was);
@@ -196,6 +196,7 @@ sub scalar_text ($v) {
     return $v ? 'true' : 'false' if $t == T_BOOL;
     return '"' . quoted($t == T_STR ? $v : $v->can('str') ? $v->str : "$v") . '"' if $t != T_NUM;
     return ref($v) eq 'JGraft::Number' || !$v->is_nan && !$v->is_inf ? JGraft::Number::str($v) : 'null' if ref $v;
+    return '-0' if JGraft::Number::negative_zero($v);           # (which Perl would write as 0)
     return "$v" if "$v" =~ /\A-?[0-9]+\z/;
     $v - $v == 0 or return 'null';                              # JSON has no way to write these
     for my $digits (15, 16) {                                   # as few as give the same number back

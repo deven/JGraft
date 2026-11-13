@@ -365,7 +365,10 @@ of thirty digits, is a L<JGraft::Number> and not a number of Perl's own.
 
     my $doc = JGraft::JSON->parse($bytes, exact => 0);
 
-reads them as Perl reads numbers instead.
+reads them as Perl reads numbers instead.  Either way a negative zero in
+the text (C<-0>, C<-0.0>) is one in the data, which Perl would have read
+as 0: it is a zero in every calculation and comparison, but is written back
+as it was, and C<CASTSTR> gives C<"-0"> for it.
 
 A number too large or too
 precise for Perl is then seen by the graft as the nearest one Perl has,

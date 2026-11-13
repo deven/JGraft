@@ -45,6 +45,19 @@ my $LONG = 18;          # an integer of this many digits is one that Perl holds,
 # of the widest decimal number that IEEE 754 defines.
 our $DIGITS = 34;
 
+# Negative zero.  A number can be it, and JSON can write it; Perl writes it
+# as 0, and reads "-0" as 0, so it is made and told apart here.  It is a
+# zero in all arithmetic and every comparison.  What is kept of it is that
+# it can be read from a text, carried about, and written again as it was
+# (and as "-0" by CASTSTR): no more than that, for Perl's own arithmetic
+# does not keep the sign of a zero that is whole.
+my $zero = 0.0;
+our $NEGATIVE_ZERO = -$zero;
+sub negative_zero ($n) { defined $n && !ref $n && $n == 0 && sprintf('%g', $n) eq '-0' }
+
+# One of Perl's numbers from a text, as Perl reads it but for that.
+sub native ($text) { $text =~ /\A-0*(?:\.0*)?(?:[eE][-+]?[0-9]+)?\z/ ? $NEGATIVE_ZERO : 0 + $text }
+
 # The coefficient as Math::BigInt, or as Perl's own integer if it is short enough to be.
 sub wide ($c)  { require Math::BigInt; ref $c ? $c : Math::BigInt->new("$c") }
 sub lower ($c) { ref $c && $c->length <= $LONG ? 0 + $c->bstr : $c }
@@ -54,14 +67,18 @@ sub len ($c)   { ref $c ? $c->length : length(abs $c) }
 # "0.30" is 30 and -2.  Nothing, if the text is not a number.
 sub scan ($text) {
     # (most are written plainly, and short)
-    return (0 + "$1$2$3", -length $3) if $text =~ /\A(-?)([0-9]+)\.([0-9]+)\z/ && length($2) + length($3) <= $LONG;
+    if ($text =~ /\A(-?)([0-9]+)\.([0-9]+)\z/ && length($2) + length($3) <= $LONG) {
+        my ($minus, $digits, $places) = ($1, "$2$3", length $3);
+        return ($minus && $digits !~ /[1-9]/ ? $NEGATIVE_ZERO : 0 + "$minus$digits", -$places);
+    }
     my ($sign, $whole, $fraction, $exponent) = $text =~ /\A([-+]?)([0-9]+)(?:\.([0-9]*))?(?:[eE]([-+]?[0-9]+))?\z/ or return;
     return if length($exponent // '') > 15;
     $fraction //= '';
     my $digits = $whole . $fraction;
     $digits =~ s/\A0+(?=[0-9])//;
     $sign = '' if $sign eq '+';
-    return (length $digits <= $LONG ? 0 + "$sign$digits" : wide("$sign$digits"), ($exponent // 0) - length $fraction);
+    my $c = $sign && $digits !~ /[1-9]/ ? $NEGATIVE_ZERO : length $digits <= $LONG ? 0 + "$sign$digits" : wide("$sign$digits");
+    return ($c, ($exponent // 0) - length $fraction);
 }
 
 # The coefficient and exponent of any number.
@@ -76,7 +93,7 @@ sub parts ($n) {
     return ratio($n) ? rounded($n) : @$n if $kind eq __PACKAGE__;       # (a fraction, as nearly as digits say it)
     if (!$kind) {
         my $text = "$n";
-        return $text =~ /\A-?[0-9]{1,18}\z/ ? (0 + $text, 0) : scan($text);
+        return $text =~ /\A-?[0-9]{1,18}\z/ ? ($n == 0 ? $n : 0 + $text, 0) : scan($text);     # (a zero is itself, with the sign it has)
     }
     return (lower($n), 0) if $kind eq 'Math::BigInt';
     my ($mantissa, $exponent) = $n->parts;      # Math::BigFloat
@@ -384,10 +401,10 @@ sub order ($a, $b) {
 # Are two numbers the same, and known to the same place?  (0.30 and 0.3 are
 # equal, and `order` says so, but they are not the same.)
 sub same ($a, $b) {
-    return $a == $b if !ref $a && !ref $b;
+    return $a == $b && ($a != 0 || negative_zero($a) == negative_zero($b)) if !ref $a && !ref $b;
     return ratio($a) && ratio($b) && $a->[2] == $b->[2] && $a->[0] == $b->[0] && $a->[1] == $b->[1] if ratio($a) || ratio($b);
     my ($c1, $e1, $c2, $e2) = (parts($a), parts($b));
-    return $e1 == $e2 && $c1 == $c2;
+    return $e1 == $e2 && $c1 == $c2 && ($c1 != 0 || negative_zero($c1) == negative_zero($c2));
 }
 
 # Is a number whole?
@@ -412,7 +429,7 @@ sub digits ($n) { ratio($n) ? len($n->[0]) + len($n->[1]) : len((least($n))[0]) 
 sub str ($n, @) {
     my ($c, $e) = parts($n);
     my $digits = ref $c ? $c->bstr : "$c";
-    my $sign   = $digits =~ s/\A-// ? '-' : '';
+    my $sign   = $digits =~ s/\A-// || negative_zero($c) ? '-' : '';
     my $length = length $digits;
     my $first  = $length - 1 + $e;          # the power of ten of its first digit
     if ($e <= 0 && $first >= -6) {

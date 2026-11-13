@@ -1115,6 +1115,25 @@ subtest 'numbers and dates at their edges' => sub {
         my $r = graft([ COPY => $expr, ['NODE'] ])->run($in, @opt);
         $r->ok ? show($r->output) : $r->error->code;
     };
+
+    # Negative zero is a zero, and CASTSTR writes it as it is where it is known to be one.
+    my $less = -(0.0);
+    is $of->(['CASTSTR'], $less), '"-0"', 'CASTSTR of negative zero is "-0"';
+    is $of->(['CASTSTR'], 0), '"0"', '... and of zero, "0"';
+    is $of->([ CASTSTR => [ MUL => [ 'NODE', 0 ], [ 'NODE', 1 ] ] ], [ -1e-200, 1e-200 ]), '"-0"', '... also of one that arithmetic came to';
+    is $of->([ IS => ['NODE'], 0 ], $less) . ' ' . $of->([ LESS => ['NODE'], 0 ], $less), 'true false', 'it is zero, and not less';
+    for my $exact (1, 0) {
+        my $how  = $exact ? 'read exactly' : 'read as Perl reads numbers';
+        my $text = '[-0, -0.0, -0e0, -0.00, 0, 0.0]';
+        my $doc  = JGraft::JSON->parse($text, exact => $exact);
+        is JGraft::JSON->encode(graft([ COPY => [ MAP => ['CASTSTR'], ['NODE'] ], ['NODE'] ])->apply($doc->data)),
+            $exact ? '["-0","-0.0","-0","-0.00","0","0.0"]' : '["-0","-0","-0","-0","0","0"]', "from a text, $how: CASTSTR has the sign" . ($exact ? ', and the places' : '');
+        is $doc->write, $text, '... and the text is written back as it was';
+        is $doc->write(graft([ MOVE => 0, 5, 1, 4 ])->apply($doc->data)), '[-0e0, -0.00, -0.0, -0]', '... as it is where a negative zero is moved to';
+        is $doc->write(graft([ COPY => [ ADD => [ NODE => 0 ], 0 ], 0 ])->apply($doc->data)), '[0, -0.0, -0e0, -0.00, 0, 0.0]', '... and one that was added to is a zero like any other';
+    }
+    is JGraft::JSON->encode([ $less, 0 ]), '[-0,0]', 'written with no text to go by, it is -0';
+    is $of->([ ROUND => { as => 'STR', at => 1 } ], -0.04), '"-0.0"', 'ROUND keeps the sign of what rounds to nothing, as it did';
     my $two = sub ($op) { [ $op, [ 'NODE', 0 ], [ 'NODE', 1 ] ] };
 
     is $of->($two->('MOD'), $_->[0]), $_->[1], "MOD of @{ $_->[0] }" for

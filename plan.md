@@ -1153,6 +1153,15 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   private copy per graft, shared by all outputs. That is what there was;
   the copy would be as exposed as the original, and it is the sharing
   between outputs that is the trap.
+- **Negative zero** is kept where it can be (spec item 34). Perl writes it
+  as 0, reads "-0" as 0, and loses the sign of a whole zero in arithmetic,
+  so it is made and recognised in `JGraft::Number` (`$NEGATIVE_ZERO`,
+  `negative_zero`, by `%g`). `JGraft::JSON` reads one from a text in either
+  mode (`Number::native`, and in exact reading as the coefficient of a
+  decimal, so that `-0.00` keeps its places too); CASTSTR gives `"-0"` for
+  it; the writer gives `-0`; and a value is taken to be what its token says
+  only if the sign of a zero agrees. It is equal to zero everywhere, and
+  what arithmetic makes of it is whatever Perl makes.
 - **What is new is written as what is around it is** (`JSON::style`,
   `anew`). A new member or element already took the separators of its
   neighbours, but a new array or object was written compactly inside
@@ -1430,6 +1439,13 @@ Each of these made the code smaller; none changes behaviour the suite can see.
     properties is kept (as `JGraft::JSON` keeps it), a new property can only
     go last. → If order is ever to matter, give MOVE and COPY a way to name
     the neighbour.
+34. **CASTSTR of negative zero (2473–2475).** "Numbers with no fractional
+    part stringify to decimal digits with a possible leading minus sign"
+    does not say whether negative zero is `"-0"` or `"0"`; ROUND does say
+    that the sign is "preserved if that information is available". Settled
+    by the spec's author: **`"-0"` where it can be had, and `"0"` is not
+    wrong.** → Say so under CASTSTR, and let a conformance case for it
+    accept either. Here it is `"-0"` (§17).
 
 ### JSON kept as it was read (`JGraft::JSON`)
 
