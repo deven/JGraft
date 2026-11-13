@@ -18,6 +18,32 @@ use JGraft::Source;
 
 use constant INF => 9**9**9;
 
+# A copy of a value that is the graft's own, for the run to have.
+sub taken ($x, $v) {
+    return $v unless ref $v eq 'ARRAY' || ref $v eq 'HASH';
+    my ($n, $bytes, $tree) = JGraft::Compiler::weigh($v);
+    $x->charge($n, $bytes);
+    return JGraft::Compiler::thawed($v, $tree ? undef : {});
+}
+
+# A copy of a value that shares nothing with anything: not with the input,
+# nor the graft, nor one part of itself with another.  Every array and object
+# in it is its own, to be changed as the caller likes.  It is as large as the
+# value written out would be, which for a value that holds one thing in many
+# places is larger than the value; that is counted.
+sub apart ($x, $v) {
+    my $kind = ref $v;
+    return $v unless $kind eq 'ARRAY' || $kind eq 'HASH';
+    $x->charge(1, sizeof($v));
+    my $copy = $kind eq 'ARRAY' ? [ map { ref $_ ? $x->apart($_) : $_ } @$v ] : do {
+        my $object = JGraft::Ordered::is($v) ? JGraft::Ordered::hash() : {};
+        $object->{$_} = ref $v->{$_} ? $x->apart($v->{$_}) : $v->{$_} for keys %$v;
+        $object;
+    };
+    JGraft::Source::cloned($v, $copy) if $x->{src};     # (where its values came from in a text is still known)
+    return $copy;
+}
+
 # Was the text that this sheet (of JGraft::Source) leads back to read with its numbers exact?
 sub exact_text ($sheet) { my $record = $sheet && ($sheet->{rec} // $sheet->{from}); $record && $record->{exact} }
 
@@ -27,6 +53,7 @@ sub new ($class, $input, %opt) {
         root => $input, at => [],                       # node namespace and the path to the current node
         node => $input, nkey => undef, nparent => undef, # the current node, cached for actions
         const => {}, stash => {}, temp => $opt{temp} // {}, cap => {},
+        held => {},                                      # the constants whose values are the graft's own, not copies
         caps => {}, path => [], capturing => 0,          # capture pass
         (map { $_ => $limit->{$_} // INF } qw(ops mem new_obj prop_per_obj)),
         depth => 0, max_depth => $limit->{depth} // 512,

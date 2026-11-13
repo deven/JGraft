@@ -69,9 +69,45 @@ sub defop ($name, $id, $kind, $args, $build, %flag) {
 
 # A node for a value that is known now.  Every evaluation, in every run, is
 # handed the same value, so it must never change.
-sub konst ($v) {
+# A node whose value is known.  The value is the graft's own, and is frozen.
+# An array or object among such values is handed to a run as a copy, which
+# is the run's (and then the caller's) to change, unless the graft was made
+# to share them ($share): then it is handed over itself.
+sub konst ($v, $share = 1) {
     my $dated = freeze($v);
-    return { const => 1, value => $v, dated => $dated, code => sub { $v } };
+    my $kind  = ref $v;
+    return { const => 1, value => $v, dated => $dated, code => sub { $v } } if $share || $kind ne 'ARRAY' && $kind ne 'HASH';
+    my ($n, $bytes, $tree) = weigh($v);     # what a copy costs is known beforehand
+    return { const => 1, value => $v, dated => $dated, code => sub { $_[0]->charge($n, $bytes); thawed($v, $tree ? undef : {}) } };
+}
+
+# A copy of a value that is the graft's own, down to its last array and
+# object.  Such a value may hold one array or object in many places (and so
+# be far larger written out than it is): given $seen, the copy holds its copy
+# of that one in as many, and is no larger than the value was.
+sub thawed ($v, $seen = undef) {
+    my $kind = ref $v;
+    return $v if $kind ne 'ARRAY' && $kind ne 'HASH';
+    return $seen->{ refaddr $v } if $seen && $seen->{ refaddr $v };
+    my $copy = $kind eq 'ARRAY' ? [] : JGraft::Ordered::is($v) ? JGraft::Ordered::hash() : {};
+    $seen->{ refaddr $v } = $copy if $seen;
+    if ($kind eq 'ARRAY') { @$copy = map { ref $_ ? thawed($_, $seen) : $_ } @$v }
+    else                  { $copy->{$_} = ref $v->{$_} ? thawed($v->{$_}, $seen) : $v->{$_} for keys %$v }
+    return $copy;
+}
+
+# How many arrays and objects there are in a value, how many bytes they
+# take, and whether each of them is there only once.
+sub weigh ($v) {
+    my ($n, $bytes, $tree, %seen) = (0, 0, 1);
+    my @todo = ($v);
+    while (defined(my $c = pop @todo)) {
+        $tree = 0, next if $seen{ refaddr $c }++;
+        $n++;
+        $bytes += sizeof($c);
+        push @todo, grep { ref eq 'ARRAY' || ref eq 'HASH' } ref $c eq 'ARRAY' ? @$c : values %$c;
+    }
+    return ($n, $bytes, $tree);
 }
 
 # Protect a constant from change as far as Perl allows, and report whether
@@ -244,7 +280,7 @@ sub fold ($c, $ctx, $s, $n) {
     my $done  = eval { $v = $n->{code}->($x, $MISSING, undef, undef); 1 };
     my $error = $@;
     $c->{limits}{$_} = $x->{$_} for qw(ops mem new_obj);        # what is left, for the rest of the graft
-    return %{ $x->{side} } ? $n : konst($v) if $done;
+    return %{ $x->{side} } ? $n : konst($v, $c->{share}) if $done;
     return $n unless ref $error eq 'JGraft::Error' && $error->{soft};
     return $c->fault("an expression always fails: $error->{message}", 'INVALID_GRAFT', expr => $s)
         if $error->code eq 'INVALID_OPERAND';
@@ -300,7 +336,7 @@ sub construct ($c, $ctx, $s) {
     # (an object written in a graft whose own objects keep their order keeps the order it was written in)
     my $ordered = $hash && JGraft::Ordered::is($s);
     my $make = !$hash ? sub { [@_] } : $ordered ? sub { JGraft::Ordered::hash(map { $_ => shift } @key) } : sub { my %h; @h{@key} = @_; \%h };
-    return konst($make->(map { $_->{value} } @kid)) unless grep { !$_->{const} } @kid;
+    return konst($make->(map { $_->{value} } @kid), $c->{share}) unless grep { !$_->{const} } @kid;
     my @code = map { $_->{code} } @kid;
     my @meta = $hash ? () : map { $_->{meta} } @kid;
     my @tok  = map { $_->{tok} } @kid;      # where the members that are read straight from a path came from
@@ -394,7 +430,19 @@ sub reader ($c, $ctx, $s) {
         dated => $ns eq 'stash' || $ns eq 'temp' || $ns eq 'const',     # where a date can be kept
         code  => $ns eq 'node'
             ? sub { my ($x, $v) = @_; $v = $x->step($v, $_) for &$keys; $x->escape($v) }
-            : sub { my $x = $_[0]; my $v = $x->{$ns}; $v = $x->step($v, $_) for &$keys; $x->escape($v) },
+            : $ns ne 'const'
+            ? sub { my $x = $_[0]; my $v = $x->{$ns}; $v = $x->step($v, $_) for &$keys; $x->escape($v) }
+            # A constant that the graft holds itself (see JGRAFT) is read where it is, and only what
+            # is taken out of it is copied: so a table of ten thousand entries costs one of them.
+            : sub {
+                my $x = $_[0];
+                my @k = &$keys;
+                my $v = $x->{const};
+                $v = $x->step($v, $_) for @k;
+                return $x->escape($v) unless %{ $x->{held} } && (ref $v eq 'ARRAY' || ref $v eq 'HASH');
+                return +{ map { $_ => $x->{held}{$_} ? $x->taken($v->{$_}) : $v->{$_} } keys %$v } if !@k;
+                return $x->{held}{ $k[0] } ? $x->taken($v) : $x->escape($v);
+            },
         # the SPLIT metadata the value carries, if it is read straight from an array element
         meta => sub {
             my ($x, $v, $i, $a) = @_;

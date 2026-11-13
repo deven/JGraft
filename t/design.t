@@ -10,6 +10,7 @@ use JSON::PP;
 use Storable ();
 use JGraft;
 use JGraft::Compiler;
+use JGraft::JSON;
 
 my $json = JSON::PP->new->canonical->allow_nonref;
 sub graft (@actions) { JGraft->new([ JGRAFT => { v => 1 }, @actions ]) }
@@ -49,30 +50,74 @@ subtest 'the input is never changed, nor one result by another' => sub {
 
 };
 
-subtest 'constants are shared, and protected where Perl can protect them' => sub {
+subtest 'what a graft supplies is copied for each run, unless it is shared' => sub {
     my $struct = [ JGRAFT => { v => 1 },
         [ COPY => { list => [ [ 1, { n => 2 } ] ], tag => 'x' }, 'made', [ CONCAT => [ [1] ], [ [2] ] ], 'folded' ] ];
     my $g = JGraft->new($struct);
     my ($one, $two) = map { $g->apply({}) } 1, 2;
     my $was = show($one);
-    ok $one->{made} == $two->{made}, 'a literal is one value, however often it is produced';
-
-    my $refused = sub ($what, $edit) { ok !eval { $edit->(); 1 } && $@ =~ /read-only/, "$what is refused" };
-    $refused->('adding to its array',                  sub { push @{ $one->{made}{list} }, 3 });
-    $refused->('replacing an element',                 sub { $one->{made}{list}[0] = 9 });
-    $refused->('replacing a property',                 sub { $one->{made}{tag} = 'y' });
-    $refused->('a change at any depth',                sub { $one->{made}{list}[1]{n} = 9 });
-    $refused->('a change to a folded value',           sub { push @{ $one->{folded} }, 3 });
-
-    ok eval { $one->{mine} = 1; push @{ $struct->[2][1]{list}[0] }, 3; 1 },
-        'what a run builds, and the structure the graft was compiled from, stay writable';
-    my $copy = Storable::dclone($two);
-    ok eval { push @{ $copy->{made}{list} }, 3; $copy->{made}{tag} = 'y'; 1 }, 'and so does a deep copy of a result';
-    is show($g->apply({})), $was, 'and none of it reaches a later run';
+    ok $one->{made} != $two->{made} && $one->{made}{list} != $two->{made}{list} && $one->{folded} != $two->{folded},
+        'a literal, and a value worked out when the graft was compiled, is a new one in each output';
+    ok eval { push @{ $one->{made}{list} }, 3; $one->{made}{list}[0] = 9; $one->{made}{tag} = 'y'; $one->{made}{extra} = 1; $one->{made}{list}[1]{n} = 9; push @{ $one->{folded} }, 3; 1 },
+        'and is the caller\'s to change, at any depth';
+    is show($two), $was, 'another output is none the worse for it';
+    is show($g->apply({})), $was, 'nor is any later run';
+    ok eval { push @{ $struct->[2][1]{list}[0] }, 3; 1 }, 'the structure the graft was compiled from stays the caller\'s too';
+    is show($g->apply({})), $was, '... and changing it does not reach the graft';
 
     my $edit = graft([ COPY => { x => [ [ 1, 2 ] ] }, 'made', 9, [ 'NODE', 'made', 'x', 0 ] ]);
-    is show([ map { $edit->apply({}) } 1, 2 ]), '[{"made":{"x":[9,2]}},{"made":{"x":[9,2]}}]',
-        'a graft can still change what it made: the engine copies first';
+    is show([ map { $edit->apply({}) } 1, 2 ]), '[{"made":{"x":[9,2]}},{"made":{"x":[9,2]}}]', 'a graft can change what it made, run after run';
+    is show([ map { graft([ COPY => [ MAP => { k => [ [ 1 ] ] }, ['NODE'] ], ['NODE'] ])->apply([ 1, 2 ]) } 1 ]), '[[{"k":[1]},{"k":[1]}]]', 'a literal made many times in one run';
+    my $each = graft([ COPY => [ MAP => { k => [ [1] ] }, ['NODE'] ], ['NODE'] ])->apply([ 1, 2 ]);
+    ok $each->[0] != $each->[1] && $each->[0]{k} != $each->[1]{k}, '... is a new one each time';
+
+    # A constant that is declared is held by the graft, and only what is read out of it is copied.
+    my %table = map { ("k$_" => { rate => $_, zone => [ [ $_ % 7, $_ % 11 ] ] }) } 1 .. 2000;
+    my $look  = JGraft->new([ JGRAFT => { const => [ table => \%table, word => 'w' ] },
+        [ COPY => [ CONST => 'table', [ NODE => 'key' ] ], 'entry', [ CONST => 'table', [ NODE => 'key' ], 'rate' ], 'rate' ] ]);
+    my @found = map { $look->apply({ key => 'k777' }) } 1, 2;
+    is show($found[0]), '{"entry":{"rate":777,"zone":[0,7]},"key":"k777","rate":777}', 'an entry is read from a table of constants';
+    ok $found[0]{entry} != $found[1]{entry} && eval { $found[0]{entry}{rate} = 0; push @{ $found[0]{entry}{zone} }, 1; 1 }, 'and is a copy, the caller\'s to change';
+    is show($look->apply({ key => 'k777' })->{entry}), '{"rate":777,"zone":[0,7]}', '... which does not change the table';
+    is $look->run({ key => 'k777' }, limits => { mem => 500, ops => 20 })->ok, 1, 'the table itself is not copied: a run pays for the entry it takes';
+    is $look->run({ key => 'k777' }, limits => { mem => 20 })->error->code, 'RESOURCE_LIMIT', '... but does pay for that';
+    my $all = JGraft->new([ JGRAFT => { const => [ a => [ [ 1, 2 ] ], b => [ NODE => 'n' ] ] }, [ COPY => ['CONST'], 'all', [ CONST => 'a' ], 'a' ] ])->apply({ n => [ 3 ] });
+    ok eval { push @{ $all->{all}{a} }, 9; push @{ $all->{a} }, 8; 1 } && show($all) eq '{"a":[1,2,8],"all":{"a":[1,2,9],"b":[3]},"n":[3]}', 'every constant at once, and one whole, are copies as well';
+    my $inner = JGraft->new([ JGRAFT => { const => [ t => [ [ 1, 2 ] ] ] }, [ JGRAFT => { const => [ t => [ NODE => 'n' ] ] }, [ COPY => [ CONST => 't' ], 'got' ] ] ])->apply({ n => [ 5 ] });
+    ok $inner->{got} == $inner->{n}, 'a constant declared again, from the data, is the data and not a copy of it';
+
+    # A value that holds one array in many places is copied as it is, and not written out in full.
+    my $many = JGraft->new([ JGRAFT => {}, [ COPY => [ REDUCE => [ [ [ 'TEMP', 'a' ], [ 'TEMP', 'a' ] ] ], 'a', 0, [ [ 1 .. 40 ] ] ], ['NODE'] ] ])->apply(0);
+    ok $many->[0] == $many->[1] && $many->[0][0] == $many->[0][1], 'a constant that holds the same value in many places is copied with it still in as many';
+
+    # Shared, as it used to be: one value for every output, which Perl protects where it can.
+    my $s = JGraft->new($struct, share => 1);
+    my ($first, $second) = map { $s->apply({}) } 1, 2;
+    ok $first->{made} == $second->{made}, 'with share, a literal is one value however often it is produced';
+    my $refused = sub ($what, $edit) { ok !eval { $edit->(); 1 } && $@ =~ /read-only/, "$what is refused" };
+    $refused->('adding to its array',        sub { push @{ $first->{made}{list} }, 3 });
+    $refused->('replacing an element',       sub { $first->{made}{list}[0] = 9 });
+    $refused->('replacing a property',       sub { $first->{made}{tag} = 'y' });
+    $refused->('a change at any depth',      sub { $first->{made}{list}[1]{n} = 9 });
+    $refused->('a change to a folded value', sub { push @{ $first->{folded} }, 3 });
+    is show([ map { JGraft->new([ JGRAFT => {}, [ COPY => { x => [ [ 1, 2 ] ] }, 'made', 9, [ 'NODE', 'made', 'x', 0 ] ] ], share => 1)->apply({}) } 1 ]), '[{"made":{"x":[9,2]}}]',
+        'a graft that shares can still change what it made: the engine copies first';
+
+    # And an output that shares nothing at all.
+    my $in  = { keep => { deep => [ 1, 2 ] }, twice => [ 7 ] };
+    my $run = graft([ COPY => [ NODE => 'twice' ], 'again', { lit => [ [ 1 ] ] }, 'new' ]);
+    my $out = $run->apply($in);
+    ok $out->{keep} == $in->{keep} && $out->{again} == $out->{twice}, 'an output shares with the input what the graft left alone, and one part of itself with another';
+    my $own = $run->apply($in, mutable => 1);
+    is show($own), show($out), 'with mutable, the output is the same';
+    ok $own->{keep} != $in->{keep} && $own->{keep}{deep} != $in->{keep}{deep} && $own->{again} != $own->{twice}, '... and shares nothing';
+    ok eval { push @{ $own->{keep}{deep} }, 3; push @{ $own->{again} }, 8; $own->{new}{lit}[0] = 0; 1 } && show($in) eq '{"keep":{"deep":[1,2]},"twice":[7]}' && show($own->{twice}) eq '[7]',
+        '... so that changing it changes nothing else';
+    is $run->run($in, mutable => 1, limits => { mem => 60 })->error->code, 'RESOURCE_LIMIT', 'the copy is part of what the run costs';
+    my $doc = JGraft::JSON->parse('{"a": [1.0, 2],  "b": {"k": 1e1}}');
+    my $mut = graft([ COPY => 5, [ 'NODE', 'a', 1 ] ])->apply($doc->data, mutable => 1);
+    push @{ $mut->{a} }, 6;
+    is $doc->write($mut), '{"a": [1.0, 5, 6],  "b": {"k": 1e1}}', 'a text is still written back as it was read, where the caller has not changed it';
 };
 
 subtest 'repeated edits happen in place' => sub {

@@ -12,8 +12,8 @@ no warnings qw(recursion);
 # What may be asked of `new` and of `run`, and what may be limited.  A name
 # that is not among them is a mistake in the caller, and is not let pass: a
 # limit misspelt would be no limit at all.
-my %NEW   = map { $_ => 1 } qw(strict max_version limits);
-my %RUN   = map { $_ => 1 } qw(limits on_raise temp date_export exact);
+my %NEW   = map { $_ => 1 } qw(strict max_version limits share);
+my %RUN   = map { $_ => 1 } qw(limits on_raise temp date_export exact mutable);
 my %LIMIT = map { $_ => 1 } qw(ops mem new_obj prop_per_obj depth);
 
 sub options ($for, $known, %opt) {
@@ -69,15 +69,16 @@ sub faults   ($self) { map { $self->theirs($_) } @{ $self->{faults} } }
 sub warnings ($self) { map { $self->theirs($_) } @{ $self->{warnings} } }
 
 # Apply the graft.  Never dies for JGraft errors; returns a JGraft::Result.
-# The input is not modified.  The output shares structure with it and with
-# the graft, and is to be treated as read-only (see the documentation below).
+# The input is not modified.  The output shares with it what the graft left
+# alone, unless it is asked for `mutable` (see the documentation below).
 sub run ($self, $input, %opt) {
     options(run => \%RUN, %opt);
     # the limits given to `new` are those of every run, but for what a run is given of its own
     my $x = JGraft::Exec->new($input, %opt, limits => { %{ $self->{limits} }, %{ $opt{limits} // {} } }, dates => $self->{dates});
     local $JGraft::Number::EXACT = $x->{exact};      # for the comparisons that have no run to ask
+    # (a copy of the output that is all the caller's own, if that is asked for, is part of the run and of what it costs)
     return bless { ok => 1, output => $x->{root}, logs => $x->{logs}, input => $input }, 'JGraft::Result'
-        if eval { $self->{code}->($x); 1 };
+        if eval { $self->{code}->($x); $x->{root} = $x->apart($x->{root}) if $opt{mutable}; 1 };
     my $error = $@;
     die $error unless blessed $error && $error->isa('JGraft::Error');
     # The error takes with it what the run left behind, for a caller of
@@ -437,38 +438,55 @@ It costs time: some tens of times what Perl's own arithmetic does, for each
 operation that is not on whole numbers, and more for numbers longer than
 eighteen digits.
 
-=head1 THE OUTPUT IS READ-ONLY
+=head1 WHAT THE OUTPUT SHARES
 
-Applying a graft copies only what it must.  The output shares with the input
-everything the graft left untouched, and shares with the graft itself the
-arrays and objects that the graft supplied: those written in it, and those
-computed from them when it was compiled.  The same is true of the data in
-C<logs>.
+Applying a graft copies only what it must, and so the output is not, by
+default, all its own.
 
-So treat the output as read-only.  To change it, change a deep copy
-(C<Storable::dclone>, or encode and decode it as JSON).
+B<With the input> it shares everything the graft left untouched: an edit to
+one field of a large document costs that field.  Changing such a part of
+the output changes the input.
 
-Perl enforces part of this.  In data that came from the graft, arrays, their
-elements, and the values of an object's properties are marked read-only, and
-assigning to one, or adding to or taking from such an array, dies with
-C<Modification of a read-only value attempted>.
+B<With itself>: a value that the graft copied from one place to another
+(C<[COPY, [NODE, "a"], "b"]>) is one value in both places, and changing it
+in one changes it in the other.
 
-The rest it cannot enforce, and getting it wrong fails silently:
+B<With the graft> it shares nothing.  An array or object written in the
+graft, or worked out from what is written there when the graft was compiled,
+is copied each time a run produces it, and the copy is the caller's.  (A
+constant declared in C<const> is the exception that costs nothing: the graft
+keeps the one value, however large, and a run copies only what it reads out
+of it.)
+
+Two options change this.
 
 =over
 
-=item *
+=item C<< mutable => 1 >>, to C<run> or C<apply>
 
-Adding or deleting a property of an object that came from the graft changes
-what the graft produces from then on.  (Perl can lock a hash's keys, but then
-reading a key it lacks is an error too.)  So does setting the length of one
-of its arrays directly (C<$#array = ...>), which Perl lets through.
+The output shares nothing with anything, and every array and object in it
+can be changed freely.  It is copied whole when the run ends, which takes
+time and memory in proportion to its size written out, and is counted
+against the run's limits.  Read from a text by L<JGraft::JSON>, it is still
+written back as it was read wherever the caller has not changed it.
 
-=item *
+=item C<< share => 1 >>, to C<new>
 
-Changing anything shared with the input changes the input.
+The graft does not copy what it supplies: every run is handed the same
+arrays and objects.  This is faster where one literal is produced many times
+(for each of 200,000 elements, eight to fourteen times faster in that part),
+and then the output must be treated as read-only.  Perl enforces part of
+that: such arrays, their elements, and the values of such objects'
+properties are marked read-only, and changing one dies with
+C<Modification of a read-only value attempted>.  It cannot enforce the
+rest: adding or deleting a property of such an object changes what the graft
+produces from then on, silently.
 
 =back
+
+Without C<mutable>, to change an output safely, change a deep copy of it
+(C<Storable::dclone>, or encode and decode it as JSON).  The same goes for
+the data in C<logs>, which shares with the input as the output does.
 
 =head1 LIMITS
 
@@ -573,13 +591,15 @@ leave an expression unexamined.
 
 =head1 OPTIONS
 
-C<new>: C<strict> (default 1), C<max_version> (default 1), C<limits>.
+C<new>: C<strict> (default 1), C<max_version> (default 1), C<limits>,
+C<share> (see L</WHAT THE OUTPUT SHARES>).
 
 C<run> / C<apply>: C<limits>, C<on_raise> (callback for each RAISE record),
 C<temp> (initial TEMP namespace), C<date_export> (callback turning a
 JGraft::Date into output data; the default is its string form), C<exact>
 (decimal arithmetic: see L</EXACT NUMBERS>; the default is as the document
-was read).
+was read), C<mutable> (an output that shares nothing: see
+L</WHAT THE OUTPUT SHARES>).
 
 An option that is not one of these is refused: C<new> and C<run> C<croak>.
 

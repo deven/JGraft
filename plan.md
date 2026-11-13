@@ -1117,6 +1117,29 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   then would have changed the graft. An error that names an expression
   still names the caller's own (`JGraft::theirs`). The defaults stay
   unlimited, as Perl's own are.
+- **What a graft supplies is copied for each run** (the comparison's item
+  3). §7 shared a literal, and a constant folded from literals, into every
+  output: O(1), but an output was then wired to the graft, and adding a
+  property to such an object changed every later run without a word (Perl
+  can refuse changes to an array, not to a hash's keys without also
+  refusing reads of keys it lacks). Now a constant node that is an array or
+  object hands out a copy each time it is evaluated (`Compiler::konst`,
+  `thawed`), charged to `ops` and `mem` at a weight worked out once. The
+  copy keeps shared parts shared, since a folded constant can hold one array
+  in 2^60 places. A constant declared in `const` is not copied on entry:
+  the graft's own value is held (`$x->{held}`) and the CONST reader copies
+  what is read out of it, so a table of 10,000 entries with one lookup a
+  run costs 0.047 ms and not 63. `share => 1` to `new` gives the old
+  behaviour. Measured: 0.046 to 0.054 ms a run for a small graft; a literal
+  made 200,000 times in a MAP, 57 to 800 ms (they are now 200,000 objects).
+  Not copied where it could be avoided but is not: a literal bound by WITH,
+  LOCAL or REDUCE is copied at each binding.
+  `mutable => 1` to `run` goes the whole way: the output is copied as a
+  tree when the run ends (`Exec::apart`), sharing nothing with the input or
+  within itself, and charged to the run. Considered and not done: one
+  private copy per graft, shared by all outputs. That is what there was;
+  the copy would be as exposed as the original, and it is the sharing
+  between outputs that is the trap.
 - **Exact numbers** (`JGraft::Number`; the comparison's item 6). The way
   `JGraft::JSON->parse` reads a text unless given `exact => 0` (a layer
   whose point is to give the text back has no business rounding its

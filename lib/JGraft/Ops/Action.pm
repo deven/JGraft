@@ -39,7 +39,12 @@ defop JGRAFT => -1, 'action', 'XX*', sub ($c, $ctx, $meta, @body) {
         my %known = %{ $scope->{known} // {} };
         $value->{const} ? ($known{$name} = $value->{value}) : delete $known{$name};
         $scope = { %$scope, cells => {}, known => \%known };
-        push @const, [ $name, $value->{code} ];
+        # A constant that is known, and is an array or an object, is not copied for each run that
+        # declares it, as it would be anywhere else: the graft's own is held, and whatever a run
+        # reads out of it is copied then (see Compiler::reader).
+        my $held = !$c->{share} && $value->{const} && (ref $value->{value} eq 'ARRAY' || ref $value->{value} eq 'HASH');
+        my $own  = $value->{value};
+        push @const, [ $name, $held ? sub { $own } : $value->{code}, $held ];
     }
     # Common expressions are kept as written and compiled where they are used.
     $scope = { %$scope, cells => {}, exprs => { %{ $scope->{exprs} }, map { @$_ } @{ $declared{expr} } } }
@@ -47,7 +52,12 @@ defop JGRAFT => -1, 'action', 'XX*', sub ($c, $ctx, $meta, @body) {
     my @action = map { $c->action({ scope => $scope }, $body[$_], $_ + 2) } 0 .. $#body;
     return sub ($x) {
         local $x->{const} = $x->{const};
-        $x->{const} = { %{ $x->{const} }, $_->[0] => $_->[1]->($x->env) } for @const;
+        local $x->{held}  = $x->{held};
+        for (@const) {
+            my ($name, $code, $held) = @$_;
+            $x->{const} = { %{ $x->{const} }, $name => $code->($x->env) };
+            $x->{held}  = { %{ $x->{held} }, $name => $held } if $held || $x->{held}{$name};
+        }
         local $x->{stash} = {};
         $_->($x) for @action;
     };
