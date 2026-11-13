@@ -780,7 +780,7 @@
         {
           "name": "Arbitrary selected property name",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",null,["MKOBJ","__proto__",{"safe":1}],["FAIL"]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",null,["MKOBJ",null,"__proto__",{"safe":1}],["FAIL"]],["NODE"]]],
           "output": {"__proto__":{"safe":1}},
           "needProto": true
         }

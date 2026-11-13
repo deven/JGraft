@@ -1824,7 +1824,7 @@
         {
           "name": "Constructed configuration object",
           "input": {"data":[10,20,30]},
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["SLICE",["MKOBJ","path",[["data"]],"ofs",1,"len",1]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SLICE",["MKOBJ",null,"path",[["data"]],"ofs",1,"len",1]],["NODE"]]],
           "output": [20]
         }
       ]

@@ -2447,25 +2447,44 @@ when iterating over properties.
 
 #### <span id="ex-mkobj">MKOBJ</span>
 
-    [MKOBJ, name_expr, val_expr, ...]            // string, string, ...
-    [MKOBJ, name_array_expr, value_array_expr ]  // [name,...], [val,...]
-    [MKOBJ, prop_array_expr ]                    // [ [name,val], ... ]
+    [MKOBJ, prop_array ]                    // array of [name,val] elements
+    [MKOBJ, prop_array, name1, val1, ... ]  // additional overrides
 
-Construct an object from properties.
+Construct an object from dynamically calculated properties.
 
-All arguments are specified in value context.
-In the first form, pairs of `name_expr` and `val_expr` each become a
-property of the created object.  At least one pair must be given in this form.
-In the second form, recognized by two array arguments, the names are provided
-in one array and the values are provided in a second array.  The arrays must be
-the same length, but also may be empty.
-In the third form, recognized by one array argument, the array holds one
-element for each property which is a two-element array of `[name,val]`.
-This array may also be empty to construct an empty object.
+All arguments are specified in value context.  The `prop_array` is an array
+(or `null` to omit it) whose elements are each an array of `[name, value]`.
+The array may also contain `null` entries which are ignored; this provides an
+easy way for `MAP` to filter the properties of an existing object.  The array
+may be empty or contain only `null` entries, resulting in an empty object.
+If the property array contains a duplicate name, the earlier property value is
+overwritten with the latter (higher array index).
 
-In all cases, the names must evaluate to strings, and it is an error for any
-two names to be identical strings.  All errors described above count as
-`INVALID_TARGET`.
+If additional arguments are provided, they must be provided in pairs.
+Incorrect argument counts are treated as `INVALID_GRAFT`.  Each pair, in
+argument order, are treated as if that additional entry had been appended to
+the array.
+
+In all cases, the name arguments/elements must evaluate to strings and cannot
+be `null`.  Any incorrect type supplied counts as `INVALID_TARGET`.
+
+Examples:
+
+    // Remove properties with leading underscore
+    [MKOBJ, [FILTER,
+      [NONE, [[ [STR, [SEQ, [START], "_"] ] ]] ],
+      [PROPS, [NODE], 1]
+    ]]
+    
+    // Translate or remove properties
+    [MKOBJ, [MAP,
+      [CASE,
+        [EXISTS, [CONST, "renames", [NODE,0]]],
+          [[ [CONST, "renames", [NODE,0]], [NODE,1] ]],
+        null
+      ],
+      [PROPS, [NODE], 1]
+    ]]
 
 #### <span id="ex-case">CASE</span>
 

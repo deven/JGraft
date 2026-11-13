@@ -1816,7 +1816,7 @@
         {
           "name": "Options built by MKOBJ",
           "input": "1.239",
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["MKOBJ","mode","DOWN","at",["ADD",1,1]]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["MKOBJ",null,"mode","DOWN","at",["ADD",1,1]]],["NODE"]]],
           "output": "1.23"
         },
         {

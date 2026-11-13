@@ -106,7 +106,7 @@
         {
           "name": "MKOBJ value",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ","x",["FAIL"]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",null,"x",["FAIL"]],["NODE"]]],
           "errors": {"INVALID_TARGET":true}
         },
         {

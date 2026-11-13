@@ -358,7 +358,7 @@
         {
           "name": "Names constructed source",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",["MKOBJ","b",[[1,2]],"a",{"x":3}]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",["MKOBJ",null,"b",[[1,2]],"a",{"x":3}]],["NODE"]]],
           "output": ["a","b"]
         },
         {
@@ -406,7 +406,7 @@
         {
           "name": "Pairs constructed source",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",["MKOBJ","b",[[1,2]],"a",{"x":3}],1],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",["MKOBJ",null,"b",[[1,2]],"a",{"x":3}],1],["NODE"]]],
           "output": [["a",{"x":3}],["b",[1,2]]]
         },
         {
@@ -454,7 +454,7 @@
         {
           "name": "Parallel arrays constructed source",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",["MKOBJ","b",[[1,2]],"a",{"x":3}],2],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",["MKOBJ",null,"b",[[1,2]],"a",{"x":3}],2],["NODE"]]],
           "output": [["a","b"],[{"x":3},[1,2]]]
         },
         {
@@ -506,9 +506,9 @@
           "output": {"z":["FAIL"],"a":null,"b":false,"c":true,"d":0,"e":-3,"f":0.5,"g":"","h":"text","i":[],"j":[1,[2]],"k":{"nested":["NODE"]}}
         },
         {
-          "name": "Parallel form reconstructs object",
+          "name": "Parallel arrays reconstruct object through MAP",
           "input": {"z":["FAIL"],"a":null,"b":false,"c":true,"d":0,"e":-3,"f":0.5,"g":"","h":"text","i":[],"j":[1,[2]],"k":{"nested":["NODE"]}},
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL","p",["PROPS",["NODE"],2],["MKOBJ",["TEMP","p",0],["TEMP","p",1]]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL","p",["PROPS",["NODE"],2],["MKOBJ",["MAP",[[["NODE"],["TEMP","p",1,["CURPROP"]]]],["TEMP","p",0]]]],["NODE"]]],
           "output": {"z":["FAIL"],"a":null,"b":false,"c":true,"d":0,"e":-3,"f":0.5,"g":"","h":"text","i":[],"j":[1,[2]],"k":{"nested":["NODE"]}}
         },
         {
