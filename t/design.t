@@ -1539,6 +1539,31 @@ subtest 'numbers that are exact' => sub {
     my $binary = JGraft::JSON->parse('{"a":0.1,"b":0.2}', exact => 0);
     is $binary->write($sum->apply($binary->data)), '{"a":0.1,"b":0.2,"c":0.30000000000000004}', '... and one read as Perl reads numbers is run with Perl\'s arithmetic';
     is $binary->write($sum->apply($binary->data, exact => 1)), '{"a":0.1,"b":0.2,"c":0.3}', '... unless the run is told to be exact';
+    # Where it is said: to the run, to the graft, or by how the document was read; and the nearest to the run decides.
+    my @said = (
+        # read     new      run       is the run exact?
+        [ undef,   undef,   undef,    0 ],      # data that is Perl's own, and nothing said
+        [ undef,   1,       undef,    1 ],
+        [ undef,   undef,   1,        1 ],
+        [ undef,   1,       0,        0 ],
+        [ undef,   0,       1,        1 ],
+        [ 1,       undef,   undef,    1 ],      # a document read exactly, as it is unless told
+        [ 1,       0,       undef,    0 ],
+        [ 1,       undef,   0,        0 ],
+        [ 1,       0,       1,        1 ],
+        [ 0,       undef,   undef,    0 ],      # a document read as Perl reads numbers
+        [ 0,       1,       undef,    1 ],
+        [ 0,       undef,   1,        1 ],
+        [ 0,       1,       0,        0 ],
+    );
+    for (@said) {
+        my ($read, $new, $run, $exact) = @$_;
+        my $data = defined $read ? JGraft::JSON->parse('{"a":0.1,"b":0.2}', exact => $read)->data : { a => 0.1, b => 0.2 };
+        my $got  = JGraft->new([ JGRAFT => {}, [ COPY => [ IS => [ ADD => $A, $B ], 0.3 ], ['NODE'] ] ], defined $new ? (exact => $new) : ())
+            ->apply($data, defined $run ? (exact => $run) : ());
+        is $got ? 1 : 0, $exact, sprintf 'read %s, graft %s, run %s: %s', (map { !defined $_ ? 'not said' : $_ ? 'exact' : 'not exact' } $read, $new, $run), $exact ? 'exact' : 'not exact';
+    }
+
     my $longer = '{"n":12345678901234567890123,"m":1.50}';
     is ref JGraft::JSON->parse($longer)->data->{n}, 'JGraft::Number', 'read exactly, a number that Perl does not hold is an object';
     ok !ref JGraft::JSON->parse($longer, exact => 0)->data->{n} && !ref JGraft::JSON->parse($longer, exact => 0)->data->{m}, '... and otherwise the nearest that Perl has';

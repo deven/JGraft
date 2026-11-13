@@ -12,7 +12,7 @@ no warnings qw(recursion);
 # What may be asked of `new` and of `run`, and what may be limited.  A name
 # that is not among them is a mistake in the caller, and is not let pass: a
 # limit misspelt would be no limit at all.
-my %NEW   = map { $_ => 1 } qw(strict max_version limits share);
+my %NEW   = map { $_ => 1 } qw(strict max_version limits share exact);
 my %RUN   = map { $_ => 1 } qw(limits on_raise temp date_export exact mutable);
 my %LIMIT = map { $_ => 1 } qw(ops mem new_obj prop_per_obj depth);
 
@@ -51,7 +51,7 @@ our $VERSION = '0.01';
 sub new ($class, $struct, %opt) {
     options(new => \%NEW, %opt);
     my $strict = delete $opt{strict} // 1;
-    my $self   = bless { from => {}, limits => { %{ $opt{limits} // {} } }, share => delete $opt{share} }, $class;
+    my $self   = bless { from => {}, limits => { %{ $opt{limits} // {} } }, share => delete $opt{share}, exact => delete $opt{exact} }, $class;
     $self->{struct} = snapshot($struct, $self->{from});
     @$self{qw(code faults dates warnings)} = JGraft::Compiler->compile($self->{struct}, %opt);
     die $self->theirs($self->{faults}[0]) if $strict && @{ $self->{faults} };
@@ -76,7 +76,8 @@ sub run ($self, $input, %opt) {
     # the limits given to `new` are those of every run, but for what a run is given of its own
     # (a run that is to copy all it leaves has no need of copies of what the graft supplies)
     my $x = JGraft::Exec->new($input, %opt, limits => { %{ $self->{limits} }, %{ $opt{limits} // {} } }, dates => $self->{dates},
-        share => $self->{share} || $opt{mutable});
+        share => $self->{share} || $opt{mutable},
+        exact => $opt{exact} // $self->{exact});         # as the run is told; or the graft was; or else as the document was read
     local $JGraft::Number::EXACT = $x->{exact};      # for the comparisons that have no run to ask
     my $done  = eval { $self->{code}->($x); 1 };
     my $error = $@;
@@ -354,11 +355,27 @@ for a text read by L<JGraft::JSON> it is:
 
     my $output = $graft->apply($data, exact => 1);      # for data that is Perl's own, it is asked for
 
-C<parse> reads every number with every digit it has, unless it is given
-C<< exact => 0 >>; and a run on a document read so is exact, unless the run
-is given C<< exact => 0 >>.  A run on any other data is exact if it is given
-C<< exact => 1 >>.  A document that is nothing but one number or string has
-nowhere to say how it was read: give C<exact> to the run.
+Whether a run is exact can be said in three places, and the nearest to the
+run decides:
+
+=over
+
+=item C<< run >> or C<< apply >>: C<< exact => 1 >> or C<< exact => 0 >>, for that run.
+
+=item C<< new >>: the same, for every run of the graft that is not told otherwise.
+
+=item C<< JGraft::JSON->parse >>: how the text's numbers are read, which is
+exactly unless it is given C<< exact => 0 >>.  A run on a document is exact
+if the document was read so, unless the run or the graft says otherwise.
+
+=back
+
+A run on data that is Perl's own, of a graft that was told nothing, is not
+exact.  Perl's numbers are not decimals, and only the caller knows whether
+they stand for decimals: a time held to the microsecond has more digits
+than the fifteen Perl writes, and exact arithmetic would take it for those
+fifteen (see below).  A document that is nothing but one number or string
+has nowhere to say how it was read: say C<exact> to the run or the graft.
 
 In an exact run:
 
@@ -617,13 +634,14 @@ leave an expression unexamined.
 =head1 OPTIONS
 
 C<new>: C<strict> (default 1), C<max_version> (default 1), C<limits>,
-C<share> (see L</WHAT THE OUTPUT SHARES>).
+C<share> (see L</WHAT THE OUTPUT SHARES>), C<exact> (for every run that is
+not told otherwise: see L</EXACT NUMBERS>).
 
 C<run> / C<apply>: C<limits>, C<on_raise> (callback for each RAISE record),
 C<temp> (initial TEMP namespace), C<date_export> (callback turning a
 JGraft::Date into output data; the default is its string form), C<exact>
-(decimal arithmetic: see L</EXACT NUMBERS>; the default is as the document
-was read), C<mutable> (an output that shares nothing: see
+(decimal arithmetic: see L</EXACT NUMBERS>; the default is as C<new> was
+told, or else as the document was read), C<mutable> (an output that shares nothing: see
 L</WHAT THE OUTPUT SHARES>).
 
 An option that is not one of these is refused: C<new> and C<run> C<croak>.

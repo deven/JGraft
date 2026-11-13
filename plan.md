@@ -1202,8 +1202,14 @@ Each of these made the code smaller; none changes behaviour the suite can see.
     codes. So an exact
     run of ordinary data gives ordinary data, and goes on exactly from it.
   - *A whole number has no places*: 1e2 is 100, and 150e28 is 15e29.
-  - *The flag is the run's*, not the graft's, so one compiled graft serves
-    both; it defaults to how the document was read (the root's record says).
+  - *The flag is the run's*, so one compiled graft serves both. It can be
+    said to `run`, or to `new` for every run not told otherwise, and failing
+    both it is how the document was read (the root's record says). For data
+    that is Perl's own and nothing said, it is off: Perl's numbers are not
+    decimals, exact arithmetic has to take one for the fifteen digits Perl
+    writes, and a double that means all seventeen of its digits (a time to
+    the microsecond) would be made coarser without a word. Only the caller
+    knows which the numbers are.
     Folding does not know which run it is for, so while folding, arithmetic
     that would differ dies ("undecided") and is left unfolded: whole-number
     arithmetic still folds, and anything on a number that is already an
