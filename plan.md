@@ -1134,7 +1134,7 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   made 200,000 times in a MAP, 57 to 800 ms (they are now 200,000 objects).
   Not copied where it could be avoided but is not: a literal bound by WITH,
   LOCAL or REDUCE is copied at each binding.
-  `mutable => 1` to `run` goes the whole way: the output is copied as a
+  `clone => 1` to `run` goes the whole way: the output is copied as a
   tree when the run ends (`Exec::apart`), sharing nothing with the input or
   within itself, and charged to the run. So is what a failure left
   (uncharged: there is nothing more to stop). Log data is not copied, in

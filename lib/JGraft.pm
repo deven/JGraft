@@ -13,7 +13,7 @@ no warnings qw(recursion);
 # that is not among them is a mistake in the caller, and is not let pass: a
 # limit misspelt would be no limit at all.
 my %NEW   = map { $_ => 1 } qw(strict max_version limits share exact);
-my %RUN   = map { $_ => 1 } qw(limits on_raise temp date_export exact mutable);
+my %RUN   = map { $_ => 1 } qw(limits on_raise temp date_export exact clone);
 my %LIMIT = map { $_ => 1 } qw(ops mem new_obj prop_per_obj depth);
 
 sub options ($for, $known, %opt) {
@@ -70,13 +70,13 @@ sub warnings ($self) { map { $self->theirs($_) } @{ $self->{warnings} } }
 
 # Apply the graft.  Never dies for JGraft errors; returns a JGraft::Result.
 # The input is not modified.  The output shares with it what the graft left
-# alone, unless it is asked for `mutable` (see the documentation below).
+# alone, unless it is asked for `clone` (see the documentation below).
 sub run ($self, $input, %opt) {
     options(run => \%RUN, %opt);
     # the limits given to `new` are those of every run, but for what a run is given of its own
     # (a run that is to copy all it leaves has no need of copies of what the graft supplies)
     my $x = JGraft::Exec->new($input, %opt, limits => { %{ $self->{limits} }, %{ $opt{limits} // {} } }, dates => $self->{dates},
-        share => $self->{share} || $opt{mutable},
+        share => $self->{share} || $opt{clone},
         exact => $opt{exact} // $self->{exact});         # as the run is told; or the graft was; or else as the document was read
     local $JGraft::Number::EXACT = $x->{exact};      # for the comparisons that have no run to ask
     my $done  = eval { $self->{code}->($x); 1 };
@@ -84,11 +84,11 @@ sub run ($self, $input, %opt) {
     die $error unless $done || blessed $error && $error->isa('JGraft::Error');
     # What the run left: as the run has it, sharing with the input what it did
     # not touch (from which the undo is worked out); and as the caller is given
-    # it, which with `mutable` is a copy that shares nothing.  The copy of an
+    # it, which with `clone` is a copy that shares nothing.  The copy of an
     # output is part of the run, and of what the run costs.  The copy of what
     # a failure left is not: there is nothing more to stop.
     my ($left, $given) = ($x->{root}) x 2;
-    if ($opt{mutable}) {
+    if ($opt{clone}) {
         $done = eval { $given = $x->apart($left); 1 } or $error = $@ if $done;
         ($given) = $x->aside(sub { $x->apart($left) }) if !$done;
     }
@@ -524,7 +524,7 @@ Two options change this.
 
 =over
 
-=item C<< mutable => 1 >>, to C<run> or C<apply>
+=item C<< clone => 1 >>, to C<run> or C<apply>
 
 What the run hands back to be changed shares nothing with anything, and
 every array and object in it can be changed freely: the output, or after a
@@ -553,14 +553,14 @@ produces from then on, silently.
 
 =back
 
-Without C<mutable>, to change an output safely, change a deep copy of it
+Without C<clone>, to change an output safely, change a deep copy of it
 (C<Storable::dclone>, or encode and decode it as JSON).  The same goes for
 C<partial>.
 
 C<logs> are for reading, in any run.  A log and its records are new for each
 run, but the data of a record is the value the graft gave to C<RAISE>, as it
 was at that moment: most often a part of the document, which is the input's
-own, and in a run with C<share> or C<mutable> perhaps a value of the
+own, and in a run with C<share> or C<clone> perhaps a value of the
 graft's.  Keeping it costs nothing, where a copy would cost as much as the
 value is large each time something is logged.  To change it, change a copy.
 
@@ -675,7 +675,7 @@ C<run> / C<apply>: C<limits>, C<on_raise> (callback for each RAISE record),
 C<temp> (initial TEMP namespace), C<date_export> (callback turning a
 JGraft::Date into output data; the default is its string form), C<exact>
 (decimal arithmetic: see L</EXACT NUMBERS>; the default is as C<new> was
-told, or else as the document was read), C<mutable> (an output that shares nothing: see
+told, or else as the document was read), C<clone> (an output that shares nothing: see
 L</WHAT THE OUTPUT SHARES>).
 
 An option that is not one of these is refused: C<new> and C<run> C<croak>.

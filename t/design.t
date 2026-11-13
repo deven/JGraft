@@ -108,47 +108,47 @@ subtest 'what a graft supplies is copied for each run, unless it is shared' => s
     my $run = graft([ COPY => [ NODE => 'twice' ], 'again', { lit => [ [ 1 ] ] }, 'new' ]);
     my $out = $run->apply($in);
     ok $out->{keep} == $in->{keep} && $out->{again} == $out->{twice}, 'an output shares with the input what the graft left alone, and one part of itself with another';
-    my $own = $run->apply($in, mutable => 1);
-    is show($own), show($out), 'with mutable, the output is the same';
+    my $own = $run->apply($in, clone => 1);
+    is show($own), show($out), 'with clone, the output is the same';
     ok $own->{keep} != $in->{keep} && $own->{keep}{deep} != $in->{keep}{deep} && $own->{again} != $own->{twice}, '... and shares nothing';
     ok eval { push @{ $own->{keep}{deep} }, 3; push @{ $own->{again} }, 8; $own->{new}{lit}[0] = 0; 1 } && show($in) eq '{"keep":{"deep":[1,2]},"twice":[7]}' && show($own->{twice}) eq '[7]',
         '... so that changing it changes nothing else';
-    is $run->run($in, mutable => 1, limits => { mem => 60 })->error->code, 'RESOURCE_LIMIT', 'the copy is part of what the run costs';
+    is $run->run($in, clone => 1, limits => { mem => 60 })->error->code, 'RESOURCE_LIMIT', 'the copy is part of what the run costs';
     # What a failure left is the caller's own as well.  A log is not: it is for reading, in any run.
     my $logged = graft([ RAISE => 'info', 'seen', [ NODE => 'keep' ] ], [ RAISE => 'info', 'made', { lit => [ [ 1 ] ] } ], [ COPY => { lit => [ [ 1 ] ] }, 'new' ], [ MATCH => { stop => [ NONE => 1 ] } ]);
     my @heard;
-    my ($r1, $r2) = map { $logged->run($in, mutable => 1, on_raise => sub ($record) { push @heard, $record->{data} }) } 1, 2;
+    my ($r1, $r2) = map { $logged->run($in, clone => 1, on_raise => sub ($record) { push @heard, $record->{data} }) } 1, 2;
     ok $r1->logs != $r2->logs && $r1->logs->[0] != $r2->logs->[0], 'a log and its records are new for each run';
     ok $r1->logs->[0]{data} == $in->{keep} && $r1->logs->[0]{data} != $r1->output->{keep}, 'but what is logged from the document is the document\'s, though the output is a copy';
     ok $heard[0] == $in->{keep}, '... as on_raise is given it';
     my $plain = $logged->run($in);
     ok $plain->logs->[0]{data} == $in->{keep} && $plain->logs->[1]{data} != $logged->run($in)->logs->[1]{data}, 'as it is in any run (where what is logged from the graft is a copy)';
-    my $snap = graft([ RAISE => 'info', 'before', ['NODE'] ], [ COPY => 2, 'n' ], [ RAISE => 'info', 'after', ['NODE'] ])->run({ n => 1 }, mutable => 1);
+    my $snap = graft([ RAISE => 'info', 'before', ['NODE'] ], [ COPY => 2, 'n' ], [ RAISE => 'info', 'after', ['NODE'] ])->run({ n => 1 }, clone => 1);
     is show([ map { $_->{data} } @{ $snap->logs } ]), '[{"n":1},{"n":2}]', 'what is logged is the value as it was then';
-    my $stopped = $logged->run({ %$in, stop => 1 }, mutable => 1);
+    my $stopped = $logged->run({ %$in, stop => 1 }, clone => 1);
     ok !$stopped->ok && $stopped->partial->{keep} != $in->{keep} && $stopped->partial->{keep}{deep} != $in->{keep}{deep}, 'what a failure left shares nothing with the input';
     ok eval { push @{ $stopped->partial->{new}{lit} }, 2; $stopped->partial->{new}{k} = 1; push @{ $stopped->partial->{keep}{deep} }, 3; 1 }
-        && show($in) eq '{"keep":{"deep":[1,2]},"twice":[7]}' && show($logged->run({ %$in, stop => 1 }, mutable => 1)->partial->{new}) eq '{"lit":[1]}', '... nor with the graft: it can be changed';
-    is $logged->run({ %$in, stop => 1 }, mutable => 1, limits => { mem => 40 })->error->code, 'RESOURCE_LIMIT', 'a run that fails for want of memory';
-    is show($logged->run({ %$in, stop => 1 }, mutable => 1, limits => { mem => 40 })->partial), show({ %$in, stop => 1 }), '... still hands back a copy of what it left';
-    # A mutable run has no need of the copies that a run is otherwise handed, and makes none.
+        && show($in) eq '{"keep":{"deep":[1,2]},"twice":[7]}' && show($logged->run({ %$in, stop => 1 }, clone => 1)->partial->{new}) eq '{"lit":[1]}', '... nor with the graft: it can be changed';
+    is $logged->run({ %$in, stop => 1 }, clone => 1, limits => { mem => 40 })->error->code, 'RESOURCE_LIMIT', 'a run that fails for want of memory';
+    is show($logged->run({ %$in, stop => 1 }, clone => 1, limits => { mem => 40 })->partial), show({ %$in, stop => 1 }), '... still hands back a copy of what it left';
+    # A run with clone has no need of the copies that a run is otherwise handed, and makes none.
     my $counted = JGraft->new([ JGRAFT => {}, [ COPY => [ LENGTH => [ MAP => [ [ 1, 2, 3, 4, 5, 6, 7, 8 ] ], ['NODE'] ] ], ['NODE'] ] ]);
     is $counted->run([ 1 .. 50 ], limits => { mem => 3000 })->error->code, 'RESOURCE_LIMIT', 'fifty copies of a literal are memory';
-    ok $counted->run([ 1 .. 50 ], limits => { mem => 3000 }, mutable => 1)->ok, '... which a mutable run does not spend, since all it leaves is copied anyway';
-    # The undo of a mutable run is as small as any other, and is of the output as it was given.
+    ok $counted->run([ 1 .. 50 ], limits => { mem => 3000 }, clone => 1)->ok, '... which a run with clone does not spend, since all it leaves is copied anyway';
+    # The undo of a run with clone is as small as any other, and is of the output as it was given.
     my $big    = { rec => [ map { { id => $_, tags => [ 1, 2 ] } } 1 .. 300 ] };
     my $change = graft([ COPY => 'x', [ 'NODE', 'rec', 5, 'id' ] ], [ SPLICE => [ 'NODE', 'rec', 100 ], 1 ]);
-    my ($usual, $owned) = ($change->run($big), $change->run($big, mutable => 1));
-    is show($owned->undo), show($usual->undo), 'the undo of a mutable run is the undo of any other';
+    my ($usual, $owned) = ($change->run($big), $change->run($big, clone => 1));
+    is show($owned->undo), show($usual->undo), 'the undo of a run with clone is the undo of any other';
     ok length(show($owned->undo)) < 200, '... which says what changed, and not the whole document';
     my $kept = Storable::dclone($owned->output);
     push @{ $owned->output->{rec} }, 'more';
     is show(JGraft->new($owned->undo)->apply($kept)), show($big), '... and undoes the output as the run gave it';
 
     my $doc = JGraft::JSON->parse('{"a": [1.0, 2],  "b": {"k": 1e1}}');
-    my $mut = graft([ COPY => 5, [ 'NODE', 'a', 1 ] ])->apply($doc->data, mutable => 1);
-    push @{ $mut->{a} }, 6;
-    is $doc->write($mut), '{"a": [1.0, 5, 6],  "b": {"k": 1e1}}', 'a text is still written back as it was read, where the caller has not changed it';
+    my $cloned = graft([ COPY => 5, [ 'NODE', 'a', 1 ] ])->apply($doc->data, clone => 1);
+    push @{ $cloned->{a} }, 6;
+    is $doc->write($cloned), '{"a": [1.0, 5, 6],  "b": {"k": 1e1}}', 'a text is still written back as it was read, where the caller has not changed it';
 };
 
 subtest 'repeated edits happen in place' => sub {
@@ -811,7 +811,7 @@ subtest 'a run can be undone' => sub {
         'places are not confused whose paths read alike';
     my $failed = graft([ MOVE => 'a', 'b' ], [ MATCH => { nothing => 1 } ])->run($large->());
     is show([ @{ $failed->undo }[ 2 .. $#{ $failed->undo } ] ]), '[["MOVE",["NODE","b"],["NODE","a"]]]', 'what a failure left is undone the same way';
-    is show(graft([ MOVE => 'a', 'b' ], [ COPY => 0, [ 'NODE', 'b', 'k7', 'id' ] ])->run($large->(), mutable => 1)->undo), show(graft([ MOVE => 'a', 'b' ], [ COPY => 0, [ 'NODE', 'b', 'k7', 'id' ] ])->run($large->())->undo),
+    is show(graft([ MOVE => 'a', 'b' ], [ COPY => 0, [ 'NODE', 'b', 'k7', 'id' ] ])->run($large->(), clone => 1)->undo), show(graft([ MOVE => 'a', 'b' ], [ COPY => 0, [ 'NODE', 'b', 'k7', 'id' ] ])->run($large->())->undo),
         'and so is a run whose output was copied for the caller';
 
     # The search for what is wanted goes only so far into what there is to spare.
