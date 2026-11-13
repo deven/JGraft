@@ -332,9 +332,23 @@ of thirty digits, is a L<JGraft::Number> and not a number of Perl's own.
 
     my $doc = JGraft::JSON->parse($bytes, exact => 0);
 
-reads them as Perl reads numbers instead.  A number too large or too
+reads them as Perl reads numbers instead.
+
+A number too large or too
 precise for Perl is then seen by the graft as the nearest one Perl has,
 though it still keeps its spelling if the graft leaves it alone.
+
+C<parse> reads a text of any length, nested to any depth, unless it is told
+otherwise:
+
+    my $doc = JGraft::JSON->parse($bytes, max_size => 1e6, max_depth => 200);
+
+C<max_size> is the most bytes the text may have, and C<max_depth> how deep
+arrays and objects may be one inside another; a text beyond either is
+refused, and C<parse> dies.  Depth is worth limiting for a text that is not
+trusted, though no depth breaks anything: each level costs some four
+kilobytes while the text is read, so that two megabytes of nothing but
+C<[> take four gigabytes.
 
 The graft may be read the same way, C<< JGraft->new(JGraft::JSON->parse($g)->data) >>,
 and then an object written in it gives its properties to the output in the

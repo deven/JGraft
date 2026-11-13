@@ -46,12 +46,18 @@ sub text ($doc) { ${ $doc->{text} } }
 our $EXACT;      # is the text being written one whose numbers were read exactly?
 
 sub parse ($class, $text, %opt) {
-    my @unknown = grep { $_ ne 'exact' } sort keys %opt;
+    my @unknown = grep { !/\A(?:exact|max_depth|max_size)\z/ } sort keys %opt;
     die "JGraft::JSON->parse: unknown option @unknown\n" if @unknown;
+    defined $opt{$_} && !($opt{$_} =~ /\A[0-9]+\z/) and die "JGraft::JSON->parse: $_ must be a whole number that is not negative\n" for qw(max_depth max_size);
     my $exact = $opt{exact} // 1;       # numbers are read with every digit they have, unless it is asked otherwise
+    # How deep arrays and objects may be one inside another, and how long the text may be: as deep and as long as
+    # they are, unless it is asked otherwise.
+    my ($deepest, $depth) = ($opt{max_depth}, 0);
     utf8::downgrade($text, 1) or utf8::encode($text);       # bytes, however they were handed over
     my $src   = \$text;
     my $fail  = sub ($what) { die sprintf "JGraft::JSON: %s at byte %d\n", $what, pos($text) // 0 };
+    $fail->(sprintf 'the text is %d bytes, and max_size is %d', length $text, $opt{max_size}) if defined $opt{max_size} && length $text > $opt{max_size};
+    my $deeper = sub { defined $deepest && ++$depth > $deepest and $fail->("arrays and objects are more than max_depth ($deepest) deep") };
     my $space = sub { $text =~ /\G[ \t\n\r]*/gc };
     my $string = sub {
         $text =~ /\G"((?:[^"\\]++|\\.)*+)"/gcs or $fail->('a string does not end');
@@ -63,6 +69,7 @@ sub parse ($class, $text, %opt) {
         my $start = pos($text) // 0;
         my ($v, $record);
         if ($text =~ /\G\{/gc) {
+            $deeper->();
             $v      = JGraft::Ordered::hash();
             $record = { text => $src, start => $start, exact => $exact, members => \my @member };
             $space->();
@@ -81,6 +88,7 @@ sub parse ($class, $text, %opt) {
             }
         }
         elsif ($text =~ /\G\[/gc) {
+            $deeper->();
             $v      = [];
             $record = { text => $src, start => $start, exact => $exact, items => \my @item };
             $space->();
@@ -102,6 +110,7 @@ sub parse ($class, $text, %opt) {
         else                            { $fail->('expected a value') }
         my $end = pos $text;
         if ($record) {
+            $depth--;
             $record->{end} = $end;
             JGraft::Source::read_as($v, $record);
         }

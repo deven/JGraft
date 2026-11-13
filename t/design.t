@@ -1569,6 +1569,22 @@ subtest 'numbers that are exact' => sub {
     ok !ref JGraft::JSON->parse($longer, exact => 0)->data->{n} && !ref JGraft::JSON->parse($longer, exact => 0)->data->{m}, '... and otherwise the nearest that Perl has';
     is JGraft::JSON->parse($longer, exact => 0)->write, $longer, '... though either way what is not touched is written as it was';
     ok !eval { JGraft::JSON->parse('1', exactly => 1); 1 } && $@ =~ /unknown option exactly/, 'parse refuses an option it does not know';
+
+    # A text may be as long and as deep as it is, unless parse is told how long and how deep it may be.
+    my $read = sub ($text, %opt) { eval { JGraft::JSON->parse($text, %opt); 'read' } // $@ =~ s/^JGraft::JSON(?:->parse)?: //r =~ s/\n\z//r };
+    my $deep = ('[' x 5000) . '{"a":[1]}' . (']' x 5000);
+    is $read->($deep), 'read', 'a text five thousand deep is read';
+    is $read->('[[1],{"a":[2]},3]', max_depth => 3), 'read', 'a text as deep as max_depth is read';
+    is $read->('[[1],{"a":[2]},3]', max_depth => 2), 'arrays and objects are more than max_depth (2) deep at byte 11', 'one deeper is refused, where it goes deeper';
+    is $read->('{"a":{"b":{}}}', max_depth => 2), 'arrays and objects are more than max_depth (2) deep at byte 11', '... objects counting as arrays do';
+    is $read->('[[],[],[[]],[]]', max_depth => 3), 'read', 'depth is how far in, not how many';
+    is $read->('7', max_depth => 0) . ' / ' . $read->('[]', max_depth => 0), 'read / arrays and objects are more than max_depth (0) deep at byte 1', 'none at all may be asked for';
+    is $read->('[1,2,3]', max_size => 7), 'read', 'a text as long as max_size is read';
+    is $read->('[1,2,3] ', max_size => 7), 'the text is 8 bytes, and max_size is 7 at byte 0', 'one byte longer is refused';
+    is $read->(qq(["\x{20ac}"]), max_size => 6), 'the text is 7 bytes, and max_size is 6 at byte 0', '... bytes being what are counted, not characters';
+    is $read->('[1]', max_depth => undef, max_size => undef), 'read', 'not defined is no limit';
+    is $read->('[1]', max_depth => -1), 'max_depth must be a whole number that is not negative', 'a limit must be a whole number';
+    is $read->('[1]', max_size => 'big'), 'max_size must be a whole number that is not negative', '... of either kind';
     is $doc->write($sum->apply($doc->data, exact => 0)), '{"a":0.1,"b":0.2,"c":0.30000000000000004}', 'the document is none the worse';
 
     # What is not touched is written as it was; what is, with the digits it has.

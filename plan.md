@@ -1153,6 +1153,16 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   private copy per graft, shared by all outputs. That is what there was;
   the copy would be as exposed as the original, and it is the sharing
   between outputs that is the trap.
+- **`JGraft::JSON->parse` can be told how long and how deep a text may be**
+  (`max_size`, `max_depth`; the comparison's item 7), and is not limited
+  unless it is, as a run is not. Nothing breaks at any depth: a million
+  arrays one inside another are read, written back, run on, copied and
+  freed. What depth costs is memory while reading, some 4 KB a level (the
+  reader calls itself, and Perl keeps a frame for each level), so that 2 MB
+  of `[` takes 4 GB: that is the reason to limit it for a text that is not
+  trusted. A reader that kept its own stack would not have the cost; not
+  done. A flat array of a million numbers takes 250 MB, most of it the
+  record of where each stood in the text.
 - **Exact numbers** (`JGraft::Number`; the comparison's item 6). The way
   `JGraft::JSON->parse` reads a text unless given `exact => 0` (a layer
   whose point is to give the text back has no business rounding its
