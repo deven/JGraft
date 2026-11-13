@@ -114,14 +114,17 @@ subtest 'what a graft supplies is copied for each run, unless it is shared' => s
     ok eval { push @{ $own->{keep}{deep} }, 3; push @{ $own->{again} }, 8; $own->{new}{lit}[0] = 0; 1 } && show($in) eq '{"keep":{"deep":[1,2]},"twice":[7]}' && show($own->{twice}) eq '[7]',
         '... so that changing it changes nothing else';
     is $run->run($in, mutable => 1, limits => { mem => 60 })->error->code, 'RESOURCE_LIMIT', 'the copy is part of what the run costs';
-    # All that a mutable run hands back is the caller's own: what a failure left, and what was logged, as well.
+    # What a failure left is the caller's own as well.  A log is not: it is for reading, in any run.
     my $logged = graft([ RAISE => 'info', 'seen', [ NODE => 'keep' ] ], [ RAISE => 'info', 'made', { lit => [ [ 1 ] ] } ], [ COPY => { lit => [ [ 1 ] ] }, 'new' ], [ MATCH => { stop => [ NONE => 1 ] } ]);
     my @heard;
     my ($r1, $r2) = map { $logged->run($in, mutable => 1, on_raise => sub ($record) { push @heard, $record->{data} }) } 1, 2;
-    ok $r1->logs->[0]{data} != $in->{keep} && $r1->logs->[0]{data}{deep} != $in->{keep}{deep}, 'what is logged from the document is a copy of it';
-    ok $r1->logs->[1]{data} != $r2->logs->[1]{data} && eval { $r1->logs->[1]{data}{more} = 1; push @{ $r1->logs->[1]{data}{lit} }, 2; 1 }, 'what is logged from the graft is a copy, and can be changed';
-    is show($logged->run($in, mutable => 1)->logs->[1]{data}), '{"lit":[1]}', '... without a later run knowing';
-    ok $heard[0] == $r1->logs->[0]{data} && $heard[0] != $in->{keep}, 'on_raise is given the same copy';
+    ok $r1->logs != $r2->logs && $r1->logs->[0] != $r2->logs->[0], 'a log and its records are new for each run';
+    ok $r1->logs->[0]{data} == $in->{keep} && $r1->logs->[0]{data} != $r1->output->{keep}, 'but what is logged from the document is the document\'s, though the output is a copy';
+    ok $heard[0] == $in->{keep}, '... as on_raise is given it';
+    my $plain = $logged->run($in);
+    ok $plain->logs->[0]{data} == $in->{keep} && $plain->logs->[1]{data} != $logged->run($in)->logs->[1]{data}, 'as it is in any run (where what is logged from the graft is a copy)';
+    my $snap = graft([ RAISE => 'info', 'before', ['NODE'] ], [ COPY => 2, 'n' ], [ RAISE => 'info', 'after', ['NODE'] ])->run({ n => 1 }, mutable => 1);
+    is show([ map { $_->{data} } @{ $snap->logs } ]), '[{"n":1},{"n":2}]', 'what is logged is the value as it was then';
     my $stopped = $logged->run({ %$in, stop => 1 }, mutable => 1);
     ok !$stopped->ok && $stopped->partial->{keep} != $in->{keep} && $stopped->partial->{keep}{deep} != $in->{keep}{deep}, 'what a failure left shares nothing with the input';
     ok eval { push @{ $stopped->partial->{new}{lit} }, 2; $stopped->partial->{new}{k} = 1; push @{ $stopped->partial->{keep}{deep} }, 3; 1 }

@@ -1137,8 +1137,10 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   `mutable => 1` to `run` goes the whole way: the output is copied as a
   tree when the run ends (`Exec::apart`), sharing nothing with the input or
   within itself, and charged to the run. So is what a failure left
-  (uncharged: there is nothing more to stop), and the data of each log
-  record as it is raised. Such a run shares what the graft supplies, as
+  (uncharged: there is nothing more to stop). Log data is not copied, in
+  any run: a log is for reading, the value logged is a snapshot for nothing
+  as it stands, and a graft that logs the document at each step would
+  otherwise copy the document at each step. Such a run shares what the graft supplies, as
   with `share`, since all it leaves is copied anyway; which of the two a
   constant does is therefore asked of the run (`$x->{share}`), not fixed
   when the graft is compiled. The copy is made at the end and not as the

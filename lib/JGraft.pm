@@ -475,10 +475,10 @@ Two options change this.
 
 =item C<< mutable => 1 >>, to C<run> or C<apply>
 
-What the run hands back shares nothing with anything, and every array and
-object in it can be changed freely: the output; after a failure, the
-C<partial> document; and the data in C<logs> (which C<on_raise> is given
-too).  The output is copied whole when the run ends, which takes time and
+What the run hands back to be changed shares nothing with anything, and
+every array and object in it can be changed freely: the output, or after a
+failure the C<partial> document.  The output is copied whole when the run
+ends, which takes time and
 memory in proportion to its size written out, and is counted against the
 run's limits.  Read from a text by L<JGraft::JSON>, it is still written
 back as it was read wherever the caller has not changed it.
@@ -504,9 +504,14 @@ produces from then on, silently.
 
 Without C<mutable>, to change an output safely, change a deep copy of it
 (C<Storable::dclone>, or encode and decode it as JSON).  The same goes for
-C<partial>, and for the data in C<logs>: a log and its records are new for
-each run, but the data of a record is whatever value the graft gave, which
-is most often a part of the document.
+C<partial>.
+
+C<logs> are for reading, in any run.  A log and its records are new for each
+run, but the data of a record is the value the graft gave to C<RAISE>, as it
+was at that moment: most often a part of the document, which is the input's
+own, and in a run with C<share> or C<mutable> perhaps a value of the
+graft's.  Keeping it costs nothing, where a copy would cost as much as the
+value is large each time something is logged.  To change it, change a copy.
 
 =head1 LIMITS
 

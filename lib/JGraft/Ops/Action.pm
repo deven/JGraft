@@ -75,8 +75,10 @@ defop RAISE => 0, 'action', 'XVV?', sub ($c, $ctx, $level, $message, $data = und
     return sub ($x) {
         my $record = { level => $level + 0, message => $text->($x->env) };
         $printable->($record->{message}) or $x->fail_target('RAISE message must be a printable string');
-        $record->{data} = $x->outgoing($extra->($x->env)) if $extra;      # the log is outside the engine too
-        $record->{data} = $x->apart($record->{data}) if $x->{opt}{mutable};
+        # The log is outside the engine too.  What it holds is the value as it was when it was logged, which
+        # costs nothing, since the value is not changed afterwards: but it is the document's own (or the
+        # graft's), and so a log is for reading, in any run.
+        $record->{data} = $x->outgoing($extra->($x->env)) if $extra;
         push @{ $x->{logs} }, $record;
         $x->{opt}{on_raise}->($record) if $x->{opt}{on_raise};
         $x->fail(NO_MATCH => $record->{message}) if $level == 2;
