@@ -2684,17 +2684,19 @@ This is the same as `LESS` but also returns true if the values are equal.
 
 #### <span id="ex-add">ADD</span>
 
-    [ADD, value_expr1...]
     [ADD, array_expr]
+    [ADD, value_expr1, value_expr2, ...]
 
-Add zero or more numbers.
+Add numbers, ignoring `null`.
 
-Arguments are described in value context.  All `value_expr` arguments must
-evaluate to numbers, unless provided as a single argument that evaluates to an
-array of numbers.  The list may be empty, resulting in the value `0`.
+Arguments are described in value context.  When a single expression is supplied,
+it must evaluate to an array whose elements will be used as the input values.
+When more than one argument is supplied, those values are used as the input.
+Each input value must be a number, or `null`; `null` values are ignored.
 Any other type of argument fails with `INVALID_TARGET`.
+The input list may be empty, resulting in the value `0`.
 The result is the host language's addition of those numbers combined in element
-order, within the rules described in the [math section](#math).
+order, using the rules described in the [math section](#math).
 
 #### <span id="ex-sub">SUB</span>
 
@@ -2709,17 +2711,19 @@ described in the [math section](#math).
 
 #### <span id="ex-mul">MUL</span>
 
-    [MUL, value_expr1...]
     [MUL, array_expr]
+    [MUL, value_expr1, value_expr2, ...]
 
 Multiply zero or more numbers.
 
-Arguments are described in value context.  All `value_expr` arguments must
-evaluate to numbers, unless provided as a single argument that evaluates to an
-array of numbers.  The list may be empty, resulting in the value `1`.
+Arguments are described in value context.  When a single expression is supplied,
+it must evaluate to an array whose elements will be used as the input values.
+When more than one argument is supplied, those values are used as the input.
+Each input value must be a number, or `null`; `null` values are ignored.
 Any other type of argument fails with `INVALID_TARGET`.
+The input list may be empty, resulting in the value `1`.
 The result is the host language's multiplication of those numbers combined in
-element order, within the rules described in the [math section](#math).
+element order, using the rules described in the [math section](#math).
 
 #### <span id="ex-div">DIV</span>
 

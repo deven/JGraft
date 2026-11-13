@@ -1,11 +1,11 @@
 {
   "version": 1,
   "name": "Math",
-  "desc": "Covers ADD, SUB, MUL, DIV, and MOD: portable exact arithmetic, ADD/MUL variadic and array forms and empty identities, strict numeric operands, divisor-sign modulus, value/namespace/LOCAL contexts, eager operand evaluation, error trapping, syntax, and fatal failures. Numeric expectations use small integers and exactly representable binary fractions, without depending on host overflow thresholds, accumulation precision, or rounding. Signed zero, underflow, overflow rejection, and nonfinite extensions belong to implementation-specific tests.",
+  "desc": "Covers ADD, SUB, MUL, DIV, and MOD: portable exact arithmetic, ADD/MUL arity-selected array and variadic forms, ignored null inputs and empty identities, strict remaining input types, divisor-sign modulus, value/namespace/LOCAL contexts, eager operand evaluation, error trapping, syntax, and fatal failures. Numeric expectations use small integers and exactly representable binary fractions, without depending on host overflow thresholds, accumulation precision, or rounding. Signed zero, underflow, overflow rejection, and nonfinite extensions belong to implementation-specific tests.",
   "tests": [
     {
       "name": "Exact addition",
-      "desc": "ADD accepts individual numeric operands or one array-valued operand. No operands and an empty array both return zero. Values are chosen so every partial sum is a small integer or exact binary fraction.",
+      "desc": "ADD accepts one array-valued operand or two or more individual numeric/null operands. No operands and an empty array both return zero; a scalar single operand is invalid and may be rejected statically when intrinsic. Values are chosen so every partial sum is a small integer or exact binary fraction.",
       "tests": [
         {
           "name": "No operands",
@@ -26,10 +26,10 @@
           "output": 0
         },
         {
-          "name": "Variadic single zero",
+          "name": "Single scalar zero is not an array operand",
           "input": null,
           "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",0],["NODE"]]],
-          "output": 0
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         },
         {
           "name": "Array single zero",
@@ -38,10 +38,10 @@
           "output": 0
         },
         {
-          "name": "Variadic single positive",
+          "name": "Single scalar positive is not an array operand",
           "input": null,
           "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",3],["NODE"]]],
-          "output": 3
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         },
         {
           "name": "Array single positive",
@@ -50,10 +50,10 @@
           "output": 3
         },
         {
-          "name": "Variadic single negative",
+          "name": "Single scalar negative is not an array operand",
           "input": null,
           "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",-3],["NODE"]]],
-          "output": -3
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         },
         {
           "name": "Array single negative",
@@ -251,7 +251,7 @@
     },
     {
       "name": "Exact multiplication",
-      "desc": "MUL accepts individual numeric operands or one array-valued operand. No operands and an empty array both return one. A zero factor does not waive numeric validation or evaluation of other operands.",
+      "desc": "MUL accepts one array-valued operand or two or more individual numeric/null operands. No operands and an empty array both return one; a scalar single operand is invalid and may be rejected statically when intrinsic. A zero factor does not waive numeric validation or evaluation of other operands.",
       "tests": [
         {
           "name": "No operands",
@@ -272,10 +272,10 @@
           "output": 1
         },
         {
-          "name": "Variadic single zero",
+          "name": "Single scalar zero is not an array operand",
           "input": null,
           "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",0],["NODE"]]],
-          "output": 0
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         },
         {
           "name": "Array single zero",
@@ -284,10 +284,10 @@
           "output": 0
         },
         {
-          "name": "Variadic single positive",
+          "name": "Single scalar positive is not an array operand",
           "input": null,
           "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",3],["NODE"]]],
-          "output": 3
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         },
         {
           "name": "Array single positive",
@@ -296,10 +296,10 @@
           "output": 3
         },
         {
-          "name": "Variadic single negative",
+          "name": "Single scalar negative is not an array operand",
           "input": null,
           "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",-3],["NODE"]]],
-          "output": -3
+          "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
         },
         {
           "name": "Array single negative",
@@ -1048,20 +1048,230 @@
       ]
     },
     {
-      "name": "Strict numeric types",
-      "desc": "Strings, booleans, null, objects, dates, and nested arrays are not implicitly coerced to numbers. ADD/MUL array forms validate every element, including after a zero product. Invalid numeric operands produce INVALID_TARGET rather than INVALID_OPERAND.",
+      "name": "Arity dispatch and null identities",
+      "desc": "One argument requires an array even when the value is numeric or null. Two or more arguments are scalar inputs, with null ignored after dispatch. Null filtering also supports computed arrays without weakening type checks or missing-reference errors.",
+      "tests": [
+        {
+          "name": "ADD",
+          "desc": "Argument count selects the form before null inputs are ignored. Empty effective input returns the identity; missing values and nonnumeric non-null inputs remain errors.",
+          "tests": [
+            {
+              "name": "Computed scalar is not accepted as the single array argument",
+              "input": 3,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
+              "errors": {"INVALID_TARGET":true}
+            },
+            {
+              "name": "A single-element array literal supplies one number",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",[[3]]],["NODE"]]],
+              "output": 3
+            },
+            {
+              "name": "A literal sole null is not an array",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",null],["NODE"]]],
+              "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+            },
+            {
+              "name": "A singleton null array returns the identity",
+              "input": [null],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "An all-null array literal returns the identity",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",[[null,null]]],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "All-null variadic arguments return the identity",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",null,null,null],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Nulls before between and after variadic numbers are ignored",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",null,2,null,3,null],["NODE"]]],
+              "output": 5
+            },
+            {
+              "name": "Nulls before between and after array numbers are ignored",
+              "input": [null,2,null,3,null],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
+              "output": 5
+            },
+            {
+              "name": "Ignoring nulls does not ignore a numeric zero",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",null,0,null],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Null removal does not turn multiple arguments into array form",
+              "input": [1,2],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"],null],["NODE"]]],
+              "errors": {"INVALID_TARGET":true}
+            },
+            {
+              "name": "Ignoring nulls does not coerce a numeric string",
+              "input": {"bad":"2"},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",null,["NODE","bad"]],["NODE"]]],
+              "errors": {"INVALID_TARGET":true}
+            },
+            {
+              "name": "Missing references are not treated as ignored nulls",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",null,["NODE","missing"]],["NODE"]]],
+              "errors": {"INVALID_TARGET":true}
+            },
+            {
+              "name": "MAP can omit contributions with null",
+              "input": [{"value":2},{"skip":true,"value":100},{"value":3}],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["MAP",["CASE",{"skip":true},null,["NODE","value"]]]],["NODE"]]],
+              "output": 5
+            },
+            {
+              "name": "Ignored null arithmetic succeeds in a match probe",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["ADD",null,2],2],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "NONE does not mistake ignored null arithmetic for an error",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["IS",["ADD",null,2],2]],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Numeric operation ID follows the same null rules",
+              "input": [null,2,null,3],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",[74,["NODE"]],["NODE"]]],
+              "output": 5
+            }
+          ]
+        },
+        {
+          "name": "MUL",
+          "desc": "Argument count selects the form before null inputs are ignored. Empty effective input returns the identity; missing values and nonnumeric non-null inputs remain errors.",
+          "tests": [
+            {
+              "name": "Computed scalar is not accepted as the single array argument",
+              "input": 3,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
+              "errors": {"INVALID_TARGET":true}
+            },
+            {
+              "name": "A single-element array literal supplies one number",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",[[3]]],["NODE"]]],
+              "output": 3
+            },
+            {
+              "name": "A literal sole null is not an array",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",null],["NODE"]]],
+              "errors": {"INVALID_TARGET":true,"INVALID_GRAFT":true}
+            },
+            {
+              "name": "A singleton null array returns the identity",
+              "input": [null],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
+              "output": 1
+            },
+            {
+              "name": "An all-null array literal returns the identity",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",[[null,null]]],["NODE"]]],
+              "output": 1
+            },
+            {
+              "name": "All-null variadic arguments return the identity",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",null,null,null],["NODE"]]],
+              "output": 1
+            },
+            {
+              "name": "Nulls before between and after variadic numbers are ignored",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",null,2,null,3,null],["NODE"]]],
+              "output": 6
+            },
+            {
+              "name": "Nulls before between and after array numbers are ignored",
+              "input": [null,2,null,3,null],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
+              "output": 6
+            },
+            {
+              "name": "Ignoring nulls does not ignore a numeric zero",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",null,0,null],["NODE"]]],
+              "output": 0
+            },
+            {
+              "name": "Null removal does not turn multiple arguments into array form",
+              "input": [1,2],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"],null],["NODE"]]],
+              "errors": {"INVALID_TARGET":true}
+            },
+            {
+              "name": "Ignoring nulls does not coerce a numeric string",
+              "input": {"bad":"2"},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",null,["NODE","bad"]],["NODE"]]],
+              "errors": {"INVALID_TARGET":true}
+            },
+            {
+              "name": "Missing references are not treated as ignored nulls",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",null,["NODE","missing"]],["NODE"]]],
+              "errors": {"INVALID_TARGET":true}
+            },
+            {
+              "name": "MAP can omit contributions with null",
+              "input": [{"value":2},{"skip":true,"value":100},{"value":3}],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["MAP",["CASE",{"skip":true},null,["NODE","value"]]]],["NODE"]]],
+              "output": 6
+            },
+            {
+              "name": "Ignored null arithmetic succeeds in a match probe",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["MUL",null,2],2],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "NONE does not mistake ignored null arithmetic for an error",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["IS",["MUL",null,2],2]],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Numeric operation ID follows the same null rules",
+              "input": [null,2,null,3],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",[76,["NODE"]],["NODE"]]],
+              "output": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Input types and ignored nulls",
+      "desc": "ADD/MUL ignore null input values; SUB/DIV/MOD still require numbers. Strings, booleans, objects, dates, and nested arrays are not coerced to numbers. A single ADD/MUL argument must be an array, so a sole null is invalid. Array forms validate every element, including after a zero product. Invalid runtime inputs produce INVALID_TARGET rather than INVALID_OPERAND.",
       "tests": [
         {
           "name": "ADD left null",
           "input": {"bad":null},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE","bad"],2],["NODE"]]],
-          "errors": {"INVALID_TARGET":true}
+          "output": 2
         },
         {
           "name": "ADD right null",
           "input": {"bad":null},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",2,["NODE","bad"]],["NODE"]]],
-          "errors": {"INVALID_TARGET":true}
+          "output": 2
         },
         {
           "name": "ADD left false",
@@ -1199,13 +1409,13 @@
           "name": "MUL left null",
           "input": {"bad":null},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE","bad"],2],["NODE"]]],
-          "errors": {"INVALID_TARGET":true}
+          "output": 2
         },
         {
           "name": "MUL right null",
           "input": {"bad":null},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",2,["NODE","bad"]],["NODE"]]],
-          "errors": {"INVALID_TARGET":true}
+          "output": 2
         },
         {
           "name": "MUL left false",
@@ -1421,7 +1631,7 @@
           "name": "ADD array member null",
           "input": [1,null,2],
           "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
-          "errors": {"INVALID_TARGET":true}
+          "output": 3
         },
         {
           "name": "ADD sole false",
@@ -1504,7 +1714,7 @@
         {
           "name": "ADD parsed date operand",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["CASTDATE","2024-01-01"]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["CASTDATE","2024-01-01"],2],["NODE"]]],
           "errors": {"INVALID_TARGET":true}
         },
         {
@@ -1517,7 +1727,7 @@
           "name": "MUL array member null",
           "input": [1,null,2],
           "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
-          "errors": {"INVALID_TARGET":true}
+          "output": 2
         },
         {
           "name": "MUL sole false",
@@ -1600,7 +1810,7 @@
         {
           "name": "MUL parsed date operand",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["CASTDATE","2024-01-01"]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["CASTDATE","2024-01-01"],2],["NODE"]]],
           "errors": {"INVALID_TARGET":true}
         },
         {
@@ -1714,13 +1924,13 @@
         {
           "name": "ADD negative match probe",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["IS",["ADD",null,2],0]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["IS",["ADD",["FAIL"],2],0]],["NODE"]]],
           "output": true
         },
         {
           "name": "ADD ANY can recover",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",["ADD",null,2],0],["IS",null]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",["ADD",["FAIL"],2],0],["IS",null]],["NODE"]]],
           "output": true
         },
         {
@@ -1786,13 +1996,13 @@
         {
           "name": "MUL negative match probe",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["IS",["MUL",null,2],0]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["IS",["MUL",["FAIL"],2],0]],["NODE"]]],
           "output": true
         },
         {
           "name": "MUL ANY can recover",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",["MUL",null,2],0],["IS",null]],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",["MUL",["FAIL"],2],0],["IS",null]],["NODE"]]],
           "output": true
         },
         {
@@ -1937,7 +2147,7 @@
     },
     {
       "name": "Syntax and fatal failures",
-      "desc": "ADD/MUL accept any operand count, including none. SUB/DIV/MOD require exactly two operands and have no one-argument NODE shorthand or array-of-operands overload. Unknown expression syntax and recursive resource failures remain fatal.",
+      "desc": "ADD/MUL accept any operand count, including none, but one operand must evaluate to an array. SUB/DIV/MOD require exactly two operands and have no one-argument NODE shorthand or array-of-operands overload. Unknown expression syntax and recursive resource failures remain fatal.",
       "tests": [
         {
           "name": "SUB operand count 0",
