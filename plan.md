@@ -1166,13 +1166,19 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   device serves a rename, a move between array and object, a wrapping put
   on or taken off, and several at once, with no ordering to work out: the
   copies aside are made while the document is still as the run left it.
+  Where copying aside, removing and putting back is all there is to it
+  (the thing wanted once, as the whole of what goes to its place; removed by
+  an action of its own; both places reached through objects alone, since an
+  element's number may have changed by then), the three are made one MOVE
+  (`Undo::straight`).
   A thing that was moved and then changed is not the same object: the
   engine now records, for each copy it makes (`Exec::clone`), what it is a
   copy of (`origin`, which the result keeps), so that the copy can be put
   back and then changed back inside (`mend`), by the same comparison at the
-  place it will then be. Long strings are found by their text. Sizes now:
-  rename 117 bytes; rename and change inside, 142 (JGraft-perl: 129 and
-  204). Undo of ordinary edits takes as long as before.
+  place it will then be. Long strings are found by their text. Sizes now, on
+  the document the comparison used: rename 53 bytes; rename and change
+  inside, 96; an element sent to the end of its array, 139 (JGraft-perl:
+  129, 204 and 192). Undo of ordinary edits takes as long as before.
 - **`JGraft::JSON->parse` can be told how long and how deep a text may be**
   (`max_size`, `max_depth`; the comparison's item 7), and is not limited
   unless it is, as a run is not. Nothing breaks at any depth: a million

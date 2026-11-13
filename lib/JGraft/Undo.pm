@@ -24,7 +24,7 @@ use JGraft::Util;
 # ($origin says which copies were made of what: see JGraft::Exec::clone); in
 # that case it is put back as it is now, and then changed back inside.
 sub graft ($now, $was, $origin = undef) {
-    my $u  = { origin => $origin // {}, spare => [], wanted => 0, aside => [], named => {}, mend => [] };
+    my $u  = { origin => $origin // {}, spare => [], wanted => 0, aside => [], named => {}, uses => [], mend => [] };
     my @do = changes($u, $now, $was, [], [], []);
     seek_spare($u) if $u->{wanted} && @{ $u->{spare} };
     @do = map { written($u, $_) } @do;
@@ -33,8 +33,38 @@ sub graft ($now, $was, $origin = undef) {
         my ($copy, $original, $final, $from) = @$mend;
         push @do, map { written($u, $_) } changes($u, $copy, $original, $final, $from, $final);
     }
-    my @aside = map { [ COPY => [ NODE => @{ $u->{aside}[$_] } ], [ STASH => "$_" ] ] } 0 .. $#{ $u->{aside} };
+    my %moved;
+    @do = straight($u, \%moved, @do) if @{ $u->{aside} };
+    my @aside = map { [ COPY => [ NODE => @{ $u->{aside}[$_] } ], [ STASH => "$_" ] ] } grep { !$moved{$_} } 0 .. $#{ $u->{aside} };
     return [ JGRAFT => { v => 1 }, together(@aside, @do) ];
+}
+
+# To copy a thing aside, remove it where it is, and put the copy where it
+# was, always works.  But where that is all there is to it, a MOVE from the
+# one place to the other says the same in one action: the thing is wanted
+# once, as the whole of what goes to its place; it is removed where it is by
+# an action of its own; and both places are reached through objects alone
+# (an element's number may not be what it was by the time the MOVE is made).
+# Such are made MOVEs here, and what was copied aside for them is noted in
+# %$moved as not needed.
+sub straight ($u, $moved, @do) {
+    my $place = sub (@path) { join '', map { length($_) . ':' . $_ } @path };
+    my (%removal, %drop);
+    for my $i (0 .. $#do) {
+        my ($action, $path, $to) = @{ $do[$i] };
+        $removal{ $place->(@$path[ 1 .. $#$path ]) } = $i if $action eq 'MOVE' && @{ $do[$i] } == 3 && !defined $to;
+    }
+    for my $i (0 .. $#do) {
+        my ($action, $value, $to) = @{ $do[$i] };
+        next unless $action eq 'COPY' && @{ $do[$i] } == 3 && ref $value eq 'ARRAY' && @$value == 2 && $value->[0] eq 'STASH';
+        my $n    = $value->[1];
+        my $from = $u->{aside}[$n];
+        next unless $u->{uses}[$n] == 1 && !grep { !is_str($_) } @$from, @$to[ 1 .. $#$to ];
+        my $at = $removal{ $place->(@$from) } // next;
+        $do[$i] = [ MOVE => [ NODE => @$from ], $to ];
+        $drop{$at} = $moved->{$n} = 1;
+    }
+    return @do[ grep { !$drop{$_} } 0 .. $#do ];
 }
 
 # Actions, with consecutive copies made one action, and removals likewise.
@@ -152,6 +182,7 @@ sub seek_spare ($u) {
 sub aside ($u, $from) {
     # (one copy aside for each place, however often it is wanted: a place is named by its path, each step with its length)
     my $n = $u->{named}{ join '', map { length($_) . ':' . $_ } @$from } //= do { push @{ $u->{aside} }, $from; $#{ $u->{aside} } };
+    $u->{uses}[$n]++;
     return [ STASH => "$n" ];
 }
 

@@ -767,15 +767,18 @@ subtest 'a run can be undone' => sub {
     };
     my $F = $JGraft::Util::FALSE;
     for (
-        [ 'a thing that was renamed is named back',
+        [ 'a thing that was renamed is moved back',
             [ [ MOVE => 'a', 'b' ] ],
-            '["COPY",["NODE","b"],["STASH","0"]] ["MOVE",["NODE","b"],null] ["COPY",["STASH","0"],["NODE","a"]]' ],
-        [ 'one renamed and then changed inside is named back, and changed back there',
+            '["MOVE",["NODE","b"],["NODE","a"]]' ],
+        [ 'one renamed and then changed inside is moved back, and changed back there',
             [ [ MOVE => 'a', 'b' ], [ COPY => 0, [ 'NODE', 'b', 'k7', 'id' ] ] ],
-            '["COPY",["NODE","b"],["STASH","0"]] ["MOVE",["NODE","b"],null] ["COPY",["STASH","0"],["NODE","a"],7,["NODE","a","k7","id"]]' ],
+            '["MOVE",["NODE","b"],["NODE","a"]] ["COPY",7,["NODE","a","k7","id"]]' ],
         [ '... and one changed and then renamed',
             [ [ COPY => 0, [ 'NODE', 'a', 'k7', 'id' ] ], [ MOVE => 'a', 'b' ] ],
-            '["COPY",["NODE","b"],["STASH","0"]] ["MOVE",["NODE","b"],null] ["COPY",["STASH","0"],["NODE","a"],7,["NODE","a","k7","id"]]' ],
+            '["MOVE",["NODE","b"],["NODE","a"]] ["COPY",7,["NODE","a","k7","id"]]' ],
+        [ 'one that went into an element of an array is copied aside first, for an element may not keep its number',
+            [ [ MOVE => 'a', [ 'NODE', 'list', 0, 'held' ] ] ],
+            '["COPY",["NODE","list",0,"held"],["STASH","0"],["STASH","0"],["NODE","a"]] ["MOVE",["NODE","list",0,"held"],null]' ],
         [ 'an element sent to the end of its array comes back from there',
             [ [ MOVE => [ 'NODE', 'list', 0 ], [ 'NODE', 'list', $F ] ] ],
             '["COPY",["NODE","list",199],["STASH","0"]] ["SPLICE",["NODE","list",199],1] ["SPLICE",["NODE","list",0],0,["STASH","0"]]' ],
@@ -785,15 +788,15 @@ subtest 'a run can be undone' => sub {
         [ 'a thing wrapped in something new is found inside it',
             [ [ COPY => { data => [ NODE => 'a' ], meta => 1 }, 'envelope' ], [ MOVE => 'a', undef ] ],
             '["COPY",["NODE","envelope","data"],["STASH","0"]] ["MOVE",["NODE","envelope"],null] ["COPY",["STASH","0"],["NODE","a"]]' ],
-        [ 'a long string that was renamed is named back',
+        [ 'a long string that was renamed is moved back',
             [ [ MOVE => 's', 't' ] ],
-            '["COPY",["NODE","t"],["STASH","0"]] ["MOVE",["NODE","t"],null] ["COPY",["STASH","0"],["NODE","s"]]' ],
+            '["MOVE",["NODE","t"],["NODE","s"]]' ],
         [ 'a short value is only written out, which is shorter',
             [ [ MOVE => 'n', 'm' ] ],
             '["MOVE",["NODE","m"],null] ["COPY",1,["NODE","n"]]' ],
-        [ 'what is wanted twice is copied aside once',
+        [ 'a thing moved back to where something else now is takes its place',
             [ [ MOVE => 'a', 'b' ], [ COPY => 1, 'a' ] ],
-            '["COPY",["NODE","b"],["STASH","0"]] ["MOVE",["NODE","b"],null] ["COPY",["STASH","0"],["NODE","a"]]' ],
+            '["MOVE",["NODE","b"],["NODE","a"]]' ],
     ) {
         my ($name, $actions, $want) = @$_;
         is $moved->($large->(), @$actions), $want, $name;
@@ -802,10 +805,12 @@ subtest 'a run can be undone' => sub {
         '["COPY",["NODE","a"],["STASH","0"]] ["MOVE",["NODE","a"],null] ["COPY",{"inner":["STASH","0"],"n":1},["NODE","wrap"]]',
         'a thing whose wrapping was taken off is put back inside a wrapping written out';
     is $moved->({ p => { x => [1] }, q => { y => [2] } }, [ MOVE => 'p', [ 'TEMP', 't' ], 'q', 'p', [ 'TEMP', 't' ], 'q' ]) =~ /does not/ ? 'wrong' : 'restored', 'restored', 'two things that changed places are put back';
+    my $onto = JGraft::JSON->parse('{"a": 1, "b": {"big": [1, 2]}, "c": 3}');
+    is $onto->write(graft([ MOVE => 'b', 'a' ])->apply($onto->data)), '{"a": {"big": [1, 2]}, "c": 3}', '(a MOVE to a property that is there takes its place: there are not two of the name)';
     is $moved->({ "a\0b" => { deep => [ 1 .. 30 ] }, a => { b => { deep => [ 31 .. 60 ] } } }, [ MOVE => "a\0b", 'x', [ 'NODE', 'a', 'b' ], 'y' ]) =~ /does not/ ? 'wrong' : 'restored', 'restored',
         'places are not confused whose paths read alike';
     my $failed = graft([ MOVE => 'a', 'b' ], [ MATCH => { nothing => 1 } ])->run($large->());
-    is show([ @{ $failed->undo }[ 2 .. 4 ] ]), '[["COPY",["NODE","b"],["STASH","0"]],["MOVE",["NODE","b"],null],["COPY",["STASH","0"],["NODE","a"]]]', 'what a failure left is undone the same way';
+    is show([ @{ $failed->undo }[ 2 .. $#{ $failed->undo } ] ]), '[["MOVE",["NODE","b"],["NODE","a"]]]', 'what a failure left is undone the same way';
     is show(graft([ MOVE => 'a', 'b' ], [ COPY => 0, [ 'NODE', 'b', 'k7', 'id' ] ])->run($large->(), mutable => 1)->undo), show(graft([ MOVE => 'a', 'b' ], [ COPY => 0, [ 'NODE', 'b', 'k7', 'id' ] ])->run($large->())->undo),
         'and so is a run whose output was copied for the caller';
 
@@ -817,7 +822,7 @@ subtest 'a run can be undone' => sub {
         no warnings 'redefine';
         local *JGraft::Undo::found = sub { $looked++; goto &$found };
         my $r = graft([ COPY => [ NODE => 'big' ], 'dup' ], [ MOVE => 'small', 'tiny' ])->run($wide);
-        is show($r->undo->[3]), '["MOVE",["NODE","dup"],null,["NODE","tiny"],null]', 'a copy of something large, and a small thing moved, are both undone';
+        is show($r->undo->[2]), '["MOVE",["NODE","dup"],null,["NODE","tiny"],["NODE","small"]]', 'a copy of something large, and a small thing moved, are both undone';
     }
     ok $looked < 2500, "... without looking through all of the copy for the small thing ($looked places looked at, of 16,400)";
 
