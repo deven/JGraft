@@ -42,7 +42,7 @@ defop JGRAFT => -1, 'action', 'XX*', sub ($c, $ctx, $meta, @body) {
         # A constant that is known, and is an array or an object, is not copied for each run that
         # declares it, as it would be anywhere else: the graft's own is held, and whatever a run
         # reads out of it is copied then (see Compiler::reader).
-        my $held = !$c->{share} && $value->{const} && (ref $value->{value} eq 'ARRAY' || ref $value->{value} eq 'HASH');
+        my $held = $value->{const} && (ref $value->{value} eq 'ARRAY' || ref $value->{value} eq 'HASH');
         my $own  = $value->{value};
         push @const, [ $name, $held ? sub { $own } : $value->{code}, $held ];
     }
@@ -56,7 +56,7 @@ defop JGRAFT => -1, 'action', 'XX*', sub ($c, $ctx, $meta, @body) {
         for (@const) {
             my ($name, $code, $held) = @$_;
             $x->{const} = { %{ $x->{const} }, $name => $code->($x->env) };
-            $x->{held}  = { %{ $x->{held} }, $name => $held } if $held || $x->{held}{$name};
+            $x->{held}  = { %{ $x->{held} }, $name => $held } if !$x->{share} && ($held || $x->{held}{$name});
         }
         local $x->{stash} = {};
         $_->($x) for @action;
@@ -76,6 +76,7 @@ defop RAISE => 0, 'action', 'XVV?', sub ($c, $ctx, $level, $message, $data = und
         my $record = { level => $level + 0, message => $text->($x->env) };
         $printable->($record->{message}) or $x->fail_target('RAISE message must be a printable string');
         $record->{data} = $x->outgoing($extra->($x->env)) if $extra;      # the log is outside the engine too
+        $record->{data} = $x->apart($record->{data}) if $x->{opt}{mutable};
         push @{ $x->{logs} }, $record;
         $x->{opt}{on_raise}->($record) if $x->{opt}{on_raise};
         $x->fail(NO_MATCH => $record->{message}) if $level == 2;

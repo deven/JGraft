@@ -54,6 +54,7 @@ sub new ($class, $input, %opt) {
         node => $input, nkey => undef, nparent => undef, # the current node, cached for actions
         const => {}, stash => {}, temp => $opt{temp} // {}, cap => {},
         held => {},                                      # the constants whose values are the graft's own, not copies
+        share => $opt{share} ? 1 : 0,                    # is the run handed the graft's own arrays and objects, not copies?
         caps => {}, path => [], capturing => 0,          # capture pass
         (map { $_ => $limit->{$_} // INF } qw(ops mem new_obj prop_per_obj)),
         depth => 0, max_depth => $limit->{depth} // 512,

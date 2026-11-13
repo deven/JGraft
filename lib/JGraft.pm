@@ -51,7 +51,7 @@ our $VERSION = '0.01';
 sub new ($class, $struct, %opt) {
     options(new => \%NEW, %opt);
     my $strict = delete $opt{strict} // 1;
-    my $self   = bless { from => {}, limits => { %{ $opt{limits} // {} } } }, $class;
+    my $self   = bless { from => {}, limits => { %{ $opt{limits} // {} } }, share => delete $opt{share} }, $class;
     $self->{struct} = snapshot($struct, $self->{from});
     @$self{qw(code faults dates warnings)} = JGraft::Compiler->compile($self->{struct}, %opt);
     die $self->theirs($self->{faults}[0]) if $strict && @{ $self->{faults} };
@@ -74,16 +74,27 @@ sub warnings ($self) { map { $self->theirs($_) } @{ $self->{warnings} } }
 sub run ($self, $input, %opt) {
     options(run => \%RUN, %opt);
     # the limits given to `new` are those of every run, but for what a run is given of its own
-    my $x = JGraft::Exec->new($input, %opt, limits => { %{ $self->{limits} }, %{ $opt{limits} // {} } }, dates => $self->{dates});
+    # (a run that is to copy all it leaves has no need of copies of what the graft supplies)
+    my $x = JGraft::Exec->new($input, %opt, limits => { %{ $self->{limits} }, %{ $opt{limits} // {} } }, dates => $self->{dates},
+        share => $self->{share} || $opt{mutable});
     local $JGraft::Number::EXACT = $x->{exact};      # for the comparisons that have no run to ask
-    # (a copy of the output that is all the caller's own, if that is asked for, is part of the run and of what it costs)
-    return bless { ok => 1, output => $x->{root}, logs => $x->{logs}, input => $input }, 'JGraft::Result'
-        if eval { $self->{code}->($x); $x->{root} = $x->apart($x->{root}) if $opt{mutable}; 1 };
+    my $done  = eval { $self->{code}->($x); 1 };
     my $error = $@;
-    die $error unless blessed $error && $error->isa('JGraft::Error');
+    die $error unless $done || blessed $error && $error->isa('JGraft::Error');
+    # What the run left: as the run has it, sharing with the input what it did
+    # not touch (from which the undo is worked out); and as the caller is given
+    # it, which with `mutable` is a copy that shares nothing.  The copy of an
+    # output is part of the run, and of what the run costs.  The copy of what
+    # a failure left is not: there is nothing more to stop.
+    my ($left, $given) = ($x->{root}) x 2;
+    if ($opt{mutable}) {
+        $done = eval { $given = $x->apart($left); 1 } or $error = $@ if $done;
+        ($given) = $x->aside(sub { $x->apart($left) }) if !$done;
+    }
+    return bless { ok => 1, output => $given, logs => $x->{logs}, input => $input, left => $left }, 'JGraft::Result' if $done;
     # The error takes with it what the run left behind, for a caller of
     # `apply`.  It is a copy that does: a fault is the same error in every run.
-    my %left = (partial => $x->{root}, logs => $x->{logs}, input => $input);
+    my %left = (partial => $given, logs => $x->{logs}, input => $input, left => $left);
     return bless { ok => 0, error => JGraft::Error->new(%{ $self->theirs($error) }, %left), %left }, 'JGraft::Result';
 }
 
@@ -104,7 +115,7 @@ sub partial { $_[0]{partial} }      # only of one that failed: the document as t
 
 # The structure of a graft that turns the output, or the partial document of
 # a failure, back into the input.  It is worked out when first asked for.
-sub undo ($r) { $r->{ok} ? $r->{undo} //= JGraft::Undo::graft(@$r{qw(output input)}) : $r->{error}->undo }
+sub undo ($r) { $r->{ok} ? $r->{undo} //= JGraft::Undo::graft(@$r{qw(left input)}) : $r->{error}->undo }
 
 1;
 
@@ -464,11 +475,18 @@ Two options change this.
 
 =item C<< mutable => 1 >>, to C<run> or C<apply>
 
-The output shares nothing with anything, and every array and object in it
-can be changed freely.  It is copied whole when the run ends, which takes
-time and memory in proportion to its size written out, and is counted
-against the run's limits.  Read from a text by L<JGraft::JSON>, it is still
-written back as it was read wherever the caller has not changed it.
+What the run hands back shares nothing with anything, and every array and
+object in it can be changed freely: the output; after a failure, the
+C<partial> document; and the data in C<logs> (which C<on_raise> is given
+too).  The output is copied whole when the run ends, which takes time and
+memory in proportion to its size written out, and is counted against the
+run's limits.  Read from a text by L<JGraft::JSON>, it is still written
+back as it was read wherever the caller has not changed it.
+
+Such a run is itself handed the graft's own arrays and objects, as with
+C<share>: all that it leaves is copied in any case, so nothing of the graft
+gets out.  C<undo> is not affected, and undoes the output as the run gave
+it, before any change the caller makes.
 
 =item C<< share => 1 >>, to C<new>
 
@@ -486,7 +504,9 @@ produces from then on, silently.
 
 Without C<mutable>, to change an output safely, change a deep copy of it
 (C<Storable::dclone>, or encode and decode it as JSON).  The same goes for
-the data in C<logs>, which shares with the input as the output does.
+C<partial>, and for the data in C<logs>: a log and its records are new for
+each run, but the data of a record is whatever value the graft gave, which
+is most often a part of the document.
 
 =head1 LIMITS
 

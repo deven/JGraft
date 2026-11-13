@@ -43,6 +43,6 @@ sub logs    { $_[0]{logs} }
 
 # From a run: the structure of a graft that turns that document back into
 # the input.  It is worked out when first asked for.
-sub undo ($e) { exists $e->{input} ? $e->{undo} //= JGraft::Undo::graft(@$e{qw(partial input)}) : undef }
+sub undo ($e) { exists $e->{input} ? $e->{undo} //= JGraft::Undo::graft(@$e{qw(left input)}) : undef }
 
 1;

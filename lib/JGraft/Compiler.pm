@@ -70,15 +70,21 @@ sub defop ($name, $id, $kind, $args, $build, %flag) {
 # A node for a value that is known now.  Every evaluation, in every run, is
 # handed the same value, so it must never change.
 # A node whose value is known.  The value is the graft's own, and is frozen.
-# An array or object among such values is handed to a run as a copy, which
-# is the run's (and then the caller's) to change, unless the graft was made
-# to share them ($share): then it is handed over itself.
-sub konst ($v, $share = 1) {
+# Where it is a value that a run may be handed ($given), and is an array or
+# an object, the run is handed a copy, which is its (and then the caller's)
+# to change: unless the run shares what the graft supplies, as it does if
+# the graft was made to, or if all it leaves is to be copied anyway (see
+# JGraft::run).
+sub konst ($v, $given = 0) {
     my $dated = freeze($v);
     my $kind  = ref $v;
-    return { const => 1, value => $v, dated => $dated, code => sub { $v } } if $share || $kind ne 'ARRAY' && $kind ne 'HASH';
+    return { const => 1, value => $v, dated => $dated, code => sub { $v } } unless $given && ($kind eq 'ARRAY' || $kind eq 'HASH');
     my ($n, $bytes, $tree) = weigh($v);     # what a copy costs is known beforehand
-    return { const => 1, value => $v, dated => $dated, code => sub { $_[0]->charge($n, $bytes); thawed($v, $tree ? undef : {}) } };
+    return { const => 1, value => $v, dated => $dated, code => sub {
+        return $v if $_[0]{share};
+        $_[0]->charge($n, $bytes);
+        thawed($v, $tree ? undef : {});
+    } };
 }
 
 # A copy of a value that is the graft's own, down to its last array and
@@ -275,12 +281,13 @@ sub fold ($c, $ctx, $s, $n) {
     # come out differently is left for them: it dies here, and is not folded.
     $x->{exact} = 1;
     local $JGraft::Number::EXACT = 'fold';
+    $x->{share} = 1;        # (what comes of it is the graft's own again)
     $x->{src} = 1;      # an object it makes keeps its order, in case it is wanted (see Exec::object)
     my $v;
     my $done  = eval { $v = $n->{code}->($x, $MISSING, undef, undef); 1 };
     my $error = $@;
     $c->{limits}{$_} = $x->{$_} for qw(ops mem new_obj);        # what is left, for the rest of the graft
-    return %{ $x->{side} } ? $n : konst($v, $c->{share}) if $done;
+    return %{ $x->{side} } ? $n : konst($v, 1) if $done;
     return $n unless ref $error eq 'JGraft::Error' && $error->{soft};
     return $c->fault("an expression always fails: $error->{message}", 'INVALID_GRAFT', expr => $s)
         if $error->code eq 'INVALID_OPERAND';
@@ -336,7 +343,7 @@ sub construct ($c, $ctx, $s) {
     # (an object written in a graft whose own objects keep their order keeps the order it was written in)
     my $ordered = $hash && JGraft::Ordered::is($s);
     my $make = !$hash ? sub { [@_] } : $ordered ? sub { JGraft::Ordered::hash(map { $_ => shift } @key) } : sub { my %h; @h{@key} = @_; \%h };
-    return konst($make->(map { $_->{value} } @kid), $c->{share}) unless grep { !$_->{const} } @kid;
+    return konst($make->(map { $_->{value} } @kid), 1) unless grep { !$_->{const} } @kid;
     my @code = map { $_->{code} } @kid;
     my @meta = $hash ? () : map { $_->{meta} } @kid;
     my @tok  = map { $_->{tok} } @kid;      # where the members that are read straight from a path came from

@@ -1136,7 +1136,18 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   LOCAL or REDUCE is copied at each binding.
   `mutable => 1` to `run` goes the whole way: the output is copied as a
   tree when the run ends (`Exec::apart`), sharing nothing with the input or
-  within itself, and charged to the run. Considered and not done: one
+  within itself, and charged to the run. So is what a failure left
+  (uncharged: there is nothing more to stop), and the data of each log
+  record as it is raised. Such a run shares what the graft supplies, as
+  with `share`, since all it leaves is copied anyway; which of the two a
+  constant does is therefore asked of the run (`$x->{share}`), not fixed
+  when the graft is compiled. The copy is made at the end and not as the
+  run goes: most of an output is what no operation wrote, and is there
+  only because a shallow copy of an array still points at it, so there is
+  no step at which to copy it; and a value that is written may be read
+  back and written again. Undo compares by identity, so the result keeps
+  what the run left as the run had it (`left`) and the undo is worked out
+  from that. Considered and not done: one
   private copy per graft, shared by all outputs. That is what there was;
   the copy would be as exposed as the original, and it is the sharing
   between outputs that is the trap.
