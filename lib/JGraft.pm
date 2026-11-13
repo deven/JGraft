@@ -337,8 +337,14 @@ whole of the changed stretch is written anew.)
 
 =back
 
-What is new is written as compactly as JSON allows, between separators like
-those already there.
+What is new is written as what is around it is written.  A new member or
+element has the separators that those beside it have; a new array or object
+is laid out as the one it stands in is, each element on a line of its own
+and a step further in if that is how its neighbours are, or on one line with
+their spacing if they are on one line; and a whole new document, where the
+graft has replaced the old, as the old one was laid out.  With nothing to go
+by (a text that was one number, say) it is written as compactly as JSON
+allows.
 
 C<< $doc->data >> is ordinary data, with three differences.  Its objects are
 ordered hashes (L<JGraft::Ordered>, a tied hash that any Perl code can read

@@ -1223,12 +1223,32 @@ subtest 'JSON is written back as it was read' => sub {
     is $edit->('{"x":1}', [ COPY => [ MKOBJ => 'z', [ 'NODE', 'x' ], 'a', 2 ], 'o' ]), '{"x":1,"o":{"z":1,"a":2}}', 'MKOBJ gives the order of its arguments';
     my $ordered = JGraft::JSON->parse('["JGRAFT", {"v": 1}, ["COPY", {"z": 1, "a": ["NODE", "x"]}, "o"]]')->data;
     my $target  = JGraft::JSON->parse('{"x": 1e1}');
-    is $target->write(JGraft->new($ordered)->apply($target->data)), '{"x": 1e1,"o": {"z":1,"a":1e1}}',
+    is $target->write(JGraft->new($ordered)->apply($target->data)), '{"x": 1e1,"o": {"z": 1,"a": 1e1}}',
         'an object written in a graft that was itself read from text has the order written there';
 
     is $edit->('{"x":1}', [ COPY => [ MKOBJ => 'z', 1, 'a', 2 ], 'o' ]), '{"x":1,"o":{"z":1,"a":2}}', '... when they are all constants, too';
     is $edit->('{"b": 1, "a": 2}', [ COPY => [ CASTDATE => '2024-02-29' ], [ 'NODE', 'when' ] ], [ COPY => { z => [ CASTDATE => '2024-03-01' ], a => 1 }, 'o' ]),
-        '{"b": 1, "a": 2, "when": "2024-02-29", "o": {"a":1,"z":"2024-03-01"}}', 'dates on their way out do not disturb it';
+        '{"b": 1, "a": 2, "when": "2024-02-29", "o": {"a": 1, "z": "2024-03-01"}}', 'dates on their way out do not disturb it';
+
+    # A new array or object is laid out as what it stands in is.
+    my $new = [ COPY => { n => 2, list => [ [ 1, { deep => [ [ 'x', [ [] ] ] ], e => {} } ] ] }, 'added' ];
+    is $edit->(qq({\n   "keep" : {\n      "x" : 1\n   }\n}), $new),
+        qq({\n   "keep" : {\n      "x" : 1\n   },\n   "added" : {\n      "list" : [\n         1,\n         {\n            "deep" : [\n               "x",\n               []\n            ],\n            "e" : {}\n         }\n      ],\n      "n" : 2\n   }\n}),
+        'one element to a line, each a step further in, where that is how the text is';
+    is $edit->(qq({\r\n\t"keep": 1\r\n}), [ COPY => { a => [ [ 1 ] ] }, 'added' ]), qq({\r\n\t"keep": 1,\r\n\t"added": {\r\n\t\t"a": [\r\n\t\t\t1\r\n\t\t]\r\n\t}\r\n}), '... with the step and the line ending that the text has';
+    is $edit->('{"a": 1, "b": [1, 2]}', $new), '{"a": 1, "b": [1, 2], "added": {"list": [1, {"deep": ["x", []], "e": {}}], "n": 2}}', 'on one line, with the spacing of the text, where it is on one line';
+    is $edit->('{ "a":1,"b":[ 1,2 ] }', [ COPY => { k => [ [ 1, 2 ] ] }, 'added' ]), '{ "a":1,"b":[ 1,2 ],"added":{ "k":[ 1,2 ] } }', '... inside its brackets as well';
+    is $edit->('{"a":1}', $new), '{"a":1,"added":{"list":[1,{"deep":["x",[]],"e":{}}],"n":2}}', 'and compactly in a text that is compact';
+    is $edit->(qq([\n  {\n    "k": 1\n  }\n]), [ COPY => { n => [ [ 2 ] ] }, [ 'NODE', 1 ] ]), qq([\n  {\n    "k": 1\n  },\n  {\n    "n": [\n      2\n    ]\n  }\n]), 'an object new in an array has the colon that the text gives its names';
+    my $whole = qq({\n  "a": {\n    "v": [\n      1,\n      2\n    ]\n  },\n  "b": "x"\n});
+    my $laid  = JGraft::JSON->parse($whole);
+    my $gone  = graft([ COPY => 'nothing left', ['NODE'] ])->run($laid->data);
+    is $laid->write($gone->output), '"nothing left"', 'a text that a graft replaces with a string is the string';
+    is $laid->write(JGraft->new($gone->undo)->apply($gone->output)), $whole, '... and what undoes that is laid out as the text was: byte for byte';
+    my $lost = graft([ MOVE => 'a', undef ])->run($laid->data);
+    is $laid->write(JGraft->new($lost->undo)->apply($lost->output)), qq({\n  "b": "x",\n  "a": {\n    "v": [\n      1,\n      2\n    ]\n  }\n}),
+        'what was removed is put back as it was laid out (though at the end, there being no way to say where)';
+    is JGraft::JSON->encode({ a => [ 1, { b => 2 } ] }), '{"a":[1,{"b":2}]}', 'with no text to go by, what is written is compact';
     my $undone = JGraft::JSON->parse('{"b": 1.0, "a": [1, 2]}');
     my $run    = graft([ MOVE => 'b', 'c' ], [ SPLICE => [ 'NODE', 'a', 0 ], 1 ])->run($undone->data);
     is $undone->write(JGraft->new($run->undo)->apply($run->output)), '{"b": 1.0, "a": [1, 2]}',
@@ -1408,8 +1428,11 @@ subtest 'JSON is written back as it was read' => sub {
         my $left = $r->ok ? $r->output : $r->partial;
         $count{written}++;
         my $again = eval { JGraft::JSON->parse($read->write($left))->data };
+        # (the same values, and the same again when both are written with no text to go by: so the same digits, and in the same order)
+        my $bare; $bare = sub ($v) { ref $v eq 'ARRAY' ? [ map { $bare->($_) } @$v ] : ref $v eq 'HASH' ? do { my $h = JGraft::Ordered::hash(); $h->{$_} = $bare->($v->{$_}) for keys %$v; $h } : $v };
         $count{wrong}++ unless !$@ && JGraft::Util::match_lit($again, $left, 1) && JGraft::Util::match_lit($left, $again, 1)
-            && JGraft::JSON->encode($again) eq JGraft::JSON->encode($left);
+            && JGraft::JSON->encode($bare->($again)) eq JGraft::JSON->encode($bare->($left));
+        undef $bare;
     }
     is $count{identical}, 2000, 'every one of 2,000 random texts is written as it was read';
     is $count{wrong}, 0, "and after a random change each says what the run left ($count{written} of them)";

@@ -1153,6 +1153,23 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   private copy per graft, shared by all outputs. That is what there was;
   the copy would be as exposed as the original, and it is the sharing
   between outputs that is the trap.
+- **What is new is written as what is around it is** (`JSON::style`,
+  `anew`). A new member or element already took the separators of its
+  neighbours, but a new array or object was written compactly inside
+  whatever it stood in, and a whole new document compactly. Now a new one
+  is laid out as the array or object it stands in is: each element on its
+  own line, a step further in, if that one's elements are (the step being
+  how much further in they are than its closing bracket); or on one line
+  with its spacing; with the colon the text uses. A whole new document is
+  laid out as the old one was (`outermost`). Prompted by measuring how
+  nearly an undo restores a text byte for byte: on the conformance suite's
+  documents, pretty-printed, 35% of those a run changed came back the same
+  to the byte, nearly all the rest differing in white space, because what a
+  run destroys comes back from the undo graft as data without layout.
+  With this, and moves undone by moves, it is 97% (2,367 of 2,437); the
+  rest are strings whose escapes were lost with the value (58), a key put
+  back at the end of its object (9), and a value moved to another depth
+  that kept the indentation it had (3).
 - **Undo takes back what was moved from where it went** (the comparison's
   item 5, where a renamed subtree of 2,000 items cost 23 KB of undo against
   129 bytes). The comparison of output with input notes, as it goes, what

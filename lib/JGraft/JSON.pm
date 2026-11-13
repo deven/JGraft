@@ -44,6 +44,8 @@ sub text ($doc) { ${ $doc->{text} } }
 # Reading
 
 our $EXACT;      # is the text being written one whose numbers were read exactly?
+our $STYLE;      # how a new array or object is to be laid out where one is being written, if that is known
+our $COLON = ':';
 
 sub parse ($class, $text, %opt) {
     my @unknown = grep { !/\A(?:exact|max_depth|max_size)\z/ } sort keys %opt;
@@ -153,6 +155,10 @@ sub unquote ($body) {
 sub write ($doc, $value = $doc->{data}) {
     my ($start, $end, $text) = @{ $doc->{root} };
     local $EXACT = $doc->{exact};
+    # How what is new is to be laid out: as what is around it is (see `style`).  Until some array or object
+    # of the text says how, all that is known is how the text writes the colon after a name.
+    local $COLON = $$text =~ /"(?:[^"\\]|\\.)*"(\s*:\s*)/ ? $1 : ':';
+    local $STYLE = outermost($doc);
     return substr($$text, 0, $start) . emit($value, $doc->{root}) . substr($$text, $end);
 }
 
@@ -221,12 +227,13 @@ sub stray ($char) {
 # again, with what was between; the rest is joined as the text joined things.
 sub array ($v, $from, $tok) {
     my $items = $from && $from->{items};
-    return fresh('[', ']', map { emit($v->[$_], $tok && $tok->[$_]) } 0 .. $#$v) unless $items && @$items && @$v;
+    return anew($v, $tok) unless $items && @$items && @$v;
     my $text = $from->{text};
     my $cut  = sub ($a, $b) { substr $$text, $a, $b - $a };
     my %was; @was{ map { refaddr $_ } @$items } = 0 .. $#$items;       # which element of the old array a token is
     my $gap  = sub ($j) { $cut->($items->[$j][1], $items->[ $j + 1 ][0]) };      # what was between two elements
     my $join = @$items > 1 ? $gap->($#$items - 1) : ',' . substr $cut->($from->{start}, $items->[0][0]), 1;    # for what is new
+    local $STYLE = style($from, $items->[0][0], $items->[-1][1], undef, $join);
     my ($out, $before) = ($cut->($from->{start}, $items->[0][0]));
     for my $i (0 .. $#$v) {
         my $hint = $tok && $tok->[$i];
@@ -244,7 +251,7 @@ sub object ($v, $from, $tok) {
     my @order   = JGraft::Ordered::is($v) ? keys %$v : sort keys %$v;
     my $members = $from && $from->{members};
     my $pair    = sub ($k, $colon = ':') { '"' . quoted($k) . '"' . $colon . emit($v->{$k}, $tok && $tok->{$k}) };
-    return fresh('{', '}', map { $pair->($_) } @order) unless $members && @$members && @order;
+    return anew($v, $tok) unless $members && @$members && @order;
     my $text = $from->{text};
     my $cut  = sub ($a, $b) { substr $$text, $a, $b - $a };
     my (%first, %last);         # the members that had each key: one, unless the text gave a key twice
@@ -264,6 +271,7 @@ sub object ($v, $from, $tok) {
     my $colon = $cut->($members->[0][2], $members->[0][3][0]);
     my $gap   = sub ($m) { $cut->($members->[$m][3][1], $members->[ $m + 1 ][1]) };      # what was between two members
     my $join  = @$members > 1 ? $gap->($#$members - 1) : ',' . substr $cut->($from->{start}, $members->[0][1]), 1;
+    local $STYLE = style($from, $members->[0][1], $members->[-1][3][1], $colon, $join);
     # a member that was read, with the value its key has now
     my $kept  = sub ($m) {
         my $k = $members->[$m][0];
@@ -302,7 +310,66 @@ sub object ($v, $from, $tok) {
     return $out . $cut->($members->[-1][3][1], $from->{end});
 }
 
-sub fresh ($open, $close, @part) { $open . join(',', @part) . $close }
+# How an array or object of the text is laid out, as far as it shows how a
+# new one among its elements should be.  $first and $last are where its first
+# element begins and its last ends.  If its elements are each on a line of
+# their own, a new array or object is written so too, a step further in than
+# they are; the step is as much as they are further in than it is.
+# Otherwise a new one is written on one line, with what this one has between
+# its elements and inside its brackets.
+sub style ($from, $first, $last, $colon, $join) {
+    my $text = $from->{text};
+    my $lead = substr $$text, $from->{start} + 1, $first - $from->{start} - 1;
+    my $tail = substr $$text, $last, $from->{end} - 1 - $last;
+    $colon //= $STYLE ? $STYLE->{colon} : $COLON;
+    return { pad => $lead, join => $join, colon => $colon } unless $lead =~ /(\r?\n)([ \t]*)\z/;
+    my ($line, $inner) = ($1, $2);
+    my $own = $tail =~ /\n([ \t]*)\z/ ? $1 : '';
+    return { line => $line, at => $inner, step => index($inner, $own) == 0 ? substr($inner, length $own) : $inner, colon => $colon };
+}
+
+# How the whole of a text was laid out, by which to write a whole new one in
+# its place: as the array or object that it was is, if it was one.
+sub outermost ($doc) {
+    my $record = ref $doc->{data} && (JGraft::Source::sheet($doc->{data}) // {})->{rec} or return undef;
+    my $text   = $record->{text};
+    my $cut    = sub ($a, $b) { substr $$text, $a, $b - $a };
+    my ($first, $last, $colon, @between);
+    if (my $items = $record->{items}) {
+        @$items or return undef;
+        ($first, $last) = ($items->[0][0], $items->[-1][1]);
+        @between = ($items->[-2][1], $items->[-1][0]) if @$items > 1;
+    }
+    else {
+        my $members = $record->{members};
+        @$members or return undef;
+        ($first, $last, $colon) = ($members->[0][1], $members->[-1][3][1], $cut->($members->[0][2], $members->[0][3][0]));
+        @between = ($members->[-2][3][1], $members->[-1][1]) if @$members > 1;
+    }
+    my $style = style($record, $first, $last, $colon, @between ? $cut->(@between) : ',' . $cut->($record->{start} + 1, $first));
+    # (it says how what is inside the text's array or object is laid out: that array or object is a step further out)
+    $style->{at} = substr $style->{at}, 0, length($style->{at}) - length $style->{step} if defined $style->{line};
+    return $style;
+}
+
+# An array or object that was not read from the text: written as what is
+# around it is, or if nothing says how, as compactly as can be.
+sub anew ($v, $tok) {
+    my $array = ref $v eq 'ARRAY';
+    my @keys  = $array ? 0 .. $#$v : JGraft::Ordered::is($v) ? keys %$v : sort keys %$v;
+    my ($open, $close) = $array ? ('[', ']') : ('{', '}');
+    return $open . $close unless @keys;
+    my $s = $STYLE;
+    local $STYLE = $s && defined $s->{line} ? { %$s, at => $s->{at} . $s->{step} } : $s;       # what is inside it is a step further in
+    my @part = map {
+        my $name = $array ? '' : '"' . quoted($_) . '"' . ($s ? $s->{colon} : ':');
+        $name . emit($array ? $v->[$_] : $v->{$_}, $tok && ($array ? $tok->[$_] : $tok->{$_}));
+    } @keys;
+    return $open . join(',', @part) . $close unless $s;
+    return $open . $s->{pad} . join($s->{join}, @part) . $s->{pad} . $close unless defined $s->{line};
+    my $in = $s->{line} . $s->{at} . $s->{step};
+    return $open . join(',', map { $in . $_ } @part) . $s->{line} . $s->{at} . $close;
+}
 
 # What to write between two things that now stand side by side, the $m-th
 # and $n-th of those that were read (either may be new, and not defined).
