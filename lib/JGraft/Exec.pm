@@ -59,6 +59,7 @@ sub new ($class, $input, %opt) {
         (map { $_ => $limit->{$_} // INF } qw(ops mem new_obj prop_per_obj)),
         depth => 0, max_depth => $limit->{depth} // 512,
         owned => {}, side => {}, moving => 0,
+        origin => {},                                    # for each copy the run has made of an array or object: [ the copy, what it is a copy of ]
         dates => $opt{dates} // \0,     # whether the graft is one that makes dates
         quiet => 0, logs => [], opt => \%opt,
         site => {},                     # the action that is running: { where, action }, as in an error
@@ -232,6 +233,10 @@ sub clone ($x, $c) {
     my $owned = $x->{owned};
     delete @$owned{ map { refaddr $_ } grep { ref } $hash ? values %$c : @$c } if %$owned;
     $owned->{ refaddr $new } = $new;        # holding it keeps the address from being reused
+    # What it is a copy of, at first hand or by way of other copies: by which an undo
+    # can tell a thing that was moved and then changed from one that is new.
+    my $first = $x->{origin}{ refaddr $c };
+    $x->{origin}{ refaddr $new } = [ $new, $first && $first->[0] == $c ? $first->[1] : $c ];
     if (my $side = $x->{side}{ refaddr $c }) {
         my $copy = $x->side($new);
         $copy->{split} = { %{ $side->{split} }, m => [ @{ $side->{split}{m} } ] } if $side->{split};

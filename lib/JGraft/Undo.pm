@@ -2,10 +2,11 @@ package JGraft::Undo;
 
 # A graft that turns one document back into another.
 #
-# Nothing is recorded while a graft runs.  A run never changes its input, and
-# its output shares with the input every part that it left alone, so what the
-# run did can be read off afterwards by comparing the two: wherever they are
-# the very same array or object, nothing happened, and nothing is looked at.
+# Nothing is recorded while a graft runs, but which arrays and objects it made
+# copies of.  A run never changes its input, and its output shares with the
+# input every part that it left alone, so what the run did can be read off
+# afterwards by comparing the two: wherever they are the very same array or
+# object, nothing happened, and nothing is looked at.
 
 use v5.36;
 no warnings qw(recursion);
@@ -13,7 +14,28 @@ use Scalar::Util qw(refaddr);
 use JGraft::Util;
 
 # The structure of a graft which, applied to $now, gives $was.
-sub graft ($now, $was) { [ JGRAFT => { v => 1 }, together(changes($now, $was)) ] }
+#
+# Something that the run took away, or took to another place, has to be put
+# back.  If it is still somewhere in $now, the graft takes it from there: it
+# is copied aside before anything else is done, and put where it was from
+# that copy.  A thing of two thousand items that was only renamed is then
+# undone by naming it, not by writing it out.  This is so whether it is where
+# it went as it was, or as a copy that the run made of it and changed
+# ($origin says which copies were made of what: see JGraft::Exec::clone); in
+# that case it is put back as it is now, and then changed back inside.
+sub graft ($now, $was, $origin = undef) {
+    my $u  = { origin => $origin // {}, spare => [], wanted => 0, aside => [], named => {}, mend => [] };
+    my @do = changes($u, $now, $was, [], [], []);
+    seek_spare($u) if $u->{wanted} && @{ $u->{spare} };
+    @do = map { written($u, $_) } @do;
+    # What was put back as the run left it is now changed back, where it now is.
+    while (my $mend = shift @{ $u->{mend} }) {
+        my ($copy, $original, $final, $from) = @$mend;
+        push @do, map { written($u, $_) } changes($u, $copy, $original, $final, $from, $final);
+    }
+    my @aside = map { [ COPY => [ NODE => @{ $u->{aside}[$_] } ], [ STASH => "$_" ] ] } 0 .. $#{ $u->{aside} };
+    return [ JGRAFT => { v => 1 }, together(@aside, @do) ];
+}
 
 # Actions, with consecutive copies made one action, and removals likewise.
 sub together (@do) {
@@ -25,15 +47,27 @@ sub together (@do) {
     return @actions;
 }
 
-# The actions that change $now, at @path in the document, into $was.
-sub changes ($now, $was, @path) {
+# The actions that change $now into $was.  Three paths lead to it: $path, as
+# the document stands when the actions are carried out; $from, as it stood
+# before any was (where a thing can be copied aside from); and $final, as it
+# will stand when all are done (where a thing put back is changed back).
+# They differ only in what an array's elements are numbered as.
+#
+# A value of $was that is to be put back is not yet written out here: it is
+# left as a note of what is wanted (`wanted`), and what $now has to spare is
+# noted as well (`spare`), so that the one can be looked for among the other.
+sub changes ($u, $now, $was, $path, $from, $final) {
     return if alike($now, $was);
-    my $here = [ NODE => @path ];
+    my $here = [ NODE => @$path ];
     if (ref $now eq 'HASH' && ref $was eq 'HASH') {
+        my @gone = grep { !exists $was->{$_} } sort keys %$now;
+        spare($u, $now->{$_}, [ @$from, $_ ]) for @gone;
         return (
-            (map { [ MOVE => [ @$here, $_ ], undef ] } grep { !exists $was->{$_} } sort keys %$now),
+            (map { [ MOVE => [ @$here, $_ ], undef ] } @gone),
             (map {
-                exists $now->{$_} ? changes($now->{$_}, $was->{$_}, @path, $_) : [ COPY => quote($was->{$_}), [ @$here, $_ ] ]
+                exists $now->{$_}
+                    ? changes($u, $now->{$_}, $was->{$_}, [ @$path, $_ ], [ @$from, $_ ], [ @$final, $_ ])
+                    : [ COPY => wanted($u, $was->{$_}, [ @$final, $_ ]), [ @$here, $_ ] ]
             } sort keys %$was),
         );
     }
@@ -46,9 +80,13 @@ sub changes ($now, $was, @path) {
             # were: take it that they changed where they stood.  Otherwise
             # the old elements go back in place of the new.
             my $within = $n == $m && ($n == 1 || !grep { !nested($now->[ $i + $_ ], $was->[ $j + $_ ]) } 0 .. $n - 1);
-            $within
-                ? (map { changes($now->[ $i + $_ ], $was->[ $j + $_ ], @path, $i + $_) } 0 .. $n - 1)
-                : [ SPLICE => [ @$here, $i ], $n, map { quote($_) } @$was[ $j .. $j + $m - 1 ] ];
+            if ($within) {
+                map { changes($u, $now->[ $i + $_ ], $was->[ $j + $_ ], [ @$path, $i + $_ ], [ @$from, $i + $_ ], [ @$final, $j + $_ ]) } 0 .. $n - 1;
+            }
+            else {
+                spare($u, $now->[ $i + $_ ], [ @$from, $i + $_ ]) for 0 .. $n - 1;
+                [ SPLICE => [ @$here, $i ], $n, map { wanted($u, $was->[ $j + $_ ], [ @$final, $j + $_ ]) } 0 .. $m - 1 ];
+            }
         } reverse stretches($now, $was);
     }
     # Strings of several lines that have lines in common are compared as
@@ -56,9 +94,98 @@ sub changes ($now, $was, @path) {
     if (is_str($now) && is_str($was) && $now =~ /\n/ && $was =~ /\n/) {
         my ($new, $old) = map { [ split /\n/, $_, -1 ] } $now, $was;
         my %old = map { $_ => 1 } @$old;
-        return [ ATSPLIT => $here, "\n", together(changes($new, $old)) ] if grep { $old{$_} } @$new;
+        return [ ATSPLIT => $here, "\n", together(changes({ %$u, quiet => 1 }, $new, $old, [], [], [])) ] if grep { $old{$_} } @$new;
     }
-    return [ COPY => quote($was), $here ];
+    spare($u, $now, $from);
+    return [ COPY => wanted($u, $was, $final), $here ];
+}
+
+#---------------------------------------------------------------------------
+# What is wanted back, and what there is to spare
+
+my $LONG = 64;      # a string of this many characters is worth looking for, and not only writing out
+
+# A note that a value of $was is wanted, at $final when all is done.
+sub wanted ($u, $v, $final) {
+    $u->{wanted}++ if !$u->{quiet} && (ref $v eq 'ARRAY' || ref $v eq 'HASH' || is_str($v) && length $v >= $LONG);
+    return bless { v => $v, final => $final }, 'JGraft::Undo::Wanted';
+}
+
+# A note that $now has a value at $from which the undoing will remove or write over.
+sub spare ($u, $v, $from) {
+    return if $u->{quiet} || !(ref $v eq 'ARRAY' || ref $v eq 'HASH' || is_str($v) && length $v >= $LONG);
+    push @{ $u->{spare} }, [ $v, $from ];
+    found($u, $v, $from) if $u->{at};       # (a later one, when the search has already been made)
+}
+
+# Record where a spare value is: as itself, and (for a copy the run made of
+# an array or object and changed) as the thing it is a copy of.
+sub found ($u, $v, $from) {
+    if (!ref $v) { $u->{text}{$v} //= $from; return }
+    $u->{at}{ refaddr $v } //= $from;
+    my $copy = $u->{origin}{ refaddr $v } or return;
+    $u->{like}{ refaddr $copy->[1] } //= [ $from, $v ] if $copy->[0] == $v;
+}
+
+# Look through what is spare, and inside it, for whatever might be wanted.
+# What is spare may be as large as the document (a copy of the whole of it,
+# say), and nothing in it wanted: so the search is of so many places and no
+# more, the nearest first.
+sub seek_spare ($u) {
+    @$u{qw(at like text)} = ({}, {}, {});
+    my @queue = @{ $u->{spare} };
+    my $most  = 2000 + 20 * $u->{wanted};
+    while (my $next = shift @queue) {
+        my ($v, $from) = @$next;
+        found($u, $v, $from);
+        next unless ref $v;
+        for my $k (ref $v eq 'ARRAY' ? 0 .. $#$v : keys %$v) {
+            my $inner = ref $v eq 'ARRAY' ? $v->[$k] : $v->{$k};
+            next unless ref $inner eq 'ARRAY' || ref $inner eq 'HASH' || is_str($inner) && length $inner >= $LONG;
+            return if --$most < 0;
+            push @queue, [ $inner, [ @$from, $k ] ];
+        }
+    }
+}
+
+# An expression that reads what was copied aside from $from.
+sub aside ($u, $from) {
+    # (one copy aside for each place, however often it is wanted: a place is named by its path, each step with its length)
+    my $n = $u->{named}{ join '', map { length($_) . ':' . $_ } @$from } //= do { push @{ $u->{aside} }, $from; $#{ $u->{aside} } };
+    return [ STASH => "$n" ];
+}
+
+# An action with its notes of what is wanted made into expressions.
+sub written ($u, $do) {
+    # (with nothing found to spare, the value is only written out)
+    return ref $do eq 'JGraft::Undo::Wanted' ? quote($do->{v}, $u->{at} ? ($u, $do->{final}) : ())
+         : ref $do eq 'ARRAY'                ? [ map { written($u, $_) } @$do ]
+         :                                     $do;
+}
+
+# A value written as an expression of a graft: its arrays escaped, and its
+# dates as the expressions that make them.  With $u, any part of it that is
+# to spare in the document as it stands is read from where it was copied
+# aside, and not written out.
+sub quote ($v, $u = undef, $final = undef) {
+    my $kind = ref $v;
+    if ($kind eq 'ARRAY' || $kind eq 'HASH') {
+        if ($u && $u->{at}) {
+            my $from = $u->{at}{ refaddr $v };
+            return aside($u, $from) if $from;
+            if (my $like = $u->{like}{ refaddr $v }) {      # a copy of it, changed: put back as it is, and mended there
+                push @{ $u->{mend} }, [ $like->[1], $v, $final, $like->[0] ];
+                delete $u->{like}{ refaddr $v };
+                return aside($u, $like->[0]);
+            }
+        }
+        my $mends = $u && %{ $u->{like} };     # (where a part will be is of interest only if one may be mended there)
+        return $kind eq 'ARRAY' ? [ [ map { quote($v->[$_], $u, $mends && [ @$final, $_ ]) } 0 .. $#$v ] ]
+                                : +{ map { ($_ => quote($v->{$_}, $u, $mends && [ @$final, $_ ])) } keys %$v };
+    }
+    return [ CASTDATE => $v->str ] if $kind eq 'JGraft::Date';
+    return aside($u, $u->{text}{$v}) if $u && $u->{text} && is_str($v) && length $v >= $LONG && $u->{text}{$v};
+    return $v;
 }
 
 # Are these both arrays, or both objects?
@@ -194,16 +321,6 @@ sub roughly ($new, $old) {
     $come[$_] = 1 for $i .. $#$new;
     $gone[$_] = 1 for $j .. $#$old;
     return (\@come, \@gone);
-}
-
-# A value written as an expression of a graft: its arrays escaped, and its
-# dates as the expressions that make them.
-sub quote ($v) {
-    my $kind = ref $v;
-    return $kind eq 'ARRAY'        ? [ [ map { quote($_) } @$v ] ]
-         : $kind eq 'HASH'         ? +{ map { ($_ => quote($v->{$_})) } keys %$v }
-         : $kind eq 'JGraft::Date' ? [ CASTDATE => $v->str ]
-         :                           $v;
 }
 
 1;

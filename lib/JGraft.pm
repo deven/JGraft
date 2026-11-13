@@ -92,10 +92,10 @@ sub run ($self, $input, %opt) {
         $done = eval { $given = $x->apart($left); 1 } or $error = $@ if $done;
         ($given) = $x->aside(sub { $x->apart($left) }) if !$done;
     }
-    return bless { ok => 1, output => $given, logs => $x->{logs}, input => $input, left => $left }, 'JGraft::Result' if $done;
+    return bless { ok => 1, output => $given, logs => $x->{logs}, input => $input, left => $left, origin => $x->{origin} }, 'JGraft::Result' if $done;
     # The error takes with it what the run left behind, for a caller of
     # `apply`.  It is a copy that does: a fault is the same error in every run.
-    my %left = (partial => $given, logs => $x->{logs}, input => $input, left => $left);
+    my %left = (partial => $given, logs => $x->{logs}, input => $input, left => $left, origin => $x->{origin});
     return bless { ok => 0, error => JGraft::Error->new(%{ $self->theirs($error) }, %left), %left }, 'JGraft::Result';
 }
 
@@ -116,7 +116,7 @@ sub partial { $_[0]{partial} }      # only of one that failed: the document as t
 
 # The structure of a graft that turns the output, or the partial document of
 # a failure, back into the input.  It is worked out when first asked for.
-sub undo ($r) { $r->{ok} ? $r->{undo} //= JGraft::Undo::graft(@$r{qw(left input)}) : $r->{error}->undo }
+sub undo ($r) { $r->{ok} ? $r->{undo} //= JGraft::Undo::graft(@$r{qw(left input origin)}) : $r->{error}->undo }
 
 1;
 
@@ -197,8 +197,8 @@ whatever the run did before it failed, and applies to C<partial>.
 It is plain data, to be encoded as JSON and kept, or applied later to
 another copy of the same output.
 
-Asking for it costs a run nothing, and needs no option: nothing is recorded
-while a graft runs.  Because the output shares with the input all that the
+Asking for it costs a run next to nothing, and needs no option: nothing is
+recorded while a graft runs but which arrays and objects it copied.  Because the output shares with the input all that the
 run left alone, what changed is found by comparing the two when C<undo> is
 first called, without looking into anything they share.  So call it before
 you change the input, if you ever do.
@@ -227,6 +227,17 @@ In a string of several lines, it puts back the lines that changed, with an
 C<ATSPLIT> on the line breaks, comparing the lines as it would an array.
 This does not depend on how the string came to change.
 
+=item *
+
+What the run took from its place and put somewhere else is taken back from
+there, and not written out: an array or object, whether it is as it was or
+was changed after it was moved (it is then put back, and changed back
+inside), and a string of 64 characters or more.  The undo graft copies it
+aside to C<STASH> before doing anything else, and puts it back from there.
+So a thing of two thousand items that was renamed is undone in a hundred
+bytes or so, as it is if it was wrapped in something new, or had a wrapping
+taken off, or went from an array into an object.
+
 =back
 
 Three things are less than ideal:
@@ -248,6 +259,13 @@ long runs that did not.
 A changed element that is right beside elements that came or went is put
 back whole, not undone inside.  So is a string of one line, or one that has
 no line in common with what it was.
+
+=item *
+
+What was moved is looked for in what the run added and replaced, and inside
+that, but only so far: some thousands of places, the nearest first.  A thing
+buried deep in a great deal that is new may be written out though it is
+there.
 
 =item *
 

@@ -1153,6 +1153,26 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   private copy per graft, shared by all outputs. That is what there was;
   the copy would be as exposed as the original, and it is the sharing
   between outputs that is the trap.
+- **Undo takes back what was moved from where it went** (the comparison's
+  item 5, where a renamed subtree of 2,000 items cost 23 KB of undo against
+  129 bytes). The comparison of output with input notes, as it goes, what
+  of the input is *wanted* back (it would have been written out) and what
+  the output has to *spare* (it will be removed or written over). If
+  anything is wanted, what is spare is looked through, breadth first and to
+  a limit (2,000 places and 20 for each thing wanted), and indexed by
+  identity; a wanted array or object that is found there, at any depth of
+  what is being written out, becomes a reference to STASH, and the graft
+  begins by copying each such thing aside from where it is. That one
+  device serves a rename, a move between array and object, a wrapping put
+  on or taken off, and several at once, with no ordering to work out: the
+  copies aside are made while the document is still as the run left it.
+  A thing that was moved and then changed is not the same object: the
+  engine now records, for each copy it makes (`Exec::clone`), what it is a
+  copy of (`origin`, which the result keeps), so that the copy can be put
+  back and then changed back inside (`mend`), by the same comparison at the
+  place it will then be. Long strings are found by their text. Sizes now:
+  rename 117 bytes; rename and change inside, 142 (JGraft-perl: 129 and
+  204). Undo of ordinary edits takes as long as before.
 - **`JGraft::JSON->parse` can be told how long and how deep a text may be**
   (`max_size`, `max_depth`; the comparison's item 7), and is not limited
   unless it is, as a run is not. Nothing breaks at any depth: a million
