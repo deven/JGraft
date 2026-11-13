@@ -89,9 +89,9 @@ sub run ($self, $input, %opt) {
     # a failure left is not: there is nothing more to stop.
     my ($left, $given) = ($x->{root}) x 2;
     if ($opt{clone}) {
-        $done = eval { $given = $x->apart($left); 1 } or $error = $@ if $done;
+        $done = eval { $given = $x->replica($left); 1 } or $error = $@ if $done;
         die $error unless $done || blessed $error && $error->isa('JGraft::Error');      # (something of the caller's own, as above)
-        ($given) = $x->aside(sub { $x->apart($left) }) if !$done;
+        ($given) = $x->aside(sub { $x->replica($left) }) if !$done;
     }
     return bless { ok => 1, output => $given, logs => $x->{logs}, input => $input, left => $left, origin => $x->{origin} }, 'JGraft::Result' if $done;
     # The error takes with it what the run left behind, for a caller of
@@ -550,6 +550,10 @@ ends, which takes time and
 memory in proportion to its size written out, and is counted against the
 run's limits.  Read from a text by L<JGraft::JSON>, it is still written
 back as it was read wherever the caller has not changed it.
+
+Data that holds itself (which JSON cannot say, but Perl data can be) is
+copied with the shape it has: the copy holds itself in the same places, and
+holds once what the data holds in several.
 
 Such a run is itself handed the graft's own arrays and objects, as with
 C<share>: all that it leaves is copied in any case, so nothing of the graft

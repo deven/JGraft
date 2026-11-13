@@ -46,6 +46,7 @@ sub text ($doc) { ${ $doc->{text} } }
 our $EXACT;      # is the text being written one whose numbers were read exactly?
 our $STYLE;      # how a new array or object is to be laid out where one is being written, if that is known
 our $COLON = ':';
+our $WATCH;      # by which data that holds itself is noticed, for it cannot be written (see JGraft::Util::watch)
 
 sub parse ($class, $text, %opt) {
     my @unknown = grep { !/\A(?:exact|max_depth|max_size)\z/ } sort keys %opt;
@@ -159,12 +160,13 @@ sub write ($doc, $value = $doc->{data}) {
     # of the text says how, all that is known is how the text writes the colon after a name.
     local $COLON = $$text =~ /"(?:[^"\\]|\\.)*"(\s*:\s*)/ ? $1 : ':';
     local $STYLE = outermost($doc);
+    local $WATCH = watch();
     return substr($$text, 0, $start) . emit($value, $doc->{root}) . substr($$text, $end);
 }
 
 # The text of any value, on its own: what was read from a text as it was,
 # and the rest as plainly as JSON can be written.
-sub encode ($class, $value) { emit($value, undef) }
+sub encode ($class, $value) { local $WATCH = watch(); emit($value, undef) }
 
 # A value as text.  $hint is the token of the place it is in, if there is
 # one: where in some text the value there was written.
@@ -174,7 +176,11 @@ sub emit ($v, $hint) {
         my $sheet = JGraft::Source::sheet($v) // {};
         my $rec   = $sheet->{rec};
         return substr ${ $rec->{text} }, $rec->{start}, $rec->{end} - $rec->{start} if $rec;       # just as it was read
-        return $kind eq 'ARRAY' ? array($v, @$sheet{qw(from tok)}) : object($v, @$sheet{qw(from tok)});
+        my $w = $WATCH;
+        if (++$w->[0] >= $w->[1] || $w->[2]) { inside($w, $v) and die "JGraft::JSON: data that contains itself cannot be written\n" }
+        my $out = $kind eq 'ARRAY' ? array($v, @$sheet{qw(from tok)}) : object($v, @$sheet{qw(from tok)});
+        left($w) if $w->[0]-- == $w->[3];
+        return $out;
     }
     if ($hint) {
         my $token = substr ${ $hint->[2] }, $hint->[0], $hint->[1] - $hint->[0];

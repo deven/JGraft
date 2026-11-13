@@ -135,6 +135,32 @@ subtest 'what a graft supplies is copied for each run, unless it is shared' => s
     my $mine = eval { local $SIG{ALRM} = sub { die { mine => 1 } }; my $n = 0; my $apart = \&JGraft::Exec::apart; no warnings 'redefine';
         local *JGraft::Exec::apart = sub { die { mine => 1 } if ++$n == 3; goto &$apart }; graft()->run($in, clone => 1); 1 };
     ok !$mine && ref $@ eq 'HASH' && $@->{mine}, "an exception of the caller's own passes through a copy that it interrupts";
+    # Data that holds itself.  JSON cannot say such a thing, but Perl data can be one; a walk through all of it would not end.
+    my $itself = sub { my $d = { name => 'x', list => [ 1, 2 ] }; $d->{self} = $d; push @{ $d->{list} }, $d->{list}; $d };
+    my $ring   = sub ($before, $round) { my @n = map { { n => $_ } } 1 .. $before + $round; $n[$_]{next} = $n[ $_ + 1 ] for 0 .. $#n - 1; $n[-1]{next} = $n[$before]; $n[0] };
+    my $ends   = sub ($code) { my $r = eval { local $SIG{ALRM} = sub { die "it did not end\n" }; alarm 10; my $v = $code->(); alarm 0; $v }; alarm 0; $r // $@ =~ s/\n\z//r };
+    is $ends->(sub { my $d = $itself->(); my $o = graft()->apply($d, clone => 1); join ', ', $o != $d ? 'a copy' : 'the same', $o->{self} == $o ? 'that holds itself' : 'that does not', $o->{list}[2] == $o->{list} ? 'as its array does' : 'but its array does not' }),
+        'a copy, that holds itself, as its array does', 'clone copies data that holds itself with the shape it has';
+    is $ends->(sub { my $d = $itself->(); my $o = graft([ COPY => 'y', 'name' ])->apply($d, clone => 1); join ' ', $o->{name}, $o->{self}{name}, $o->{self}{self} == $o->{self} ? 'round' : 'not', $d->{name} }),
+        'y x round x', '... also after a change (the part that held itself still holds what it was)';
+    for ([ 0, 1 ], [ 0, 2 ], [ 5, 3 ], [ 63, 7 ], [ 64, 1 ], [ 200, 100 ], [ 1000, 1000 ], [ 0, 3000 ], [ 3000, 1 ]) {
+        my ($before, $round) = @$_;
+        is $ends->(sub { my $p = graft()->apply($ring->($before, $round), clone => 1); my (%at, $i); while (!exists $at{$p}) { $at{$p} = $i++; $p = $p->{next} } ($i - $at{$p}) . " after $at{$p}" }),
+            "$round after $before", "a ring of $round reached after $before is copied as that";
+        is $ends->(sub { JGraft::JSON->encode($ring->($before, $round)) }), 'JGraft::JSON: data that contains itself cannot be written', '    and is not written, there being no way to';
+    }
+    is $ends->(sub { graft()->run($itself->(), clone => 1, limits => { mem => 1e4 })->ok }), 1, 'a copy of it costs what it holds, once';
+    is $ends->(sub { my $r = graft()->run($itself->(), clone => 1, limits => { mem => 10 }); $r->error->code . ($r->partial->{self} == $r->partial ? ', left whole' : '') }), 'RESOURCE_LIMIT, left whole',
+        '... which may be more than is allowed: and what is left is copied all the same';
+    is $ends->(sub { my $d = 1; $d = [$d] for 1 .. 5000; length JGraft::JSON->encode(graft()->apply($d, clone => 1)) }), 10001, 'data that is only deep is not taken for data that holds itself';
+    is $ends->(sub { my $c = 1; $c = { in => $c } for 1 .. 300; my $o = graft()->apply([ $c, $c, { again => $c } ], clone => 1); ($o->[0] != $o->[1] ? 'apart' : 'one') . ' ' . length JGraft::JSON->encode($o) }), 'apart 6317',
+        'nor is data that holds one deep thing in several places: the copies of it are apart';
+    is $ends->(sub { graft([ COPY => [ IS => [ NODE => 'self' ], ['NODE'] ], 'same' ])->apply($itself->())->{same} ? 'yes' : 'no' }), 'yes', 'a thing is itself, without being gone round';
+    is $ends->(sub { show(graft([ MOVE => 'self', 'me' ])->run($itself->())->undo) }), '["JGRAFT",{"v":1},["MOVE","me","self"]]', 'a part that holds itself and was moved is moved back';
+    is $ends->(sub { graft([ MOVE => 'self', undef ])->run($itself->())->undo }), 'JGraft::Undo: what the run took away contains itself, and no graft can say what it was', '... but one that was taken away cannot be written out';
+    is $ends->(sub { graft([ COPY => { d => [ CASTDATE => '2024-01-01' ], c => [ NODE => 'self' ] }, 'both' ])->run($itself->())->error }) =~ s/ in COPY.*//r, 'INVALID_TARGET: the data contains itself, and a date',
+        'and a value that holds itself cannot be searched for dates to hand out';
+
     # A run with clone has no need of the copies that a run is otherwise handed, and makes none.
     my $counted = JGraft->new([ JGRAFT => {}, [ COPY => [ LENGTH => [ MAP => [ [ 1, 2, 3, 4, 5, 6, 7, 8 ] ], ['NODE'] ] ], ['NODE'] ] ]);
     is $counted->run([ 1 .. 50 ], limits => { mem => 3000 })->error->code, 'RESOURCE_LIMIT', 'fifty copies of a literal are memory';
@@ -1100,9 +1126,12 @@ subtest 'corners of moving, matching and counting' => sub {
     is $run->({}, [1], [ [ MATCH => [ [ [ SEQ => [ REP => 3, 2 ] ] ] ] ] ]), 'new: INVALID_GRAFT', 'limits that are written wrongly are a fault';
     is $run->({}, {}, [ [ IF => [ 'NODE', 'go' ], [ COPY => 1, [ 'NODE', $T, [ 'NODE', 'k' ] ] ] ] ]), 'new: INVALID_GRAFT',
         'a path element that is written wrongly is a fault, though another beside it is computed';
+    is $run->({}, { big => [ 1 .. 3000 ], same => [ 1 .. 3000 ], list => [ 1 .. 300 ] }, [ [ COPY => [ 'NODE', 'big' ], [ 'STASH', 'big' ], [ 'NODE', 'same' ], [ 'STASH', 'same' ] ],
+        [ COPY => [ LENGTH => [ FILTER => [ IS => [ 'STASH', 'big' ], [ 'STASH', 'same' ] ], [ 'NODE', 'list' ] ] ], $N ] ], limits => { ops => 5000 }),
+        'RESOURCE_LIMIT', 'comparing data with data is counted';
     is $run->({}, { big => [ 1 .. 3000 ], list => [ 1 .. 300 ] }, [ [ COPY => [ 'NODE', 'big' ], [ 'STASH', 'big' ] ],
         [ COPY => [ LENGTH => [ FILTER => [ IS => [ 'STASH', 'big' ], [ 'STASH', 'big' ] ], [ 'NODE', 'list' ] ] ], $N ] ], limits => { ops => 5000 }),
-        'RESOURCE_LIMIT', 'comparing data with data is counted';
+        '300', '... but a thing compared with itself is not looked into, and costs nothing';
     is $run->({}, [ (1) x 3000 ], [ $yes->([ IS => [ [ [ SEQ => ['REP'], ['NUM'], ['REP'] ] ] ] ]) ], limits => { ops => 40_000 }), 'true',
         '"anything, then this, then anything" costs in proportion to the array';
     is $run->({}, [ (0) x 3000 ], [ $yes->([ [ [ SEQ => ['REP'], ['REP'], ['REP'], 'no' ] ] ]) ], limits => { ops => 3000 }), 'RESOURCE_LIMIT',

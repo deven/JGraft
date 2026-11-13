@@ -4,7 +4,7 @@ package JGraft::Util;
 # functions that compare them.  Nothing here knows about grafts.
 
 use v5.36;
-use builtin qw(created_as_number is_bool);
+use builtin qw(created_as_number is_bool refaddr);
 no warnings qw(experimental::builtin recursion non_unicode);
 use JSON::PP ();
 use JGraft::Number ();
@@ -18,6 +18,7 @@ use constant {
 our @EXPORT = qw(
     T_MISSING T_NULL T_BOOL T_NUM T_STR T_ARR T_OBJ T_DATE T_DATETIME T_TIMESTAMP T_OTHER
     $TRUE $FALSE $MISSING type_of is_str is_num is_int whole is_idx match_lit sizeof
+    watch inside left
     STRAY $WIDE mended
 );
 
@@ -94,6 +95,7 @@ sub is_idx { !defined $_[0] || is_num($_[0]) }
 sub match_lit ($v, $p, $exact, $x = undef) {
     my $t = type_of($p);
     return 0 unless $t == type_of($v);
+    return 1 if $t >= T_ARR && refaddr($v) == refaddr($p);      # (one thing is like itself, without looking; and data that holds itself is not gone round)
     return ref $v || ref $p ? !JGraft::Number::order($v, $p) : $v == $p || $JGraft::Number::EXACT && JGraft::Number::equal($v, $p) if $t == T_NUM;
     return $v eq $p   if $t == T_STR;
     return 1          if $t == T_NULL;
@@ -112,6 +114,45 @@ sub match_lit ($v, $p, $exact, $x = undef) {
     }
     return $t >= T_DATE && $t <= T_TIMESTAMP ? $v->cmp($p) == 0 : 0;
 }
+
+#---------------------------------------------------------------------------
+# A walk down through arrays and objects must end, and in data that holds
+# itself it would not.  JSON cannot say such a thing, but Perl data can be
+# one.  To notice is cheap, by R. P. Brent's way of finding a cycle with one
+# thing remembered: at certain depths the walk remembers the array or object
+# it is entering, and thereafter asks of each one it enters whether it is
+# that one.  If it is, the walk is inside it twice, and will be for ever.
+# The depths are each twice the last, so whatever the length of the round
+# trip, some remembered one is met again within about that many more steps.
+#
+# What is remembered is forgotten when the walk comes back out of it: so it
+# is always something the walk is inside, and data that merely holds one
+# thing in two places is never taken for data that holds itself.
+#
+# Nothing is remembered above the depth of WATCH_FROM, which is deeper than
+# data is but in rare cases: a walk of ordinary data pays a count and a
+# comparison for each array and object, and no more.  A walk has a watch,
+# [ depth, the depth to remember at next, what is remembered, at what depth ],
+# and is written so:
+#
+#     if (++$w->[0] >= $w->[1] || $w->[2]) { inside($w, $v) and ...it holds itself... }
+#     ...go down into $v...
+#     left($w) if $w->[0]-- == $w->[3];
+
+use constant WATCH_FROM => 64;
+
+sub watch () { [ 0, WATCH_FROM, 0, -1 ] }
+
+# Entering $v, at a depth where it matters: is the walk inside it already?
+sub inside ($w, $v) {
+    my $this = refaddr $v;
+    return 1 if $w->[2] == $this;
+    @$w[ 1, 2, 3 ] = ($w->[0] * 2, $this, $w->[0]) if $w->[0] >= $w->[1];
+    return 0;
+}
+
+# Leaving what was remembered: it is forgotten, and the next thing entered at this depth is remembered.
+sub left ($w) { @$w[ 1, 2, 3 ] = ($w->[0] + 1 > WATCH_FROM ? $w->[0] + 1 : WATCH_FROM, 0, -1) }
 
 # Shallow size estimate, in bytes, for the `mem` limit.
 sub sizeof ($v) {

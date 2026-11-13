@@ -1153,6 +1153,18 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   private copy per graft, shared by all outputs. That is what there was;
   the copy would be as exposed as the original, and it is the sharing
   between outputs that is the trap.
+- **Data that holds itself** is not JSON, but a caller can hand it over, and
+  a walk through all of a value would not end: the copy for `clone`, the
+  writing of JSON, the writing out of a removed value in an undo graft, the
+  search of a stored value for dates. Each now notices
+  (`JGraft::Util::watch`, by Brent's method: one array or object is
+  remembered at depths that double, and forgotten when the walk leaves it,
+  so that nothing is kept account of for data less than 64 deep and data
+  that merely holds one thing twice is not mistaken). `clone` then begins
+  again and copies the data with its shape (`Exec::twin`: every array and
+  object once, as `Storable::dclone` would); the others cannot do what was
+  asked and say so. `match_lit` takes a thing to be like itself without
+  looking, which is also quicker.
 - **Negative zero** is kept where it can be (spec item 34). Perl writes it
   as 0, reads "-0" as 0, and loses the sign of a whole zero in arithmetic,
   so it is made and recognised in `JGraft::Number` (`$NEGATIVE_ZERO`,

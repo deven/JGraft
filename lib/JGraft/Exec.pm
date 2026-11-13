@@ -26,6 +26,9 @@ sub taken ($x, $v) {
     return JGraft::Compiler::thawed($v, $tree ? undef : {});
 }
 
+# What `apart` dies with when it finds that the data holds itself (see JGraft::Util::watch).
+my $ROUND = bless [], 'JGraft::Exec::Round';
+
 # A copy of a value that shares nothing with anything: not with the input,
 # nor the graft, nor one part of itself with another.  Every array and object
 # in it is its own, to be changed as the caller likes.  It is as large as the
@@ -34,13 +37,46 @@ sub taken ($x, $v) {
 sub apart ($x, $v) {
     my $kind = ref $v;
     return $v unless $kind eq 'ARRAY' || $kind eq 'HASH';
+    my $w = $x->{watch};
+    if (++$w->[0] >= $w->[1] || $w->[2]) { inside($w, $v) and die $ROUND }
     $x->charge(1, sizeof($v));
     my $copy = $kind eq 'ARRAY' ? [ map { ref $_ ? $x->apart($_) : $_ } @$v ] : do {
         my $object = JGraft::Ordered::is($v) ? JGraft::Ordered::hash() : {};
         $object->{$_} = ref $v->{$_} ? $x->apart($v->{$_}) : $v->{$_} for keys %$v;
         $object;
     };
+    left($w) if $w->[0]-- == $w->[3];
     JGraft::Source::cloned($v, $copy) if $x->{src};     # (where its values came from in a text is still known)
+    return $copy;
+}
+
+# The copy that `clone` asks for: of all of $v, sharing nothing with it.
+#
+# Data that holds itself cannot be copied as a tree, which would have no
+# end.  When `apart` finds that it does, the copy is begun again another
+# way (`twin`): each array and object is copied once, and wherever it is
+# held the copy of it is held, so that the copy has the shape that the data
+# has and holds itself in the same places.  Ordinary data does not pay for
+# this: nothing is kept account of until `apart` has gone suspiciously deep.
+sub replica ($x, $v) {
+    my @spent = @$x{qw(ops mem)};
+    $x->{watch} = watch();
+    my $copy;
+    return $copy if eval { $copy = $x->apart($v); 1 };
+    die $@ unless ref $@ eq 'JGraft::Exec::Round';
+    @$x{qw(ops mem)} = @spent;         # (what the attempt cost is not owed)
+    return $x->twin($v, {});
+}
+
+sub twin ($x, $v, $made) {
+    my $kind = ref $v;
+    return $v unless $kind eq 'ARRAY' || $kind eq 'HASH';
+    return $made->{ refaddr $v } if $made->{ refaddr $v };
+    $x->charge(1, sizeof($v));
+    my $copy = $made->{ refaddr $v } = $kind eq 'ARRAY' ? [] : JGraft::Ordered::is($v) ? JGraft::Ordered::hash() : {};
+    if ($kind eq 'ARRAY') { @$copy = map { ref $_ ? $x->twin($_, $made) : $_ } @$v }
+    else                  { $copy->{$_} = ref $v->{$_} ? $x->twin($v->{$_}, $made) : $v->{$_} for keys %$v }
+    JGraft::Source::cloned($v, $copy) if $x->{src};
     return $copy;
 }
 
@@ -79,7 +115,11 @@ sub env ($x) { ($x, @$x{qw(node nkey nparent)}) }
 # Dates exist only inside the engine.  A value on its way out of it, into the
 # document or the log, comes through here to have its dates replaced.  Nothing
 # is looked at unless the graft is one that makes dates.
-sub outgoing ($x, $v) { ref $v && ${ $x->{dates} } ? $x->export($v) : $v }
+sub outgoing ($x, $v) {
+    return $v unless ref $v && ${ $x->{dates} };
+    $x->{seen} = watch();           # (the walk is of all of $v, which might hold itself: see JGraft::Util::watch)
+    return $x->export($v);
+}
 
 # $v with its dates replaced, copying only the arrays and objects that held one.
 sub export ($x, $v) {
@@ -88,6 +128,8 @@ sub export ($x, $v) {
     my $array = $r eq 'ARRAY';
     return $v unless $array || $r eq 'HASH';
     my $copy;
+    my $w = $x->{seen};
+    if (++$w->[0] >= $w->[1] || $w->[2]) { inside($w, $v) and $x->fail(INVALID_TARGET => 'the data contains itself, and a date') }
     $x->charge($array ? scalar @$v : scalar keys %$v);
     for my $k ($array ? 0 .. $#$v : keys %$v) {
         my $old = $array ? $v->[$k] : $v->{$k};
@@ -100,6 +142,7 @@ sub export ($x, $v) {
         }
         $array ? ($copy->[$k] = $new) : ($copy->{$k} = $new);
     }
+    left($w) if $w->[0]-- == $w->[3];
     return $copy // $v;
 }
 

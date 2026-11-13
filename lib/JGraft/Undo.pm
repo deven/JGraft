@@ -23,7 +23,10 @@ use JGraft::Util;
 # it went as it was, or as a copy that the run made of it and changed
 # ($origin says which copies were made of what: see JGraft::Exec::clone); in
 # that case it is put back as it is now, and then changed back inside.
+our $WATCH;      # by which a value that holds itself is noticed where it would have to be written out (see JGraft::Util::watch)
+
 sub graft ($now, $was, $origin = undef) {
+    local $WATCH = watch();
     my $u  = { origin => $origin // {}, spare => [], wanted => 0, aside => [], named => {}, uses => [], mend => [], plain => [] };
     my @do = changes($u, $now, $was, [], [], []);
     seek_spare($u) if $u->{wanted} && @{ $u->{spare} };
@@ -254,8 +257,14 @@ sub quote ($v, $u = undef, $final = undef) {
             }
         }
         my $mends = $u && %{ $u->{like} };     # (where a part will be is of interest only if one may be mended there)
-        return $kind eq 'ARRAY' ? [ [ map { quote($v->[$_], $u, $mends && [ @$final, $_ ]) } 0 .. $#$v ] ]
-                                : +{ map { ($_ => quote($v->{$_}, $u, $mends && [ @$final, $_ ])) } keys %$v };
+        my $w     = $WATCH //= watch();
+        if (++$w->[0] >= $w->[1] || $w->[2]) {
+            inside($w, $v) and die "JGraft::Undo: what the run took away contains itself, and no graft can say what it was\n";
+        }
+        my $out = $kind eq 'ARRAY' ? [ [ map { quote($v->[$_], $u, $mends && [ @$final, $_ ]) } 0 .. $#$v ] ]
+                                   : +{ map { ($_ => quote($v->{$_}, $u, $mends && [ @$final, $_ ])) } keys %$v };
+        left($w) if $w->[0]-- == $w->[3];
+        return $out;
     }
     return [ CASTDATE => $v->str ] if $kind eq 'JGraft::Date';
     return aside($u, $u->{text}{$v}) if $u && $u->{text} && is_str($v) && length $v >= $LONG && $u->{text}{$v};
