@@ -24,7 +24,8 @@ package JGraft::Number;
 # fifteen digits Perl writes, or of more than an integer holds; one beyond
 # Perl's range; a fraction.  An object is
 # [ coefficient, exponent ], and the coefficient a Math::BigInt if it has
-# more than eighteen digits; or, for a fraction, [ Math::BigRat, places ].
+# more than eighteen digits; or, for a fraction,
+# [ numerator, denominator, places ].
 # It is never changed once made.
 #
 # Math::BigInt and Math::BigFloat objects are read as numbers too, wherever a
@@ -72,7 +73,7 @@ sub scan ($text) {
 # that some binary arithmetic has left as 0.30000000000000004 is 0.3 here.
 sub parts ($n) {
     my $kind = ref $n;
-    return ratio($n) ? scan($n->[0]->as_float($DIGITS)->bsstr) : @$n if $kind eq __PACKAGE__;     # (a fraction, as nearly as digits say it)
+    return ratio($n) ? rounded($n) : @$n if $kind eq __PACKAGE__;       # (a fraction, as nearly as digits say it)
     if (!$kind) {
         my $text = "$n";
         return $text =~ /\A-?[0-9]{1,18}\z/ ? (0 + $text, 0) : scan($text);
@@ -144,19 +145,22 @@ sub level ($a, $b) {
 # Arithmetic.  Each takes numbers of any kind, and returns one as `make` does.
 
 sub add ($a, $b) {
-    return settle(rat($a) + rat($b), most(places($a), places($b))) if ratio($a) || ratio($b);
+    return sum($a, $b, 1) if ratio($a) || ratio($b);
     my ($c1, $c2, $e) = level($a, $b);
     return make($c1 + $c2, $e);
 }
 
 sub sub ($a, $b) {
-    return settle(rat($a) - rat($b), most(places($a), places($b))) if ratio($a) || ratio($b);
+    return sum($a, $b, -1) if ratio($a) || ratio($b);
     my ($c1, $c2, $e) = level($a, $b);
     return make($c1 - $c2, $e);
 }
 
 sub mul ($a, $b) {
-    return settle(rat($a) * rat($b), places($a) + places($b)) if ratio($a) || ratio($b);
+    if (ratio($a) || ratio($b)) {
+        my ($n1, $d1, $n2, $d2) = (frac($a), frac($b));
+        return settle(product($n1, $n2), product($d1, $d2), places($a) + places($b));
+    }
     my ($c1, $e1, $c2, $e2) = (parts($a), parts($b));
     return make(!ref $c1 && !ref $c2 && length(abs $c1) + length(abs $c2) <= $LONG ? $c1 * $c2 : wide($c1) * $c2, $e1 + $e2);
 }
@@ -164,8 +168,12 @@ sub mul ($a, $b) {
 # The remainder, which takes the sign of the divisor (which is not zero).
 sub mod ($a, $b) {
     if (ratio($a) || ratio($b)) {
-        my ($p, $q) = (rat($a), rat($b));
-        return settle($p - $q * ($p / $q)->bfloor, most(places($a), places($b)));
+        # what is left of $a when as many of $b as go into it, rounded down, are taken from it
+        my ($n1, $d1, $n2, $d2) = (frac($a), frac($b));
+        my ($n, $d) = (product($n1, $d2), product($d1, $n2));
+        ($n, $d) = (-$n, -$d) if $d < 0;
+        my $times = ref $n || ref $d ? scalar wide($n)->copy->bdiv($d) : do { my $left = $n % $d; use integer; ($n - $left) / $d };
+        return sum($a, mul($b, make($times, 0)), -1);
     }
     my ($c1, $c2, $e) = level($a, $b);
     return make(ref $c1 || ref $c2 ? wide($c1) % $c2 : $c1 % $c2, $e);
@@ -184,7 +192,7 @@ sub apart ($a, $b) { abs((ratio($a) ? 0 : (parts($a))[1]) - (ratio($b) ? 0 : (pa
 
 # $a to the power $n: a whole number of Perl's own, and not negative.
 sub pow ($a, $n) {
-    return settle(rat($a)->bpow(wide($n)), places($a) * $n) if ratio($a);
+    return settle((map { wide($_)->copy->bpow($n) } @$a[ 0, 1 ]), places($a) * $n) if ratio($a);
     my ($c, $e) = least($a);
     return make(!ref $c && len($c) * $n <= 15 ? 0 + sprintf('%d', $c**$n) : wide($c)->copy->bpow($n), $e * $n);
 }
@@ -193,7 +201,10 @@ sub pow ($a, $n) {
 # written with as few places as it needs beyond those of the numbers
 # divided; if it does not, it is the fraction.
 sub div ($a, $b) {
-    return settle(rat($a) / rat($b), most(0, places($a) - places($b))) if ratio($a) || ratio($b);
+    if (ratio($a) || ratio($b)) {
+        my ($n1, $d1, $n2, $d2) = (frac($a), frac($b));
+        return settle(product($n1, $d2), product($d1, $n2), most(0, places($a) - places($b)));
+    }
     my ($c1, $e1, $c2, $e2) = (parts($a), parts($b));
     my $e = $e1 - $e2;
     return make(0, $e < 0 ? $e : 0) if !$c1;
@@ -202,60 +213,104 @@ sub div ($a, $b) {
         return make($c1 / $c2, $e);
     }
     # (the powers of ten are kept out of the fraction, which may then be far smaller than the number)
-    require Math::BigRat;
-    return settle(Math::BigRat->new(wide($c1), wide($c2)), most(0, places($a) - places($b)), $e);
+    return settle($c1, $c2, most(0, places($a) - places($b)), $e);
 }
 
 #---------------------------------------------------------------------------
 # Fractions
 #
-# A fraction is [ Math::BigRat, places ]: a number in lowest terms whose
-# divisor is not made of twos and fives alone, so that no decimal says it;
-# and the number of places it would be known to if one did.  1.00 / 3 is a
-# third, of two places, and three times that is 1.00.  Arithmetic on a
-# fraction is arithmetic on fractions, and the result is a decimal again as
-# soon as there is a decimal that says it.
+# A fraction is [ numerator, denominator, places ]: a number in lowest terms
+# whose denominator is not made of twos and fives alone, so that no decimal
+# says it; and the number of places it would be known to if one did.
+# 1.00 / 3 is a third, of two places, and three times that is 1.00.
+# Arithmetic on a fraction is arithmetic on fractions, and the result is a
+# decimal again as soon as there is a decimal that says it.
+#
+# Numerator and denominator are Perl's own integers while those are long
+# enough, as a coefficient is, and Math::BigInt when they are not.
 
-sub ratio ($n)  { ref $n eq __PACKAGE__ && ref $n->[0] eq 'Math::BigRat' }
+sub ratio ($n)    { ref $n eq __PACKAGE__ && @$n == 3 }
 sub most ($a, $b) { $a > $b ? $a : $b }
 
 # The places after the point that a number is known to.
 sub places ($n) {
-    return $n->[1] if ratio($n);
+    return $n->[2] if ratio($n);
     my $e = (parts($n))[1];
     return $e < 0 ? -$e : 0;
 }
 
-# Any number as a fraction (which is the caller's to change).
-sub rat ($n) {
-    return $n->[0]->copy if ratio($n);
-    require Math::BigRat;
+# Any number as a numerator and a denominator (not in lowest terms).
+sub frac ($n) {
+    return @$n[ 0, 1 ] if ratio($n);
     my ($c, $e) = parts($n);
-    my $rat = Math::BigRat->new(wide($c));
-    return $rat unless $e;
-    my $power = Math::BigInt->new(10)->bpow(abs $e);
-    return $e > 0 ? $rat->bmul($power) : scalar $rat->bdiv($power);        # (in a list, bdiv gives a quotient and a remainder)
+    return $e >= 0 ? (up($c, $e), 1) : ($c, up(1, -$e));
 }
 
-# The number that is $rat times ten to the power $e, known to $places: a
-# decimal if one says it, and otherwise a fraction.
-sub settle ($rat, $places, $e = 0) {
-    my ($rest, %times) = ($rat->denominator);
+# Whole numbers, of either kind: a product, a quotient that is known to be
+# whole, and the greatest number that divides two.
+sub product ($a, $b) { !ref $a && !ref $b && length(abs $a) + length(abs $b) <= $LONG ? $a * $b : wide($a) * $b }
+
+sub over ($a, $b) {
+    return lower(wide($a) / $b) if ref $a || ref $b;
+    use integer;
+    return $a / $b;
+}
+
+sub common ($a, $b) {
+    return lower(Math::BigInt::bgcd($a, $b)) if ref $a || ref $b;
+    ($a, $b) = (abs $a, abs $b);
+    ($a, $b) = ($b, $a % $b) while $b;
+    return $a;
+}
+
+# The sum of two numbers, or their difference, where one is a fraction.
+sub sum ($a, $b, $sign) {
+    my ($n1, $d1, $n2, $d2) = (frac($a), frac($b));
+    my ($left, $right) = (product($n1, $d2), product($n2, $d1));
+    $right = -$right if $sign < 0;
+    return settle(ref $left || ref $right ? wide($left) + $right : $left + $right, product($d1, $d2), most(places($a), places($b)));
+}
+
+# The number that is $n over $d, times ten to the power $e, known to
+# $places: a decimal if one says it, and otherwise a fraction.
+sub settle ($n, $d, $places, $e = 0) {
+    ($n, $d) = (-$n, -$d) if $d < 0;
+    return make(0, -$places) if $n == 0;
+    my $shared = common($n, $d);
+    ($n, $d) = (over($n, $shared), over($d, $shared)) if $shared != 1;
+    my ($rest, %times) = ($d);
     for my $p (2, 5) {
         $times{$p} = 0;
-        $rest->bdiv($p), $times{$p}++ while ($rest % $p)->is_zero;
+        $rest = over($rest, $p), $times{$p}++ while $rest % $p == 0;
     }
-    if ($rest->is_one) {
-        # Some power of ten is a multiple of the divisor: the least such gives the places it needs.
+    if ($rest == 1) {
+        # Some power of ten is a multiple of the denominator: the least such gives the places it needs.
         my $needs = most($times{2}, $times{5});
-        my $c     = $rat->copy->bmul(Math::BigInt->new(10)->bpow($needs))->numerator;
+        my $c     = over(product($n, up(1, $needs)), $d);
         $e -= $needs;
         ($c, $e) = least(bless [ $c, $e ]) if $e >= 0;          # (a whole number: its zeros are not places)
         ($c, $e) = (up($c, $e + $places), -$places) if $e > -$places && $e <= 0;       # the places it is known to, beyond those
         return make($c, $e);
     }
-    $rat = rat(bless [ $rat ]) * rat(make(1, $e)) if $e;
-    return bless [ $rat, $places ], __PACKAGE__;
+    if ($e) {       # the power of ten is part of a fraction, having nowhere else to be
+        ($n, $d) = $e > 0 ? (product($n, up(1, $e)), $d) : ($n, product($d, up(1, -$e)));
+        $shared = common($n, $d);
+        ($n, $d) = (over($n, $shared), over($d, $shared)) if $shared != 1;
+    }
+    return bless [ lower($n), lower($d), $places ], __PACKAGE__;
+}
+
+# A fraction as the nearest decimal of $DIGITS digits: its coefficient and exponent.
+sub rounded ($n) {
+    my ($p, $q) = (wide($n->[0]), wide($n->[1]));
+    # (a quotient has as many digits as the one number has more than the other, or one more: so this is tried once or twice)
+    for (my $k = $DIGITS - ($p->length - $q->length); ; $k--) {
+        my ($top, $bottom) = $k >= 0 ? ($p->copy->blsft($k, 10), $q) : ($p->copy, $q->copy->blsft(-$k, 10));
+        my ($c, $left) = $top->bdiv($bottom);                   # rounded down, with what is left over
+        next if $c->length > $DIGITS;
+        $c->binc if $left * 2 > $bottom;
+        return (lower($c), -$k);
+    }
 }
 
 # A fraction as it is written in school, with the digits that repeat marked:
@@ -264,7 +319,7 @@ sub settle ($rat, $places, $e = 0) {
 # fraction is written as it always is.
 sub repeating ($n, $most = 1000) {
     return str($n) unless ratio($n);
-    my ($p, $q) = ($n->[0]->numerator, $n->[0]->denominator);
+    my ($p, $q) = map { wide($_)->copy } @$n[ 0, 1 ];
     my $sign    = $p->is_neg ? '-' : '';
     my ($whole, $left) = $p->babs->bdiv($q);
     ($q, $left) = (0 + $q->bstr, 0 + $left->bstr) if $q->length <= 17;      # long division, in Perl's integers if they will do
@@ -310,7 +365,11 @@ sub ordered ($a, $b) {
 sub order ($a, $b) {
     # (an infinity, or what is not a number at all, is no decimal; Perl compares those as it does)
     return 0 + $a <=> 0 + $b if grep { !ref && $_ - $_ != 0 } $a, $b;
-    return rat($a)->bcmp(rat($b)) if ratio($a) || ratio($b);
+    if (ratio($a) || ratio($b)) {
+        my ($n1, $d1, $n2, $d2) = (frac($a), frac($b));
+        my ($left, $right) = (product($n1, $d2), product($n2, $d1));
+        return ref $left || ref $right ? wide($left)->bcmp($right) : $left <=> $right;
+    }
     my ($c1, $e1, $c2, $e2) = (parts($a), parts($b));
     my ($s1, $s2) = ($c1 <=> 0, $c2 <=> 0);
     return $s1 <=> $s2 if $s1 != $s2 || !$s1;
@@ -326,7 +385,7 @@ sub order ($a, $b) {
 # equal, and `order` says so, but they are not the same.)
 sub same ($a, $b) {
     return $a == $b if !ref $a && !ref $b;
-    return ratio($a) && ratio($b) && $a->[1] == $b->[1] && $a->[0] == $b->[0] if ratio($a) || ratio($b);
+    return ratio($a) && ratio($b) && $a->[2] == $b->[2] && $a->[0] == $b->[0] && $a->[1] == $b->[1] if ratio($a) || ratio($b);
     my ($c1, $e1, $c2, $e2) = (parts($a), parts($b));
     return $e1 == $e2 && $c1 == $c2;
 }
@@ -342,7 +401,7 @@ sub whole ($n) {
 
 # How many digits a number has: what it costs to keep.  (Those of a whole
 # number that are zeros at its end cost nothing.)
-sub digits ($n) { ratio($n) ? $n->[0]->numerator->length + $n->[0]->denominator->length : len((least($n))[0]) }
+sub digits ($n) { ratio($n) ? len($n->[0]) + len($n->[1]) : len((least($n))[0]) }
 
 #---------------------------------------------------------------------------
 # Writing

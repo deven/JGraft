@@ -1178,9 +1178,10 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   - *Equality is of value* (0.30 matches 0.3); only the JSON writer and undo
     ask whether two numbers are the same to the place (`Number::same`).
   - *Division is exact too.* A quotient that ends is the decimal. One that
-    does not is a fraction: the object is then `[ Math::BigRat, places ]`,
-    and arithmetic that meets one is done on fractions (`Number::rat`,
-    `settle`), giving a decimal again as soon as one says the result. So
+    does not is a fraction: the object is then
+    `[ numerator, denominator, places ]`, and arithmetic that meets one is
+    done on fractions (`Number::frac`, `settle`), giving a decimal again as
+    soon as one says the result. So
     (1/3) x 3 is 1, where forty digits of a third gave 0.999...; that had
     made exact arithmetic worse than Perl's own at the one thing, and broke
     indices worked out by division. Digits are given only when a fraction is
@@ -1189,11 +1190,11 @@ Each of these made the code smaller; none changes behaviour the suite can see.
     1.00. Storing the digits that repeat, as on paper, was considered: it is
     the same information as the fraction, but a divisor of n digits can
     repeat every 10^n (1/65537: 65,536 digits), so it is offered only as a
-    way of writing (`repeating`: `0.(3)`, `0.1(6)`). `Math::BigRat` does
-    the fractions because it is there; it is not used for decimals, where it
-    is ten times slower than the coefficients (25 to 80 µs an operation
-    against 8) and would lose the places. `LOG` and fractional `POW` stay
-    Perl's.
+    way of writing (`repeating`: `0.(3)`, `0.1(6)`). The fractions were
+    first done with `Math::BigRat`, which cost 200 µs an operation (to make
+    one is 80); they are now Perl's integers, as coefficients are, with
+    `Math::BigInt` when those are too short, and ten times faster. `LOG` and
+    fractional `POW` stay Perl's.
   - *Cost is charged*: a digit of a kept object, the zeros between two
     numbers added, the digits of a power, with a cap of a billion.
   The whole conformance suite gives the same results exact as not, except
