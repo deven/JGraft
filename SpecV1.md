@@ -1206,10 +1206,12 @@ When the source property is an element of an array, the deletion of the
 element implies that following elements will be shifted up to fill the gap.
 However, this shifting and the corresponding change to `LENGTH` does not occur
 until after all pairs have been processed.
-Attempts to access an array element pending deletion fail with
+Attempts to access the value of an array element pending deletion fail with
 `INVALID_TARGET`, including expressions like `SLICE` that attempt to clone
 every element in a span of an array.  Moving an array with deletions pending is
-not a problem since there is no need to enumerate the elements.
+not a problem since there is no need to enumerate the elements.  An `EXISTS`
+test on the element still returns true, since `EXISTS` does not actually need
+to read the property, just observe that a property of the container exists.
 The deleted array index may still be used as a move destination, and writing a
 new value to it (or through it) also cancels the deletion for that index.
 For purposes of destination-path auto-vivification, an array index pending
@@ -1292,9 +1294,9 @@ are:
   - Arrays do not get resized or shifted on every single move pair
   - If an editor has re-ordered the elements of an array, and knows the source
     and destination index of each, it can easily export that edit as a `MOVE`
-    argument list from those pairs by adding ".5" to each destination.  Every
-    deletion will be paired with an insertion and the `MOVE` action can run in
-    `O(N)` time without actual splice() calls.
+    argument list from those pairs by subtracting ".5" to each destination.
+    Every deletion will be paired with an insertion and the `MOVE` action can
+    run in `O(N)` time without actual splice() calls.
 
 Examples:
 
@@ -1634,13 +1636,41 @@ expression's successor state 2.
 
 #### <span id="ex-exists">EXISTS</span>
 
-    [EXISTS]
+    [EXISTS]              // current node
+    [EXISTS, path_expr]   // hypothetical node
 
-Match when the current node exists, including the value `null`.
+Match when the target node is a reference to a property that exists,
+without regard to the value of the property.
 
-This is also particularly useful when negated as `[NONE,[EXISTS]]`.  As this
-implies, the matching system must consider property expressions even when the
-property doesn't exist on the target.
+With no arguments, this tests the current node.  The primary use of testing the
+current node for existence is when structural matching is checking an
+expression for a property which may or may not exist in the target.
+The current node may also be nonexistent when sequence matching reaches the end
+of an array, and when computing a name for a named sequence capture.
+
+When one argument is provided (path context), the existence of the implied
+reference expression will be tested without attempting to read the property.
+This is similar to a 2-argument `IS` expression like:
+
+    [IS, [NODE, "a"], [EXISTS]]
+    vs. [EXISTS, "a"]
+
+    [IS, [CONST, "known_keys", [CURPROP]], [EXISTS]],
+    vs. [EXISTS, [CONST, "known_keys", [CURPROP]]]
+
+but more efficient, since those 2-argument `IS` expressions are actually
+failing with `INVALID_TARGET` and then the error gets trapped as a false match
+because `IS` is a match expression.  The `[EXISTS, path]` form can take a
+lighter-weight approach of checking the path as it is resolved.
+In sequence context, the one-argument form becomes a zero width assertion much
+the same way `IS` does.  The zero-argument form continues to generate a
+successor state of the following node when true.
+
+The root of each namespace (excluding `NODE`, and instead considering the root
+of the input data) is considered to be an "existing" property, even though
+`CURPROP` returns `null`.  It also returns true for a property pending deletion
+in a `MOVE` action, but not if it needs to descend *through* the inaccessible
+value of that property.
 
 #### <span id="ex-array">ARRAY</span>
 
@@ -1870,6 +1900,13 @@ Regex Notation               | REP notation
  `(...)?`                    | [REP,0,1,...]
  `(...){5}`                  | [REP,5,0,...]
  `(...){3,5}`                | [REP,3,5,...]
+
+Implementations should optimize the pattern `[REP, ... [EXISTS]]` (specifically
+the no-argument form of `EXISTS`) to simply identify successor states based on
+the elements which exist, rather than executing an `EXISTS` expression at each
+of them.  This prevents quadratic application of `EXISTS` when testing possible
+successor states from expressions like `[SEQ, [REP], "needle", [REP] ]` and
+avoids running into resource limits unnecessarily.
 
 #### <span id="ex-start">START</span>
 

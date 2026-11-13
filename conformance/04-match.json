@@ -1113,6 +1113,410 @@
       ]
     },
     {
+      "name": "EXISTS with a path",
+      "desc": "One-argument EXISTS queries a location without reading its final value. Covers path resolution, namespaces, current-node scope, zero-width sequence assertions, pending MOVE deletions, and validation.",
+      "tests": [
+        {
+          "name": "Properties and roots",
+          "desc": "The path identifies a location rather than a truthy value. Missing paths fail to match without reading nonexistent values or creating containers; NODE follows the current structural scope.",
+          "tests": [
+            {
+              "name": "Present null exists",
+              "input": {"a":null},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","a"],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Present false exists",
+              "input": {"a":false},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","a"],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Present zero exists",
+              "input": {"a":0},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","a"],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Present empty string exists",
+              "input": {"a":""},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","a"],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Present object exists",
+              "input": {"a":{}},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","a"],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Present array exists",
+              "input": {"a":[]},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","a"],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Missing property does not exist",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","a"],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Nested property containing null exists",
+              "input": {"a":[{"b":null}]},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["NODE","a",0,"b"]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Missing intermediate property fails without creating containers",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["NODE","a","b"]],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Cannot descend through a scalar",
+              "input": {"a":7},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["NODE","a","b"]],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Current input root containing null exists",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["NODE"]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "NODE reference to a missing structural current node does not exist",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["HAS",{"missing":["NONE",["EXISTS",["NODE"]]]}],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Numeric operation ID accepts a path",
+              "input": {"a":null},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",[6,"a"],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Existence probing does not auto-vivify paths",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["NODE","a","b"]],["STASH","exists"]],["COPY",{"exists":["STASH","exists"],"tree":["NODE"]},["NODE"]]],
+              "output": {"exists":false,"tree":{}}
+            }
+          ]
+        },
+        {
+          "name": "Selectors and own properties",
+          "desc": "Path-context shorthand uses NODE. Negative indices, the append alias, computed selectors, and one-level array expansion follow the ordinary path rules; inherited host properties are not data.",
+          "tests": [
+            {
+              "name": "Integer selects an array element",
+              "input": [null,7],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",0],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Negative integer selects the last element",
+              "input": [7,null],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",-1],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Negative index before the array does not exist",
+              "input": [7],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",-2],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Index at array length does not exist",
+              "input": [7],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",1],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "False append alias does not identify an existing element",
+              "input": [7],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",false],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "String selector does not select an array index",
+              "input": [7],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","0"],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Integer selector does not select an object property",
+              "input": {"0":7},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",0],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Computed selector is evaluated in the caller scope",
+              "input": {"key":"a","a":null},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["NODE",["NODE","key"]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "An array-valued selector expands to a multi-element path",
+              "input": {"path":["a",0,"b"],"a":[{"b":null}]},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["NODE",["NODE","path"]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Own property constructor exists",
+              "input": {"constructor":null},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","constructor"],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Absent property constructor is not inherited",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","constructor"],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Own property __proto__ exists",
+              "input": {"__proto__":null},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","__proto__"],["NODE"]]],
+              "output": true,
+              "needProto": true
+            },
+            {
+              "name": "Absent property __proto__ is not inherited",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS","__proto__"],["NODE"]]],
+              "output": false,
+              "needProto": true
+            }
+          ]
+        },
+        {
+          "name": "Namespaces and substitution",
+          "desc": "References can query existing read-only and writable namespaces. TEMP uses lexical bindings, CAP uses the enclosing match, and common expressions retain invocation scope.",
+          "tests": [
+            {
+              "name": "CONST property containing null exists",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1,"const":["flag",null]},["COPY",["EXISTS",["CONST","flag"]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Missing CONST property does not exist",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["CONST","missing"]],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "CONST root exists without declarations",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["CONST"]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "STASH root exists before assignments",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["STASH"]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "STASH property containing false exists",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",false,["STASH","flag"]],["COPY",["EXISTS",["STASH","flag"]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Lexically bound TEMP property containing null exists",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL","flag",null,["EXISTS",["TEMP","flag"]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Missing TEMP property does not exist",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["TEMP","missing"]],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Integer CONST names retain namespace coercion",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1,"const":[0,null]},["COPY",["EXISTS",["CONST",0]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "CAP root exists without a captured sequence",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["CAP"]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Missing CAP property does not exist",
+              "input": null,
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["CAP","missing"]],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Published capture fields can be queried by path",
+              "input": [1,2],
+              "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["SEQMAX","group",["REP"]]]],["COPY",["EXISTS",["CAP","group","len"]],["NODE"]]]],
+              "output": true
+            },
+            {
+              "name": "Common expression evaluates the path in its invocation scope",
+              "input": {"a":null},
+              "jgraft": ["JGRAFT",{"v":1,"expr":["present",["EXISTS","a"]]},["COPY",["EXPR","present"],["NODE"]]],
+              "output": true
+            }
+          ]
+        },
+        {
+          "name": "Element, sequence, and regex contexts",
+          "desc": "The path form consumes one array element in ordinary element context and becomes a zero-width assertion inside SEQ or regex context. Its referenced location may exist even when the current sequence cursor is at the array end.",
+          "tests": [
+            {
+              "name": "Ordinary element path probe consumes exactly one element",
+              "input": ["head","tail"],
+              "jgraft": ["JGRAFT",{"v":1,"const":["flag",null]},["COPY",["IS",[[["EXISTS",["CONST","flag"]],"tail"]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Sequence path probes consume nothing at the start or end",
+              "input": [9],
+              "jgraft": ["JGRAFT",{"v":1,"const":["flag",null]},["COPY",["IS",[[["SEQ",["EXISTS",["CONST","flag"]],9,["EXISTS",["CONST","flag"]],["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Sequence path probe can succeed on an empty input",
+              "input": [],
+              "jgraft": ["JGRAFT",{"v":1,"const":["flag",null]},["COPY",["IS",[[["SEQ",["EXISTS",["CONST","flag"]],["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Sequence path probe fails for a missing reference",
+              "input": [],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",["EXISTS",["CONST","missing"]],["END"]]]]],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Sequence path probe preserves the current element for the next pattern",
+              "input": [{"id":null}],
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",["EXISTS","id"],{"id":null},["END"]]]]],["NODE"]]],
+              "output": true
+            },
+            {
+              "name": "Regex path probes do not consume characters",
+              "input": "ab",
+              "jgraft": ["JGRAFT",{"v":1,"const":["flag",false]},["COPY",["STR",["SEQ",["START"],["EXISTS",["CONST","flag"]],"ab",["EXISTS",["CONST","flag"]],["END"]]],["NODE"]]],
+              "output": true
+            }
+          ]
+        },
+        {
+          "name": "Pending deletions and unreadable values",
+          "desc": "MOVE defers array compaction. A pending-deletion slot still exists, but probing descendants requires reading its inaccessible value. Object deletion is immediate, and finalized array deletion removes the slot.",
+          "tests": [
+            {
+              "name": "Pending-deletion array slot still exists",
+              "input": [{"x":1},"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["MOVE",0,["TEMP","held"],1,["STASH",["CASE",["EXISTS",["NODE",0]],"present","absent"]]],["COPY",["STASH"],["NODE"]]],
+              "output": {"present":"tail"}
+            },
+            {
+              "name": "Cannot probe through a pending-deletion array slot",
+              "input": [{"x":1},"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["MOVE",0,["TEMP","held"],1,["STASH",["CASE",["EXISTS",["NODE",0,"x"]],"present","absent"]]],["COPY",["STASH"],["NODE"]]],
+              "output": {"absent":"tail"}
+            },
+            {
+              "name": "Existing pending-deletion slot is distinct from a readable value",
+              "input": [{"x":1},"tail"],
+              "jgraft": ["JGRAFT",{"v":1},["MOVE",0,["TEMP","held"],1,["STASH",["CASE",["EXISTS",["NODE",0]],["CASE",["IS",["NODE",0],["EXISTS"]],"readable","exists"],"missing"]]],["COPY",["STASH"],["NODE"]]],
+              "output": {"exists":"tail"}
+            },
+            {
+              "name": "Finalized array deletion removes the slot",
+              "input": ["head"],
+              "jgraft": ["JGRAFT",{"v":1},["MOVE",0,["TEMP","held"]],["COPY",["EXISTS",0],["NODE"]]],
+              "output": false
+            },
+            {
+              "name": "Pending-deletion existence follows an array moved to STASH",
+              "input": ["head","tail"],
+              "jgraft": ["JGRAFT",{"v":1},["MOVE",0,["TEMP","held"],["NODE"],["STASH","array"],null,["NODE"],["STASH","array",1],["STASH","result",["CASE",["EXISTS",["STASH","array",0]],"present","absent"]]],["COPY",["STASH","result"],["NODE"]]],
+              "output": {"present":"tail"}
+            },
+            {
+              "name": "Removed object property immediately ceases to exist",
+              "input": {"a":1,"b":"tail"},
+              "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["TEMP","held"],"b",["STASH",["CASE",["EXISTS","a"],"present","absent"]]],["COPY",["STASH"],["NODE"]]],
+              "output": {"absent":"tail"}
+            }
+          ]
+        },
+        {
+          "name": "Path validation and trapped errors",
+          "desc": "Invalid literal syntax remains fatal rather than looking absent. Input-dependent operand errors are trapped as failed matches, following the normal match-expression error rules.",
+          "tests": [
+            {
+              "name": "Literal null selector",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",null],["NODE"]]],
+              "errors": {"INVALID_GRAFT":true}
+            },
+            {
+              "name": "Literal true selector",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",true],["NODE"]]],
+              "errors": {"INVALID_GRAFT":true}
+            },
+            {
+              "name": "Literal half index",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",0.5],["NODE"]]],
+              "errors": {"INVALID_GRAFT":true}
+            },
+            {
+              "name": "Object in path context",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",{}],["NODE"]]],
+              "errors": {"INVALID_GRAFT":true}
+            },
+            {
+              "name": "Escaped array in path context",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",[[]]],["NODE"]]],
+              "errors": {"INVALID_GRAFT":true}
+            },
+            {
+              "name": "Non-reference expression as path",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["CONCAT","a","b"]],["NODE"]]],
+              "errors": {"INVALID_GRAFT":true}
+            },
+            {
+              "name": "TEMP root without a property",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["TEMP"]],["NODE"]]],
+              "errors": {"INVALID_GRAFT":true}
+            },
+            {
+              "name": "Unknown expression inside a selector",
+              "input": {},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["NODE",["UNKNOWN"]]],["NODE"]]],
+              "errors": {"INVALID_GRAFT":true}
+            },
+            {
+              "name": "Computed invalid selector becomes a failed match",
+              "input": {"key":true},
+              "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["NODE",["NODE","key"]]],["NODE"]]],
+              "output": false
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Own property names",
       "desc": "Arbitrary keys are matched as own data properties rather than host methods or inherited values.",
       "tests": [
@@ -1766,9 +2170,9 @@
           "errors": {"INVALID_GRAFT":true}
         },
         {
-          "name": "EXISTS takes no arguments",
+          "name": "EXISTS rejects a second argument",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["MATCH",["EXISTS",1]]],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["EXISTS",1,2]]],
           "errors": {"INVALID_GRAFT":true}
         },
         {
