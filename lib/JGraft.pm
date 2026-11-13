@@ -90,6 +90,7 @@ sub run ($self, $input, %opt) {
     my ($left, $given) = ($x->{root}) x 2;
     if ($opt{clone}) {
         $done = eval { $given = $x->apart($left); 1 } or $error = $@ if $done;
+        die $error unless $done || blessed $error && $error->isa('JGraft::Error');      # (something of the caller's own, as above)
         ($given) = $x->aside(sub { $x->apart($left) }) if !$done;
     }
     return bless { ok => 1, output => $given, logs => $x->{logs}, input => $input, left => $left, origin => $x->{origin} }, 'JGraft::Result' if $done;

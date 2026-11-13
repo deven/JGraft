@@ -131,6 +131,10 @@ subtest 'what a graft supplies is copied for each run, unless it is shared' => s
         && show($in) eq '{"keep":{"deep":[1,2]},"twice":[7]}' && show($logged->run({ %$in, stop => 1 }, clone => 1)->partial->{new}) eq '{"lit":[1]}', '... nor with the graft: it can be changed';
     is $logged->run({ %$in, stop => 1 }, clone => 1, limits => { mem => 40 })->error->code, 'RESOURCE_LIMIT', 'a run that fails for want of memory';
     is show($logged->run({ %$in, stop => 1 }, clone => 1, limits => { mem => 40 })->partial), show({ %$in, stop => 1 }), '... still hands back a copy of what it left';
+    # An exception that is not the engine's passes through, when it comes while the output is being copied as at any other time.
+    my $mine = eval { local $SIG{ALRM} = sub { die { mine => 1 } }; my $n = 0; my $apart = \&JGraft::Exec::apart; no warnings 'redefine';
+        local *JGraft::Exec::apart = sub { die { mine => 1 } if ++$n == 3; goto &$apart }; graft()->run($in, clone => 1); 1 };
+    ok !$mine && ref $@ eq 'HASH' && $@->{mine}, "an exception of the caller's own passes through a copy that it interrupts";
     # A run with clone has no need of the copies that a run is otherwise handed, and makes none.
     my $counted = JGraft->new([ JGRAFT => {}, [ COPY => [ LENGTH => [ MAP => [ [ 1, 2, 3, 4, 5, 6, 7, 8 ] ], ['NODE'] ] ], ['NODE'] ] ]);
     is $counted->run([ 1 .. 50 ], limits => { mem => 3000 })->error->code, 'RESOURCE_LIMIT', 'fifty copies of a literal are memory';
