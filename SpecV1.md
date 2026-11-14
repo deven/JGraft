@@ -50,19 +50,29 @@ Implementations may choose to use host-language objects of some sort to
 represent actions and expressions at runtime, then perform the array encoding
 during serialization and reconstruct the objects during deserialization.
 Implementations could also choose to leave the JGraft data
-structure in its JSON-compatible form and interpret it on the fly.
-They should make it clear to the developer whether the data structure the
+structure in its JSON-compatible form and interpret it on the fly.  However,
+JGraft allows actions and expressions to be passed around as opaque macro
+objects, so implementations do still require some way to distinguish those from
+data. They should make it clear to the developer whether the data structure the
 application code interacts with is using objects and literal arrays, or the
 direct "arrays-are-special" representation of JGraft.
 Since the object model of a host language is left unspecified, the remainder of
 this specification uses the JSON representation of actions and expressions,
-using JavaScript-like notation for readability.
+but using JavaScript-like notation for readability.
 
 ### Argument Contexts
 
 Every action and expression declares the context of each of its arguments.
 Argument Contexts help reduce the verbosity of the encoding by giving more
 complex meaning to simpler JSON structures.
+
+#### Action Context
+
+Actions live in a distinct namespace from expressions; expressions may not be
+used where an action is expected, and actions may not appear within an
+expression (with the exception of the `ACT` function which returns an action
+in the form of a macro object).  Action context does not use any short-hand
+notations.
 
 #### Value Context
 
@@ -97,9 +107,11 @@ specification structure.
   * Other arrays represent expressions, which are handled specially depending
     on their type.  Match expressions become part of the matching algorithm,
     while functions evaluate to a plain value and then use the value as
-    structure to match against.  Reference expressions are also treated as
-    returning values, except for `EXPR` which substitutes some other
-    expression in its place, to be composed at runtime.
+    structure to match against.  Reference expressions other than `EX` are also
+    treated as values to match against.  `EX` expands an expression macro
+    inline, allowing referenced [match pattern macros](#ex-pat) to participate
+    in a match.  Regex pattern macros (despite also being match expressions)
+    are not legal to expand here.
 
 The section [Matching](#matching) describes the process in detail.
 
@@ -112,10 +124,13 @@ structure as general matching, but operating on a virtual array of characters.
   * Strings of other lengths implicitly become [`SEQ`](#ex-seq)
     expressions, matching a sequence of characters
   * Non-negative integers describe Unicode codepoints
-  * Arrays represent expressions; match expressions become part of the matching
-    algorithm, subexpressions (via [`EXPR`](#ex-expr) ) that resolve to match
-    expressions get re-interpreted according to these rules, and all other
-    expressions evaluate to a plain value interpreted according to these rules.
+  * Arrays represent expressions.  Literal match expressions become part of the
+    matching algorithm.  Match expressions macros created with `REG` may be
+    inserted with `EX` and participate in the match.  Literal values, Value
+    expressions, and expansion of value expression macros evaluate to a plain
+    value which then gets interpreted according to these rules.
+    Structural pattern macros (despite also being match expressions) are not
+    legal to expand here.
   * Any other type of data (non-integer number, object, escaped-array, or date)
     counts as an `INVALID_OPERAND` error.
 
@@ -127,9 +142,9 @@ detail.
 Paths are used to refer to data within one of the [namespaces](#namespaces),
 and may be used for reading or writing.
 
-  * Non-objects/non-arrays are interpreted as a single argument to a
-    [`NODE` expression](#ex-node), though some actions can override the
-    implied namespace.
+  * Non-objects/non-arrays are interpreted as a single argument to a default
+    namespace; the [current node](#ex-node) is the default unless specified
+    otherwise.
   * Arrays represent expressions, with the root expression restricted to
     a Reference Expression.  Actions may further restrict the root expression
     to specific namespaces.  The arguments to the expression are defined
@@ -191,38 +206,53 @@ and `LESSEQ` expressions will fail with an `INVALID_TARGET` error.
 You can use the `CASTDATE` function to cast values to the same precision for
 comparison.
 
+### Macros
+
+JGraft allows actions and expressions to be passed around as opaque macro
+objects.  Macro objects can only exist in the various internal namespaces of
+JGraft; they may not be copied or moved into the input data tree.  Attempts to
+do so fail with `INVALID_TARGET`.
+
+There is one macro-creation function for each of the contexts where actions or
+expressions are allowed; this lets an implementation perform the same logic it
+would use during argument parsing to construct the object.  It also helps
+disambiguate whether a plain JSON structure is a match pattern or a value
+construction notation.
+
+Macros are expanded in-line using the [`CALL` action](#act-call) or
+[`EX` expression](#ex-ex).  They do not receive parameters directly, but may
+receive them by way of namespaces like `TEMP` or `STASH`.
+
+Macros may only be expanded in a compatible context; action macros can only be
+expanded by `CALL`, regex pattern macros may only be expanded in regex context,
+and structural pattern macros may only be expanded outside of regex context.
+Value macros may be expanded both in and outside of regex context.
+
 ## Namespaces
 
-Actions and expressions can make references to data in six namespaces:
+Actions and expressions can make references to data in five namespaces:
 
-  * Current Node       - initial tree of data supplied as input, implicitly
-                         referenced by many expressions and directly by the
-                         [`NODE` expression](#ex-node).
-  * Constants          - a read-only tree of values declared in the
-                         [`JGRAFT` action](#act-jgraft) and referenced by the
-                         [`CONST` expression](#ex-const).
-  * Common Expressions - a read-only collection of parsed/validated expression
-                         trees declared in the [`JGRAFT` action](#act-jgraft)
-                         and referenced by the [`EXPR` expression](#ex-expr).
-  * Match Captures     - a read-only tree of data captured by the named
-                         sequences in an enclosing `MATCH` or `IF` action,
-                         referenced by the [`CAP` expression](#ex-cap).
-  * Stash              - a read/write tree of temporaries shared between
-                         actions in the scope of the same `JGRAFT` action,
-                         referenced by the [`STASH` expression](#ex-stash).
-  * Temporaries        - a read/write tree of temporaries created fresh for
-                         each action, referenced by the
-                         [`TEMP` expression](#ex-temp) and which may be
-                         localized during expressions using [`WITH`](#ex-with)
-                         or [`LOCAL`](#ex-local).
+  * Input Data     - initial tree of data supplied as input, only accessible
+                     via the [current node](#ex-node).
+  * Constants      - a read-only tree of values declared in the
+                     [`JGRAFT` action](#act-jgraft) and referenced by the
+                     [`CONST` expression](#ex-const).
+  * Match Captures - a read-only tree of data captured by the named sequences
+                     in an enclosing `MATCH` or `IF` action, referenced by the
+                     [`CAP` expression](#ex-cap).
+  * Stash          - a read/write tree of temporaries shared between actions in
+                     the scope of the same `JGRAFT` action, referenced by the
+                     [`STASH` expression](#ex-stash).
+  * Temporaries    - a read/write tree of temporaries created fresh for each
+                     action, referenced by the [`TEMP` expression](#ex-temp)
+                     and which may be localized during expressions using
+                     [`WITH`](#ex-with) or [`LOCAL`](#ex-local).
 
-While the Current Node starts as a distinct namespace, within some expressions
-it can become an alias of something other than the input data.  Aside from
-current node aliasing, each tree logically owns its own data and is strictly a
-tree for all purposes of JGraft actions and expressions.  However, so long as a
-tree can only be read from (the read-only namespaces, and the effectively
-read-only environment while evaluating expressions, which are not permitted to
-have side effects) implementations are permitted to share subtrees within and
+Each tree logically owns its own data and is strictly a tree for all purposes
+of JGraft actions and expressions.  However, so long as a tree can only be read
+from (the read-only namespaces, and the effectively read-only environment while
+evaluating expressions, which are not permitted to have side effects)
+implementations are permitted to share subtrees within and
 across namespaces, making the namespaces technically acyclic graphs.
 The expression language has no means to observe that two read-only objects or
 arrays are the same entity, so authors of JGraft can still consider
@@ -230,12 +260,19 @@ the namespaces to always be trees.  Application code interacting with the
 JGraft state may be able to tell the difference, though.
 
 No namespace other than the input data may have its root node overwritten.
-All namespaces except the `TEMP` namespace may reference the root node directly
+All namespaces except the `TEMP` namespace permit references to the root node,
 for copying or enumerating properties.  `TEMP` is excluded so that extensions
 may expose unofficial data into the `TEMP` namespace without it becoming
 discoverable by JGrafts that don't expect it to be there.  A JGraft can still
 test for the existence of `TEMP` properties using match expressions, but they
 have to know specifically what they are looking for.
+
+While the Current Node starts as a reference to the root of the input data,
+as `AT` actions move the current node deeper into the tree the ancestor
+elements become inaccessible.  This is by design; it ensures that independent
+JGrafts can be composed without breaking their assumptions about the shape of
+the tree, and ensures that there is at most one path expression which can refer
+to a node of the input data as actions perform mutations to it.
 
 ## Paths
 
@@ -246,7 +283,7 @@ of a namespace.
 In general, strings may only refer to object properties and integers may only
 refer to array elements.  This is particularly important when auto-vivifying a
 path; integers will create arrays and strings will create objects.
-However, paths for the `CONST`, `EXPR`, `STASH` and `TEMP` namespaces permit a
+However, paths for the `CONST`, `STASH` and `TEMP` namespaces permit a
 leading integer as a property name (coerced to a string) even though the
 namespaces aren't arrays, for the improved serialization size.  Paths for the
 `TEMP` namespace must always contain at least one element, since the root of
@@ -290,7 +327,7 @@ facilitates transfer of values between actions.
 The primary intended workflow for JGraft is to use a `MATCH` or `IF` action to
 verify that the input data tree matches expectations (or find a matching
 location in the tree with some [fuzzy matching](#fuzzy-matching) ) and then
-within that use `COPY`, `MOVE`, or other actions to alter the tree.
+within that use `COPY`, `MOVE`, and `SPLICE` to alter the tree.
 
 The list of actions is fairly concise:
 
@@ -305,6 +342,8 @@ Name                    | ID | Description
 [COPY](#act-copy)       |  5 | Assign-by-value to properties
 [MOVE](#act-move)       |  6 | Move existing values between properties
 [SPLICE](#act-splice)   |  7 | Perform standard splice() on an array
+[WHILE](#act-while)     |  8 | General-purpose looping construct
+[CALL](#act-call)       |  9 | Invoke an action reference, localize STASH
 
 The `RAISE` action can be used to provide improved diagnostics to a user
 applying a JGraft, or within `IF` to detect unhandled inputs that should be
@@ -315,8 +354,12 @@ within them, then reassembling the modified string.  It can also be used to
 access specific substrings and copy them into stash variables for use in other
 actions.
 
-The `SPLICE` action is an optimization vs. `COPY` or `MOVE` for making
-changes to a range of an array.
+Most grafts should not require the `WHILE` loop, but it helps with things like
+applying an action to every element of an array or iterating properties of
+objects.
+
+Finally, the `CALL` action allows trees of actions to be re-used and
+parameterized.
 
 ## Expression Overview
 
@@ -357,15 +400,13 @@ current array.  The `regex` flag is set by any expression declared in
 
 For all contiguous portions of the match specification composed of plain
 structures or match expressions, the matching algorithm continues building on
-the same match state.  If the match algorithm encounters an `EXPR` path
-expression, the referenced expression becomes part of the current match
-specification and likewise continues building on the same match state.
-Note that expressions are values by default, and interpreting them as match
-expressions requires them to be declared as such, as described in
-[the `EXPR` expression](#ex-expr).
+the same match state.  If the match algorithm encounters an `EX` macro
+expansion, the referenced expression can become part of the current match
+specification if it was created with `PAT` (or `REG`, in regexp context)
+and likewise continues building on the same match state.
 If the matching algorithm encounters any other type of expression, it evaluates
-it as a function and uses the resulting value (which may not contain
-expressions) as a literal structure to match against.
+it as a function and uses the resulting value (which is not recursively checked
+for expressions) as a literal structure to match against.
 If the function expression includes an inner match expression, the inner match
 expression begins a new match state independent of any ancestor match state.
 It retains the current node, but begins with default HAS semantics and no
@@ -621,7 +662,7 @@ The following expressions are available:
 
 Name                     | Type  | ID | Description
 -------------------------|-------|----|----------------------------------------
-[EXPR](#ex-expr)         | Ref   | -5 | An element of the common subexpressions
+[EX](#ex-ex)             | Ref   | -5 | Expression expansion/execution
 [CAP](#ex-cap)           | Ref   | -4 | A path in the capture namespace
 [TEMP](#ex-temp)         | Ref   | -3 | A path in the temp namespace
 [STASH](#ex-stash)       | Ref   | -2 | A path in the stash namespace
@@ -632,7 +673,7 @@ Name                     | Type  | ID | Description
 [NONE](#ex-none)         | Match |  3 | Logical NOT/NOR of match exprs
 [ANY](#ex-any)           | Match |  4 | Logical OR of match exprs
 [ALL](#ex-all)           | Match |  5 | Logical AND of match exprs
-[EXISTS](#ex-exists)     | Match |  6 | Current node exists
+[EXISTS](#ex-exists)     | Match |  6 | Node path exists
 [ARRAY](#ex-array)       | Match |  7 | Match arrays, specific elements
 [STR](#ex-str)           | Match |  8 | Match strings, optional regex
 [NUM](#ex-num)           | Match |  9 | Match numbers, optional ranges
@@ -646,6 +687,11 @@ Name                     | Type  | ID | Description
 [START](#ex-start)       | Match | 17 | Match at first element of array
 [END](#ex-end)           | Match | 18 | Match at length of array
 [CHARS](#ex-chars)       | Match | 19 | Match to a set of characters
+[ACT](#ex-act)           | Fn    | 40 | Create an action macro
+[VAL](#ex-val)           | Fn    | 41 | Create a value expression macro
+[PAT](#ex-pat)           | Fn    | 42 | Create a structure-match pattern macro
+[REG](#ex-reg)           | Fn    | 43 | Create a character-match pattern macro
+[DATA](#ex-data)         | Fn    | 44 | Provide expression-free literal data
 [CAPTURE](#ex-capture)   | Fn    | 50 | Match, then return captured sequences
 [LOCAL](#ex-local)       | Fn    | 51 | Scoped overrides to select namespaces
 [NOT](#ex-not)           | Fn    | 52 | Logical NOT of value exprs
@@ -707,8 +753,9 @@ whether `node.a` is not exactly identical to `{b:1}`.
 The `IS` and `HAS` expressions have a 2-argument form to specify both the
 pattern and the target to match.  In this case, `node.a` becomes the current
 node, and `node.b` becomes the fully-evaluated structure to match against.
-Return values from functions cannot contain expressions; arrays are considered
-literally.
+
+Return values from functions are considered to be data to match against, and
+do not participate as match specifications:
 
     [IS, { "a": [OR, [NOT, [EXISTS]], true] }]
     // node.a === true
@@ -923,7 +970,6 @@ The following properties are currently defined:
   - writer: a string identifying the tool that authored the structure
   - comment: a free-form text comment string
   - const: an array declaring constants
-  - expr: an array declaring value context macros
 
 When exported to JSON, outer metadata should contain `v` (minimum version
 to correctly process the structure), and it should be at least as high as
@@ -932,9 +978,9 @@ sub-structures, for composability between different sources.
 Future versions of the JGraft specification are expected to be backward
 compatible, but if incompatibilities arise, implementations should aim to
 support older versions dynamically so that they can process sub-structures
-generated according to a prior specification.  If the version is greater
-than the highest specification version the implementation knows it supports,
-it immediately fails with `UNSUPPORTED_GRAFT`.
+generated according to a prior specification.  If an implementation encounters
+a version other than the ones it knows it supports, it must immediately fail
+with `UNSUPPORTED_GRAFT`.
 
 For user-defined properties, a good pattern is to use a unique-ish property
 name containing a period (such as Java-style reverse domain name) or other
@@ -953,22 +999,11 @@ The algorithm when beginning a `JGRAFT` action is roughly:
     - For each (`name`,`val_expr`) pair of elements in the `const` array,
       - `name` must be a single property string, or integer (which gets
         coerced to a string)
-      - `val_expr` may be a [value or expression](#value-context).
-      - Set property `const[name]` to the value, after evaluating any
-        expressions within.  `CONST` expressions evaluate according to the
-        `const` namespace in its current state before this assignment. `STASH`
-        expressions still refer to the parent scope's stash, if one exists.
-  - If the metadata contains an `expr` property,
-    - Set the `expr` namespace to a shallow clone of the parent `expr`
-      namespace, or an empty object at the root.
-    - For each (`name`,`val_expr`) pair of elements in the `expr` array,
-      - `name` must be a single property string, or integer (which gets
-        coerced to a string)
-      - `val_expr` may be a [value or expression](#value-context).
-      - Set property `expr[name]` to the value-construction structure *without*
-        evaluating any of it.  In other words, it captures no context and paths
-        like `NODE` or `TEMP` will be interpreted in the context of the `EXPR`
-        expression that invokes it.
+      - Evaluate `val_expr` in [value context](#value-context).
+        Within, `CONST` expressions evaluate according to the `const` namespace
+        in its current state before this assignment.  `STASH` expressions still
+        refer to the parent scope's stash, if one exists.
+      - Set property `const[name]` to the value.
   - Set the `stash` namespace to a new empty object.
 
 ### <span id="act-raise">RAISE</span>
@@ -1058,7 +1093,10 @@ to repeatedly act on `[STASH,0]`:
 `ATSPLIT` is the primary tool used to re-implement text diff/patch behavior:
 
     [ATSPLIT, [NODE],
-      { sep: [ANY, "\n", "\r\n"], default: "\n", trim: [REP,0,-1," "] },
+      { sep: [REG, [ANY, "\n", "\r\n"]],
+        default: "\n",
+        trim: [REG, [REP,0,-1," "]]
+      },
       [MATCH,
         [ARRAY, 9,
           "Line ten",
@@ -1349,38 +1387,68 @@ spliced.  The replacement values may also introduce `SPLIT` metadata to the
 target array if none was present, in the same manner as if each element of the
 result of the splice had been inserted at the end of a fresh array.
 
+### <span id="act-while">WHILE</span>
+
+    [WHILE, test_expr, actions...]
+
+Evaluate `test_expr` and if true, execute `actions` and repeat.
+
+The `test_expr` (value context) is any expression that evaluates to a boolean.
+It is evaluated, and then only if it is true, each of the `actions` are
+executed in sequence.  This process repeats until `test_expr` returns false.
+
+This expression often requires the use of loop variables in the `STASH`
+namespace, since only actions can mutate data, and the `TEMP` namespace is
+local to each action, and other non-input namespaces are read-only.  Iteration
+might also be controlled by mutating the input data.  The loop variables can be
+initialized in an action prior to the `WHILE` loop.  There is no "break" or
+"continue" flow control available.
+
+### <span id="act-call">CALL</span>
+
+    [CALL, action_ref]
+    [CALL, action_ref, stash_prop1, value1, ...]
+
+Executes an action object while also optionally making lexical overrides to the
+root of the `STASH` namespace.
+
+The `action_ref` argument is declared in path context, but with a default
+namespace of `CONST` for single scalars.  For each stash override pair,
+`stash_prop` must be a simple string or integer to be used as a property name
+of the `STASH` namespace and `value` is any value-context expression.
+
+Before the call, the stash is first shallow-cloned.  For each lexical override
+pair, the value is evaluated with the temporary stash in scope, and then
+assigned to the specified property of that temporary stash.  As `CALL`
+finishes, the former root object of the STASH is restored.  This means that
+for subtrees that existed prior to the call which were not overridden, changes
+by the called action will remain, but the lexical overrides and any changes
+within their subtrees will be reverted.
+
+Action objects are created using the [`ACT` expression](#ex-act).
+
 ## Expressions
 
 ### Reference Expressions
 
-#### <span id="ex-expr">EXPR</span>
+#### <span id="ex-ex">EX</span>
 
-    [EXPR, name]
+    [EX, path]
 
-Reference a pre-defined expression.
+Expand and execute a pre-defined expression macro object.
 
-The common expression namespace is populated by the
-[`JGRAFT` action](#act-jgraft).
-It is a flat namespace, so referencing one of the expressions uses only a
-single name rather than a path.  The other expression will be used as if it
-had been specified in place of this `EXPR` expression, but preserving the
-definition's value-construction or matching semantics.  It is possible to
-set up infinite recursion using EXPR references, but likely to quickly run
-into `RESOURCE_LIMIT` errors.  Implementations are not expected to optimize
-tail-calls like a functional language would (but are permitted to).
+The `path` (path context) defaults to the `CONST` namespace for simple scalars,
+but any path expression may be used here.  It must resolve to an expression
+macro object, as created by `VAL`, `PAT`, or `REG`.  The referenced expression
+replaces the `EX` expression as if it had been written there literally, however
+the type of the macro must match the environment to which it is being inserted.
+Regex macros cannot be applied to normal arrays, nor can structural patterns be
+applied in a regex context.  Value expressions may be expanded in match
+contexts with the usual behavior.
 
-Note that expressions are declared in value context and imply value
-construction unless the root of the expression is a match expression.
-This means if you declare a data structure containing expressions and
-reference that expression in match context, it will still construct a value
-to match against rather than applying subexpressions *during* the match.
-A bare structure in match context would normally imply `HAS` or `IS`,
-but to preserve that behavior as a common subexpression it must be explicit.
-To preserve existing `HAS` / `IS` context of the caller, use an expression
-like `ALL`.  Match expressions referenced in Regex context do still get
-interpreted according to the Regex rules; regex context should be implemented
-as a runtime context for match expressions rather than a distinct class of
-expressions that happen to have the same names as match expressions.
+It is possible to set up infinite recursion using `EX` references, but likely
+to quickly run into `RESOURCE_LIMIT` errors.  Implementations are not expected
+to optimize tail-calls like a functional language would, but are permitted to.
 
 #### <span id="ex-cap">CAP</span>
 
@@ -1396,7 +1464,7 @@ The root-level properties are the same as the capture names and the values have
 the form:
 
     {
-      path:  // array of path elements from root of match to target
+      path:  // array of path elements to reach array/string
       ofs:   // starting offset
       len:   // number of elements matched
       lim:   // ofs + len
@@ -1486,12 +1554,10 @@ the 2-argument form to establish an alternate current node.
 
 In the 2-argument form, the current node does not change until matching begins
 in the subexpression; this means that if `match_spec` is a reference or
-function expression (evaluated to produce the match structure) `NODE`
-references still refer to the old tree, but if `match_spec` is a structure or
-match expression, `NODE` references refer to the new tree.  Further, if
-`match_spec` is an `EXPR` expression which resolves to a non-match expression,
-`NODE` expressions within the replacement still refer to the old tree until
-it returns something that causes matching to begin again.
+function expression or expansion of a value macro, `NODE` references within
+still refer to the old tree, but if `match_spec` is a structure or match
+expression or expansion of an appropriate pattern macro, `NODE` references
+within refer to the new tree.
 
 Examples:
 
@@ -1816,15 +1882,16 @@ structural level.  Within the same match state, a `SEQMIN` or `SEQMAX`
 occurring beneath these expressions behaves as an ordinary `SEQ`.
 
 The `capture_name` is defined as an expression to deal with cases where a
-common subexpression (called with `EXPR`) wants to perform a capture, but
-might need to be applied multiple times to the same tree.  Using the `WITH`
-expression to set a prefix in the TEMP namespace, the common subexpression can
-then generate different capture names at each call site.  The `capture_name`
-expression may not make use of the current node; the current node is treated
-as nonexistent while evaluating `capture_name`.  The evaluation of
-`capture_name` happens at the beginning of the sequence matching algorithm for
-a specific array, but they are not evaluated at all if the captures for that
-array are not observable (i.e. boolean sequence context).
+pattern macro wants to perform a capture, but might need to be applied multiple
+times to the same tree.  Using the `WITH` expression to set a prefix in the
+`TEMP` namespace, the common subexpression can then generate different capture
+names at each call site.  However, because the node where the sequence begins
+isn't known at first, the `capture_name` expression may not make use of the
+current node; the current node is treated as nonexistent while evaluating
+`capture_name`.  The evaluation of `capture_name` happens at the beginning of
+the sequence matching algorithm for a specific array, but they are not
+evaluated at all if the captures for that array are not observable
+(i.e. boolean sequence context).
 
 The "min" vs. "max" designation indicates a preference for which match should
 be chosen if multiple match states are valid at the end of matching the array.
@@ -1832,8 +1899,8 @@ They do *not* mean that the capture group will always maximize or minimize the
 elements matched during the algorithm, only that if multiple outcomes for
 matching an array are possible, the selection of the match should prefer longer
 matches or shorter matches for those sequences, giving precedence to the
-sequences in the order they occur.  If the captures of the match are unobservable,
-the implementation may skip resolving the preferred match.
+sequences in the order they occur.  If the captures of the match are
+unobservable, the implementation may skip resolving the preferred match.
 
 Examples:
 
@@ -1877,14 +1944,17 @@ Match repetitions of an expression against a series of array elements.
 
 `min` and `max` are [value context](#value-context) expressions which must
 evaluate to integers.  The value of `min` must be non-negative.  The value of
-`max` may be -1 as an alias for infinity, or 0 as an alias for "same as min".
+`max` may be -1 to mean "unbounded", or 0 as an alias for "same as min".
+("same as min" is particularly useful if `min` is a complex expression)
 Otherwise, `max` must have a value greater than or equal to `min`.
 `match_expr` is a [match context](#match-context) expression.
 When the `match_expr` argument is omitted, it defaults to `[EXISTS]` which
 basically just consumes elements.  When the `max` argument is omitted, it
 defaults to -1.  When the `min` argument is omitted, it defaults to 0.
 
-This expression is illegal outside of [sequence context](#matching).
+This expression is illegal outside of [sequence context](#matching), however if
+it appears in a position where a [SEQ] expression is permitted, it is handled
+as if it had been written [SEQ, [REP, ... ]].
 It produces all the successor cursor positions that can satisfy a count of
 matches of the expression between `min` and `max`.  (Of course, implementations
 need to limit the successor states to the length of the array and handle
@@ -1939,7 +2009,8 @@ based on the array cursor.
       "a",null,            // open-ended range
       "a","",              // not a range, just the character 'a'
       48,57,               // Unicode codepoint range
-      [EXPR,name]          // reference a common CHARS expression
+      value_expr           // reference a value or CHARS expression
+    ]
 
 Match when the current node is a character in the defined set.
 
@@ -1961,10 +2032,10 @@ value (and must fall within the valid Unicode range).  Since integers and
 `null` represent single characters, they also begin or end ranges when
 possible.
 
-Finally, you may use an [`EXPR expression`](#ex-expr) to reference a `CHARS`
-expression from the common expression namespace.  It must resolve to exactly
-a `CHARS` expression; anything else results in `INVALID_OPERAND`.  Other
-expressions and data types also count as `INVALID_OPERAND`.
+Finally, you may use an expression that evaluates to either a string (of which
+all characters will be added or removed; it never participates in a range) or
+the expression macro object of another `CHARS` expression created using
+[`REG`](#ex-reg).  Any other type results in `INVALID_TARGET`.
 
 Examples:
 
@@ -1988,9 +2059,63 @@ Examples:
     // "All printable but no punctuation"
     // Regex /[^\P{Print}\p{Punct}]/
     // (assuming you define these classes in the JGRAFT action)
-    [CHARS, [EXPR,"regex_Print"], false, [EXPR,"regex_Punct"]]
+    [CHARS, [CONST,"regex_Print"], false, [CONST,"regex_Punct"]]
 
 ### Function Expressions
+
+#### <span id="ex-act">ACT</span>
+
+    [ACT, action]
+
+Create an action macro.
+
+The `action` argument is declared as a normal action, but instead of executing
+it, an opaque object representing it is returned.  This object can be invoked
+with the `CALL` action.  Parameters may be passed via the `STASH` namespace
+using whatever convention the JGraft generator prefers.
+
+#### <span id="ex-val">VAL</span>
+
+    [VAL, value_expr]
+
+Create a value-context expression macro.
+
+The `value_expr` is given in value context, but instead of executing it, an
+opaque object representing it is returned.  The object can be invoked with the
+`EX` expression.  None of the subexpressions within `value_expr` are evaluated
+until the point where `EX` expands it.  Parameters may be passed via the `TEMP`
+or `STASH` namespaces using whatever convention the JGraft generator prefers.
+
+#### <span id="ex-pat">PAT</span>
+
+    [PAT, match_expr...]
+
+Create a match-context expression macro.
+
+The `match_expr` argument is given in match context, but instead of using it to
+start a match, an opaque object representing it is returned.  If more than one
+argument is provided (or zero), it implicitly becomes a `SEQ` expression.
+None of the subexpressions within `match_expr` are evaluated until the point
+where `EX` expands it.
+
+#### <span id="ex-reg">REG</span>
+
+    [REG, match_expr...]
+
+Create a regex-context expression macro.
+
+Like `PAT`, but `match_expr` arguments are interpreted according to
+regular-expression context, where the meaning of scalars is altered.
+
+#### <span id="ex-data">DATA</span>
+
+    [DATA, literal_data]
+
+Supply value-context data which is guaranteed to not contain subexpressions.
+
+This is primarily useful for generators to supply data to a graft without
+needing to escape the arrays within.  Likewise, implementations can consume it
+as-is without checking for subexpressions.
 
 #### <span id="ex-capture">CAPTURE</span>
 
@@ -2250,30 +2375,24 @@ from evaluating `string_expr` (value context).  The input must be a string, or
 `SPLIT` fails with `INVALID_TARGET`.  The validity of the input should be
 checked after the validity of `split_spec`.
 
-The `split_spec` argument may be a simple string used as a verbatim separator,
-a match expression to be evaluated in
-[regex longest-match context](#regex-context), a reference expression resolving
-to one of those two, or a literal object with a more elaborate specification:
+The `split_spec` argument (value context) may evaluate to a simple string used
+as a verbatim separator, a pattern macro object (see [`REG`](#ex-reg) ) to be
+evaluated in [regex longest-match context](#regex-context), or an object
+with a more elaborate specification:
 
-    {"sep": ...,        // A string or regex to split on
-     "element": ...,    // A regex that must match prior to testing for 'sep'
-     "default": ...,    // The default separator used for joining new elements
-     "keep": ...,       // Preserve the separator within the generated array
-     "ltrim": ...,      // A string or regex to trim from start of elements
-     "rtrim": ...,      // A string or regex to trim from end of elements
-     "trim": ...,       // sets 'ltrim' and 'rtrim' to the same value
-     "discard": bool,   // Don't preserve trimmed chars when re-assembling
+    {"sep": ...,      // A string or regex macro to split on
+     "element": ...,  // A regex macro to match prior to testing for 'sep'
+     "default": ...,  // The default separator used for joining new elements
+     "keep": ...,     // Preserve the separator within the generated array
+     "ltrim": ...,    // A string or regex macro to trim from start of elements
+     "rtrim": ...,    // A string or regex macro to trim from end of elements
+     "trim": ...,     // sets 'ltrim' and 'rtrim' to the same value
+     "discard": bool, // Don't preserve trimmed chars when re-assembling
     }
 
-The `split_spec` object must be literal, not value context, since it needs to
-be able to contain expressions without evaluating them.  Unknown properties
-and illegal literal property values count as `INVALID_OPERAND`.
-If the `sep` parameter is an [expression reference](#ex-expr), it is first
-resolved to something that isn't an expression reference.  Then, if the root is
-a match expression it is treated as a regular expression to be applied
-repeatedly when searching for separators, but otherwise it is evaluated
-immediately and must return a string.  `default` is not used by `SPLIT`, but
-defined here since the specification is shared with `JOIN`.
+Unknown properties or illegal values for them count as `INVALID_OPERAND`.
+`default` is not used by `SPLIT`, but defined here since the specification is
+shared with `JOIN`.
 
 The split operation iterates through the characters of the string looking for
 [the longest match](#regex-context) of the separator pattern.  If you specify
@@ -2313,13 +2432,13 @@ none of the alternatives matched.
 
 For example, consider the pattern `/a*/` applied to the following strings:
 
-    [SPLIT, [REP,0,-1,"a"], "baabc"]
+    [SPLIT, [REG, [REP,0,-1,"a"]], "baabc"]
       => ["b", "b", "c"]
     
-    [SPLIT, [REP,0,-1,"a"], "baabca"]
+    [SPLIT, [REG, [REP,0,-1,"a"]], "baabca"]
       => ["b", "b", "c", ""]
     
-    [SPLIT, { sep: [REP,0,-1,"a"], keep: "@" }, "baabca"]
+    [SPLIT, { sep: [REG, [REP,0,-1,"a"]], keep: "@" }, "baabca"]
       => ["b", "aa", "b", "", "c", "a", ""]
 
 `ltrim` and `rtrim` are used to hide unimportant characters from the resulting
