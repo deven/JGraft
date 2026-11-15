@@ -1218,6 +1218,15 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   written as the string; and whatever is left is refused in words that say
   what it was (`JSON::stand_in`). Still as it was: an infinity or a
   not-a-number is written `null`, as JavaScript writes it.
+- **What is not data is passed along, unless `data_only` is asked for.** A
+  graft given an object, a subroutine or data that contains itself works on
+  it as far as it can and passes it on; that is the default, and nothing is
+  looked at that the graft does not touch. `data_only => 1` (to `run`, or to
+  `new` for all its runs) looks through the document and `temp` first
+  (`Exec::only_data`, with the same watch for data that holds itself) and
+  fails the run with `INVALID_TARGET`, saying what it found and where. It
+  costs a pass over the document, uncharged. `clone` accordingly no longer
+  fails on an object it cannot copy: it passes that on, shared.
 - **`clone` copies what is not JSON as well** (`Exec::another`). It had
   passed an object through uncopied, which made "shares nothing" untrue of
   it. An object is copied by its own `clone` method, or failing that by

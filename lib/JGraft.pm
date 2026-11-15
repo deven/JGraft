@@ -12,8 +12,8 @@ no warnings qw(recursion);
 # What may be asked of `new` and of `run`, and what may be limited.  A name
 # that is not among them is a mistake in the caller, and is not let pass: a
 # limit misspelt would be no limit at all.
-my %NEW   = map { $_ => 1 } qw(strict max_version limits share exact);
-my %RUN   = map { $_ => 1 } qw(limits on_raise temp date_export exact clone);
+my %NEW   = map { $_ => 1 } qw(strict max_version limits share exact data_only);
+my %RUN   = map { $_ => 1 } qw(limits on_raise temp date_export exact clone data_only);
 my %LIMIT = map { $_ => 1 } qw(ops mem new_obj prop_per_obj depth);
 
 sub options ($for, $known, %opt) {
@@ -51,7 +51,8 @@ our $VERSION = '0.01';
 sub new ($class, $struct, %opt) {
     options(new => \%NEW, %opt);
     my $strict = delete $opt{strict} // 1;
-    my $self   = bless { from => {}, limits => { %{ $opt{limits} // {} } }, share => delete $opt{share}, exact => delete $opt{exact} }, $class;
+    my $self   = bless { from => {}, limits => { %{ $opt{limits} // {} } }, share => delete $opt{share}, exact => delete $opt{exact},
+        data_only => delete $opt{data_only} }, $class;
     $self->{struct} = snapshot($struct, $self->{from});
     @$self{qw(code faults dates warnings)} = JGraft::Compiler->compile($self->{struct}, %opt);
     die $self->theirs($self->{faults}[0]) if $strict && @{ $self->{faults} };
@@ -79,7 +80,12 @@ sub run ($self, $input, %opt) {
         share => $self->{share} || $opt{clone},
         exact => $opt{exact} // $self->{exact});         # as the run is told; or the graft was; or else as the document was read
     local $JGraft::Number::EXACT = $x->{exact};      # for the comparisons that have no run to ask
-    my $done  = eval { $self->{code}->($x); 1 };
+    my $only  = $opt{data_only} // $self->{data_only};      # (is the document, and what else the run is given, to be data and nothing else?)
+    my $done  = eval {
+        if ($only) { $x->only_data($input); $x->only_data($opt{temp}, 'what was given as temp') if $opt{temp} }
+        $self->{code}->($x);
+        1;
+    };
     my $error = $@;
     die $error unless $done || blessed $error && $error->isa('JGraft::Error');
     # What the run left: as the run has it, sharing with the input what it did
@@ -455,6 +461,28 @@ order written there.
 As with C<output> in general, treat C<< $doc->data >> as read-only: C<write>
 takes an array or object that was read to be still as it was read.
 
+=head1 DATA THAT IS NOT JSON
+
+A graft works on Perl data, and Perl data can hold what no JSON text can: an
+object, a subroutine, a reference to a scalar, data that contains itself.  A
+graft passes all of these along.  To a pattern such a thing is there
+(C<EXISTS>) and is of no JSON type; it can be copied and moved, as the same
+thing; and nothing can be read out of it or made of it (C<INVALID_TARGET>).
+What C<clone> does with them is said under L</WHAT THE OUTPUT SHARES>, and
+what L<JGraft::JSON> writes for them under L</JSON5>.
+
+    my $result = $graft->run($document, data_only => 1);
+
+C<data_only>, given to C<run> or to C<new> for all its runs, refuses them.
+The document is looked through before the graft is run, and so is what is
+given as C<temp>; if anything in either is not data (null, true or false, a
+number, a string, or an array or object of data), or contains itself, the
+run fails with C<INVALID_TARGET>, and the error says what was found and
+where (C<node>).  A number of any kind is data: one of Perl's own, an
+infinity included, or a L<JGraft::Number>, C<Math::BigInt> or
+C<Math::BigFloat>.  The check takes time in proportion to the size of the
+document, which is why it is asked for and not always made.
+
 =head1 EXACT NUMBERS
 
 Arithmetic in a graft is Perl's own, as the specification has it, and so
@@ -621,9 +649,8 @@ object by its own C<clone> method if it has one, and otherwise, like a
 reference to a scalar, by C<Storable::dclone>, which copies anything made of
 data alone.  What cannot be changed is left as it is: C<true> and C<false>,
 a subroutine, a compiled regex.  An object that neither way can copy (one
-that holds a subroutine or a file handle, say) cannot be in an output that
-shares nothing, and the run fails with C<INVALID_TARGET>, handing back what
-it left as it is.
+that holds a subroutine or a file handle, say) is passed on as it is, shared,
+as it would be without C<clone>.
 
 Such a run is itself handed the graft's own arrays and objects, as with
 C<share>: all that it leaves is copied in any case, so nothing of the graft
@@ -767,7 +794,8 @@ C<temp> (initial TEMP namespace), C<date_export> (callback turning a
 JGraft::Date into output data; the default is its string form), C<exact>
 (decimal arithmetic: see L</EXACT NUMBERS>; the default is as C<new> was
 told, or else as the document was read), C<clone> (an output that shares nothing: see
-L</WHAT THE OUTPUT SHARES>).
+L</WHAT THE OUTPUT SHARES>), C<data_only> (a document of data and nothing
+else: see L</DATA THAT IS NOT JSON>).
 
 An option that is not one of these is refused: C<new> and C<run> C<croak>.
 

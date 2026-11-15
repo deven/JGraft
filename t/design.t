@@ -177,9 +177,24 @@ subtest 'what a graft supplies is copied for each run, unless it is shared' => s
     ok $dup->{text} != $odd->{text} && ${ $dup->{text} } eq 't', '... and a reference to a scalar';
     ok $dup->{code} == $odd->{code} && $dup->{re} == $odd->{re} && $at->($dup->{yes}) == $at->($odd->{yes}), 'what cannot be changed is not copied: a subroutine, a compiled regex, true';
     my $hooked = graft([ COPY => 1, 'n' ])->run({ hook => Local::Hook->new, list => [1] }, clone => 1);
-    is $hooked->ok ? 'ok' : $hooked->error->code . ': ' . $hooked->error->message, 'INVALID_TARGET: an object of Local::Hook cannot be cloned', 'an object that cannot be copied is not shared instead: the run fails';
-    is join(' ', sort keys %{ $hooked->partial }), 'hook list n', '... and hands back what it left, as it is';
-    ok graft([ COPY => 1, 'n' ])->run({ hook => Local::Hook->new })->ok, '... which a run without clone has no quarrel with';
+    my $hook = Local::Hook->new;
+    $hooked = graft([ COPY => 1, 'n' ])->run({ hook => $hook, list => [1] }, clone => 1);
+    ok $hooked->ok && $hooked->output->{hook} == $hook && $hooked->output->{n} == 1, 'an object that cannot be copied is passed on as it is, as it is without clone';
+
+    # A caller who wants nothing in a document but data asks for that.
+    my $only = sub ($in, %opt) { my $r = graft([ COPY => 1, 'n' ])->run($in, data_only => 1, %opt); $r->ok ? 'ok' : '' . $r->error };
+    is $only->({ n => 0, t => $JGraft::Util::TRUE, list => [ 1, 's', undef, { k => 9**9**9 } ], big => Math::BigInt->new(2)->bpow(70) }), 'ok', 'data_only lets data pass: numbers of any kind among it';
+    is $only->({ list => [ 1, { hook => $hook } ] }), 'INVALID_TARGET: an object of Local::Hook, in the document that is to be data only, on /list/1/hook', '... and refuses an object, saying where it is';
+    is $only->({ deep => { card => Local::Card->new(1) } }), 'INVALID_TARGET: an object of Local::Card, in the document that is to be data only, on /deep/card', '... whether or not it could be copied';
+    is $only->({ list => [ 0, sub { 1 } ] }), 'INVALID_TARGET: a subroutine, in the document that is to be data only, on /list/1', '... and a subroutine';
+    is $only->({ r => \'x' }), 'INVALID_TARGET: a reference to a scalar, in the document that is to be data only, on /r', '... and a reference to anything that is not an array or object';
+    like $ends->(sub { $only->($itself->()) }), qr{^INVALID_TARGET: data that contains itself, in the document that is to be data only, on /}, '... and data that contains itself';
+    is $only->({ a => 1 }, temp => { x => [ Local::Card->new(1) ] }), 'INVALID_TARGET: an object of Local::Card, in what was given as temp that is to be data only, on /x/0', 'what is given as temp is looked at too';
+    my $checked = JGraft->new([ JGRAFT => {} ], data_only => 1);
+    ok !$checked->run({ c => $hook })->ok && $checked->run({ c => $hook }, data_only => 0)->ok && $checked->run({ c => 1 })->ok, 'asked of new, it is asked of every run that is not told otherwise';
+    ok graft()->run({ c => $hook })->ok, 'and unless it is asked, a graft passes along whatever it is given';
+    my $refused = graft([ COPY => 1, 'n' ])->run({ hook => $hook }, data_only => 1);
+    ok !defined $refused->output && $refused->partial->{hook} == $hook && !exists $refused->partial->{n}, 'a document that is refused is handed back untouched';
     my $both = { obj => Local::Card->new(1) };
     $both->{self} = $both;
     my $round = graft()->apply($both, clone => 1);

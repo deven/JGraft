@@ -75,8 +75,10 @@ sub replica ($x, $v) {
 # to it: true and false, a date, a number of the engine's own, a subroutine,
 # a compiled regex.  Anything else is copied as it would itself be copied: by
 # its own `clone` method if it has one, and otherwise by Storable, which
-# copies whatever is made of data alone.  What neither can copy cannot be in
-# an output that is to share nothing, and the run fails saying so.
+# copies whatever is made of data alone.  What neither can copy (an object
+# that holds a subroutine, say) is passed on as it is: it is not data, and a
+# graft that is given what is not data passes it along.  A caller who wants
+# no such thing in a document asks for `data_only` (see `only_data`).
 sub another ($x, $v) {
     my $kind = ref $v;
     my $type = type_of($v);
@@ -86,8 +88,34 @@ sub another ($x, $v) {
     my $class = blessed $v;
     my $copy  = defined $class && $v->can('clone') ? eval { $v->clone } : undef;
     $copy //= do { require Storable; eval { Storable::dclone($v) } };
-    return $copy if ref $copy;
-    $x->fail(INVALID_TARGET => (defined $class ? "an object of $class" : 'a reference to a ' . lc $kind) . ' cannot be cloned');
+    return ref $copy ? $copy : $v;      # (what cannot be copied is passed on as it is, as it would be without `clone`)
+}
+
+# The check that `data_only` asks for: that a value is data and nothing else.
+# Data is null, true and false, numbers, strings, and arrays and objects of
+# data: what a JSON text can hold (or a JSON5 one: an infinity is a number).
+# A Perl object is not data, nor a subroutine, nor a reference to anything
+# that is not an array or a hash; and data does not contain itself.  The run
+# fails on the first thing found that is not data, saying where it is.
+sub only_data ($x, $v, $what = 'the document') {
+    my $w    = watch();
+    my @path;
+    my $not = sub ($why) { die JGraft::Error->new(code => 'INVALID_TARGET', message => "$why, in $what that is to be data only", node => { path => [@path] }) };
+    my $walk;
+    $walk = sub ($v) {
+        my $kind = ref $v or return;
+        if ($kind ne 'ARRAY' && $kind ne 'HASH') {
+            return if type_of($v) != T_OTHER;       # true or false, a number of more digits than Perl's, a date
+            $not->(!defined blessed($v) ? $kind eq 'CODE' ? 'a subroutine' : 'a reference to a ' . lc $kind : "an object of $kind");
+        }
+        if (++$w->[0] >= $w->[1] || $w->[2]) { inside($w, $v) and $not->('data that contains itself') }
+        if ($kind eq 'ARRAY') { for my $i (0 .. $#$v) { ref $v->[$i] or next; push @path, $i; $walk->($v->[$i]); pop @path } }
+        else                  { for my $k (keys %$v)  { ref $v->{$k} or next; push @path, $k; $walk->($v->{$k}); pop @path } }
+        left($w) if $w->[0]-- == $w->[3];
+    };
+    my $done = eval { $walk->($v); 1 };
+    undef $walk;        # (it refers to itself)
+    die $@ unless $done;
 }
 
 sub twin ($x, $v, $made) {
