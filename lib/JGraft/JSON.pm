@@ -68,6 +68,7 @@ my $BLANK   = qr/[ \t\n\r\x0B\x0C]|\xC2\xA0|\xEF\xBB\xBF|\xE1\x9A\x80|\xE2\x80[\
 my $COMMENT = qr{//(?:(?!\xE2\x80[\xA8\xA9])[^\n\r])*+|/\*.*?\*/}s;
 my $NUMBER5 = qr/[-+]?(?:0[xX][0-9a-fA-F]+|Infinity|NaN|(?:(?:0|[1-9][0-9]*)(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?)/;
 my $NUMBER  = qr/-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?/;
+my $NEXT_NUMBER5 = qr/\G($NUMBER5)(?![A-Za-z0-9_\$])/;      # (as the next thing in a text)
 
 sub json5 ($doc) { $doc->{json5} ? 1 : 0 }
 
@@ -103,19 +104,22 @@ sub reading ($text, $opt, $five) {
         $text =~ /\G(?:$BLANK|$COMMENT)*/gc;
         $text =~ m{\G/\*} and $fail->('a comment does not end');
     };
-    my $string = sub {
+    my $string = !$five ? sub {
+        $text =~ /\G"((?:[^"\\]++|\\.)*+)"/gcs or $fail->('a string does not end');
+        return unquote($1) // $fail->('a string has an escape that means nothing');
+    } : sub {
         my $quote = substr $text, pos($text) // 0, 1;
         ($quote eq '"' ? $text =~ /\G"((?:[^"\\]++|\\(?:\r\n|.))*+)"/gcs : $text =~ /\G'((?:[^'\\]++|\\(?:\r\n|.))*+)'/gcs) or $fail->('a string does not end');
-        return unquote($1, $five) // $fail->('a string has an escape that means nothing');
+        return unquote($1, 1) // $fail->('a string has an escape that means nothing');
     };
-    # (how the text writes its first name, the colon after it, and its first string: for what is written new)
-    my %first;
+    # (how a JSON5 text writes its first name, the colon after it, and its first string: for what is written new.
+    # Of a JSON text all that is not already known is the colon, which is looked for when it is wanted.)
+    my ($names, $colon, $quote) = $five ? () : ('"', undef, '"');
     my $value;
     $value = sub {
         $space->();
         my $start = pos($text) // 0;
-        my ($v, $record);
-        my $next = substr $text, $start, 1;
+        my ($v, $record, $next);
         if ($text =~ /\G\{/gc) {
             $deeper->();
             $v      = JGraft::Ordered::hash();
@@ -128,14 +132,17 @@ sub reading ($text, $opt, $five) {
                     last if $five && $text =~ /\G\}/gc;         # (a comma after the last)
                 }
                 my $at  = pos $text;
-                my $key = substr($text, $at, 1) eq '"' || $five && substr($text, $at, 1) eq "'" ? $string->()
-                        : $five ? name($text) // $fail->('expected the name of a property') : $fail->('expected the name of a property');
+                my $key = substr($text, $at, 1) eq '"' ? $string->()
+                        : !$five                         ? $fail->('expected the name of a property')
+                        : substr($text, $at, 1) eq "'"   ? $string->()
+                        :                                  name($text) // $fail->('expected the name of a property');
                 my $to  = pos $text;
-                $first{names} //= substr($text, $at, 1) =~ /(["'])/ ? $1 : 'bare';
                 $space->();
                 $text =~ /\G:/gc or $fail->('expected :');
-                $space->();
-                $first{colon} //= uncommented(substr $text, $to, pos($text) - $to);
+                if ($five) {
+                    $names //= substr($text, $at, 1) =~ /(["'])/ ? $1 : 'bare';
+                    if (!defined $colon) { $space->(); $colon = uncommented(substr $text, $to, pos($text) - $to) }
+                }
                 ($v->{$key}, my $token) = $value->();
                 push @member, [ $key, $at, $to, $token ];
                 $space->();
@@ -157,11 +164,12 @@ sub reading ($text, $opt, $five) {
                 $space->();
             }
         }
-        elsif ($next eq '"' || $five && $next eq "'") { $v = $string->(); $first{quote} //= $next }
-        elsif (!$five && $text =~ /\G($NUMBER)/gc) {
+        elsif (($next = substr $text, $start, 1) eq '"') { $v = $string->(); $quote //= '"' if $five }
+        elsif ($five && $next eq "'")                    { $v = $string->(); $quote //= "'" }
+        elsif (!$five && $text =~ /\G(-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)/gc) {
             $v = $exact ? JGraft::Number::read($1) // $fail->('a number is beyond all reason') : JGraft::Number::native($1);
         }
-        elsif ($five && $text =~ /\G($NUMBER5)(?![A-Za-z0-9_\$])/gc) { $v = number($1, $exact) // $fail->('a number is beyond all reason') }
+        elsif ($five && $text =~ /$NEXT_NUMBER5/gc) { $v = number($1, $exact) // $fail->('a number is beyond all reason') }
         elsif ($text =~ /\Gtrue\b/gc)   { $v = $TRUE }
         elsif ($text =~ /\Gfalse\b/gc)  { $v = $FALSE }
         elsif ($text =~ /\Gnull\b/gc)   { $v = undef }
@@ -178,7 +186,7 @@ sub reading ($text, $opt, $five) {
     $space->();
     pos($text) == length $text or $fail->('there is something after the value');
     undef $value;       # (it refers to itself)
-    return { text => $src, data => $data, root => $root, exact => $exact, json5 => $five, %first };
+    return { text => $src, data => $data, root => $root, exact => $exact, json5 => $five, names => $names, colon => $colon, quote => $quote };
 }
 
 # Some text of a JSON5 document without its comments (to be written again where no comment belongs).
@@ -263,7 +271,7 @@ sub write ($doc, $value = $doc->{data}, %opt) {
     # How what is new is to be written: as the text writes such things, as far as that is known.  The first name
     # in the text and the first string say how those are quoted and what follows a name; and some array or
     # object of the text will say how one is laid out (see `style`).
-    local $COLON = spacing($doc->{colon} // ':');
+    local $COLON = spacing($doc->{colon} //= $$text =~ /"(?:[^"\\]|\\.)*"(\s*:\s*)/ ? $1 : ':');
     local ($QUOTE, $NAMES) = $FIVE ? ($doc->{quote} // '"', $doc->{names} // '"') : ('"', '"');
     local $STYLE = outermost($doc);
     local $WATCH = watch();
