@@ -783,21 +783,50 @@ current node, and the return value gets consumed as the match result because
 
 ## Math
 
-For any operation that computes a new numeric value, if the value would
-overflow the host language's representation for numbers (or configured limits,
-which an application might want for portability) the operation fails with
-`UNSUPPORTED_GRAFT`.  Several math expressions are defined in terms of
-the host language math operators.  In some environments an overflow can return
-a special infinity value, though these cannot be serialized to JSON.
+Portable JGraft includes the expectation of at least 15 decimal digits of
+numeric precision and decimal exponents from −307 through +307, which is
+provided in most environments by IEEE double precision math.  15 digits is also
+the baseline for lossless representations of integers.  Implementations
+may provide more digits, 64-bit integers, or even "big integer" or rational
+number support, but this is not required.  No specific rounding mode is
+required as long as the precision requirement is met.  JGraft does not
+guarantee an exact outcome for math, only that the precision and exponent scale
+meet a minimum threshold.
+
+Against these requirements:
+
+  * An implementation providing the portable numeric baseline reports numeric
+    execution failures as `RUNTIME_ERROR`.
+  * An implementation providing only partial numeric support may report
+    `UNSUPPORTED_GRAFT` when its missing numeric capabilities prevent
+    execution.
+  * Implementations may support a wider range and succeed where others report
+    `RUNTIME_ERROR`.
+
+Some expressions require that integer digits not be lost or rounded; if the
+number exceeds an implementation's available integer precision, the expression
+must fail using `RUNTIME_ERROR` or `UNSUPPORTED_GRAFT` as described above.
+
+JSON does not include encodings for Infinity or Not-a-Number, and so in the
+default configuration calculations on floating point values must not return
+these results.  Calculations that overflow or return infinity in the host
+language's math system should fail.  Implementations must also fail when
+underflow to zero occurs; at each arithmetic step, using the host
+representation of its operands, a mathematically nonzero result that becomes
+zero because its magnitude is below the implementation’s supported range must
+fail.  Implementations may additionally choose to fail when the host arithmetic
+engine reports underflow, including nonzero subnormal results.  Implementations
+may also define a minimum supported nonzero magnitude and reject smaller
+results.  These policies must be documented.  Logically impossible computations
+that result in not-a-number, domain or range error flags, etc. should always
+fail with `RUNTIME_ERROR`.
+
 Implementations may give the application the option of preserving infinity
 values in the output (and using them as input to other expressions where that
-makes sense) instead of failing with `UNSUPPORTED_GRAFT`.  However, division
-by exactly zero should always fail with `INVALID_TARGET` rather than returning
-an infinity value.
-
-Some environments also return a "not a number" value for nonsensical
-operations.  These values should always be converted to an `INVALID_TARGET`
-error.
+makes sense) instead of failing, but the implementation must then also document
+the behavior of this extension.
+Even then, division by exactly zero should always fail with `RUNTIME_ERROR`
+rather than returning an infinity value.
 
 ## Errors
 
@@ -805,86 +834,127 @@ Applying a JGraft to a target data structure may fail with:
 
   * `NO_MATCH`        - The JGraft explicitly rejected the input data as
                         not meeting its preconditions.
-  * `INVALID_TARGET`  - The graft describes an operation that can't apply due
-                        to the type or value of the data it was applied to.
-  * `INVALID_OPERAND` - The calculated runtime parameters describing how an
-                        operation should be performed violate the spec.
-  * `INVALID_GRAFT`   - The structure of the JGraft itself or parameters of
-                        expressions intrinsically violate the spec.
+  * `RUNTIME_ERROR`   - The calculated arguments to an operation are the wrong
+                        type, or are impossible to execute correctly.
+  * `INVALID_GRAFT`   - The structure of the JGraft itself or literal arguments
+                        to an operation violate the spec.
   * `UNSUPPORTED_GRAFT` - The graft requires data or operations that the
                         implementation’s host environment cannot faithfully
                         represent or perform, including insufficient version
                         support or use of forbidden object property names.
-  * `RESOURCE_LIMIT`  - Applying the graft would exceed configured limits,
-                        such as too much memory, too much recursion, too many
-                        generated properties, or too deep of a tree.
+  * `RESOURCE_LIMIT`  - Applying the graft would exceed configured limits.
 
 Ideally (when supported by the implementation and within resource limits),
 a logically valid JGraft should either succeed or generate `NO_MATCH` and a
 logically invalid JGraft should result in `INVALID_GRAFT`.
-When expressions are used for arguments and evaluate to values that violate
-the spec, this is less clear, and the errors `INVALID_TARGET` and
-`INVALID_OPERAND` are used to discern between errors that could be the result
-of the input data (or data used by the generator) vs. more fundamental bugs in
-the generation of the expressions.
-When these errors occur during action execution, outside of match evaluation,
-they represent uncertainties between the cases where either the graft should
-have used more comprehensive match expressions to validate the input data
-before starting, or where the graft is logically invalid in an indirect manner.
-Each action and expression documents which invalid conditions constitute
-`INVALID_TARGET` vs. `INVALID_OPERAND`.  If an action or expression detects
-both `INVALID_OPERAND` and `INVALID_TARGET` conditions while evaluating its
-arguments or performing its own operation, it should report the higher-priority
-`INVALID_OPERAND` error.  Implementations are not required to evaluate
-additional arguments after encountering an error, but are encouraged to do so
-within the constraints of the specified behavior for that action or expression
-in order to improve diagnostics.
+A graft generator *ought to* generate comprehensive `MATCH` / `IF` tests to
+ensure that the data is the expected shape before using the data in computed
+arguments, in which case any runtime error that occurs is logically a fault of
+the graft.  However, graft generators are permitted to take the shortcut of
+probing paths or computing values during a match and letting the runtime
+failure act as an indication of "it doesn't match".  However, treating
+all invalid grafts as "it doesn't match" would hide generation defects that
+a developer likely wants to know about.  The compromise is that malformed
+JGraft structures and all locally-invalid arguments (described in further
+detail below) count as `INVALID_GRAFT`, and immediately abort execution.
+Every other type of logical error is `RUNTIME_ERROR`; inside a match expression
+they are trapped and converted to a false match, and outside of a match they
+immediately abort execution the same as `INVALID_GRAFT`.
 
-Implementations may perform static analysis to determine whether
-`INVALID_TARGET` and `INVALID_OPERAND` errors actually represent
-`INVALID_GRAFT` and report them as such, but to make lightweight
-implementations possible, this is not required.  For example, if an
-implementation is constructing host language objects to represent expressions
-and the constructor detects that an integer parameter is being supplied by an
-expression that can only return strings, it may end with `INVALID_GRAFT` before
-it even begins executing the JGraft, while simpler implementations would report
-this at runtime as `INVALID_OPERAND`.  However, `INVALID_TARGET` errors within
-match expressions are never upgraded to `INVALID_GRAFT`, as described below,
-and intentional failures (like `RAISE` with level "fail", `FAIL`, or `CASE`
-lacking an "else") are also never upgraded to `INVALID_GRAFT`.
-In the remaining cases, to upgrade an `INVALID_TARGET` error
-to `INVALID_GRAFT` the static analysis must prove that in the *complete* graft
-semantics (such as the short-circuiting behavior of `AND`, `OR`, and `NOT`,
-which may be used intentionally to guard deeper expressions from evaluation
-unless an earlier test succeeds) the expression always results in an error
-regardless of input.
-
-By default, `INVALID_TARGET` or `INVALID_OPERAND` errors that occur within
-match expressions are considered part of the normal process of probing the
-shape of the data without being overly verbose.  Generators of JGraft might
-produce expressions that always resolve to these error states and it would be a
-burden on the generators to eliminate those from generated expressions.
-Implementations must trap `INVALID_TARGET` or `INVALID_OPERAND` errors in
-match expressions and convert them to simple failed-to-match conditions, unless
-static analysis can prove that `INVALID_OPERAND` is actually `INVALID_GRAFT`,
-in which case it may be upgraded.  The error trapping conceptually occurs at
-the innermost match expression, including any implied `IS` or `HAS` expression
+When trapping `RUNTIME_ERROR` inside of a match, they get trapped at the
+innermost match expression, including any implied `IS` or `HAS` expression
 within a structural match or where a match expression calls a value expression.
 However, since failed matches propagate upward through other match expressions
 where the subexpression was not optional, an implementation really only needs
-to trap errors around each argument of `ANY` and `NONE`, for each successor
-state being investigated during a sequence match, and for the outermost match
+to trap errors around each argument of `ANY` and `NONE`, around each successor
+state being investigated during a sequence match, and at the outermost match
 expression that initiated the match state.
-If an implementation can prove that a match expression always generates an
-`INVALID_TARGET` error, it may emit warnings about this, but must not upgrade
-them to `INVALID_GRAFT`.
-Static analysis of match expressions should be narrower than static analysis
-of actions; to upgrade `INVALID_OPERAND` to `INVALID_GRAFT` it must establish
-that the parameter is intrinsically invalid without relying on constraints
-established by surrounding match assertions or preceding actions.  Analysis may
-consider an expression supplying a parameter, including its subexpressions
-and local bindings.  This avoids upgrading automated combinations of assertions
-into a fatal error.  For example:
+
+Aside from structural or logical errors, grafts can fail if the implementation
+simply can't execute them for some reason, such as missing functionality or
+exceeding configured resource limits.  The `UNSUPPORTED_GRAFT` and
+`RESOURCE_LIMIT` errors always immediately terminate the graft operation
+regardless of match context.  Likewise, unspecified errors from application
+callbacks or other implementation aspects should terminate the graft operation.
+
+The `UNSUPPORTED_GRAFT` error covers the basic case of a `JGRAFT` action
+declaring a version the implementation doesn't support.  It also covers cases
+where a host language or environment is unable to represent (or is restricted
+from representing) certain things that are legal in JSON's data model.
+For example, on older JavaScript engines, the `__proto__` property is
+problematic and implementations may entirely forbid use of that property in
+any expression or generated value.  Other non-JavaScript implementations may
+also provide an option to forbid that property in order to ensure a graft is
+compatible with old JavaScript implementations.
+
+### Validation
+
+The following conditions cause an `INVALID_GRAFT` error:
+
+  * A type is encountered for which the implementation has no defined behavior.
+  * An array in a context where directives are permitted lacks a first element.
+  * A directive array (excluding escaped arrays) has a first element which is
+    not a known directive name or ID.
+  * A directive has an illegal number of arguments.
+  * A literal object used to supply a collection of optional named arguments
+    (not general data) contains unknown or incompatible sets of properties.
+  * The pre-evaluation type of an argument (including optional arguments
+    supplied in literal objects) does not intersect the domain of the argument.
+    Pre-evaluation types are determined as:
+      * Literals: the known type of the value.
+      * `LOCAL` expressions: the pre-evaluation type of its root expression
+      * `FAIL` expressions: always fail with `RUNTIME_ERROR` and are exempt
+        from type tests.
+      * Any other expression: the range of possible return types of the root
+        expression without considering its contents.  Reference expressions and
+        `CASE` are assumed to be any type.
+  * Pre-evaluation types do not intersect between supplied arguments which must
+    match.  For example, `CONCAT` requires all arguments to be strings or all
+    arguments to be arrays.  `FAIL` expressions are still exempt.
+  * A literal argument value (including optional ones supplied in literal
+    objects) does not match the domain explicitly specified for that argument.
+    Arguments other than literal objects of named arguments are considered
+    opaquely; array length or object properties are not used to narrow the
+    domain of other arguments.
+  * Two or more literal argument values (including optional ones supplied in
+    literal objects) violate a constraint between them, like `pos <= lim`.
+    If an array length is used to interpret a literal alias, it is not truly
+    a literal and is exempt from this check.
+
+These rules are chosen to be easy to implement without deep semantic analysis,
+but still broad enough to usefully catch bugs in generators.
+All implementations must consistently generate `INVALID_GRAFT` rather than
+`RUNTIME_ERROR` when encountering these cases.  Implementations are permitted
+to attempt execution and resolve the cause of the error in an exception path.
+In some cases this may result in `RESOURCE_LIMIT` where an `INVALID_GRAFT` has
+also occurred, which is permitted.
+
+Implementations are permitted to lazily evaluate directives.  In order to
+provide portability across implementations, all implementations must provide a
+lazy-evaluation mode.  In lazy mode, validation of a directive operand occurs
+when evaluation requires that operand.  Operands skipped by flow control are
+not validated.  Errors from validation, including `INVALID_GRAFT`, are
+deferred.  A structurally invalid graft may apply cleanly so long as the
+structurally invalid portions do not need executed.  It also means that
+implementations which compile the full JGraft before execution must include the
+ability to hold the deferred validation errors in the optree nodes, including
+within parsed macros.
+
+More robust implementations are encouraged to provide various degrees of
+validation prior to execution, such as checking for all the `INVALID_GRAFT`
+conditions above throughout the JGraft tree, or even performing deeper static
+analysis to look for logical impossibilities.  Implementations may choose to
+make full validation the default mode, or let validation emit warnings by
+default while still executing as if lazy validation were used.  The degree of
+validation should always be configurable so that applications can make use of
+grafts that were working on less strict implementations.
+
+When performing static analysis, there are two categories which must never
+prevent execution, both of which are intended to make generators easier to
+write.  First, it is never a fatal error for match subexpressions to be
+mutually exclusive to each other.  This allows results from multiple expression
+generators to be combined without worry that a resulting logical impossibility
+will cause a recipient to reject the graft.  For example:
 
     [ALL,
       {offset: "2"},
@@ -892,38 +962,54 @@ into a fatal error.  For example:
     ]
 
 The first condition only passes when `offset` is the string "2", which
-guarantees that the second condition will trigger an `INVALID_OPERAND`, but in
-isolation the second expression's correctness still depends on input data,
-so in a match context this is not considered an invalid graft,
-just one that never matches.  A more intelligent generator could
-eliminate this subexpression, but is not required to, regardless of the
-configured JGraft validation level.
+guarantees that the second condition will receive the wrong type for the
+`ofs` argument of `SLICE`, and trigger a `RUNTIME_ERROR`.  But, in isolation
+the second expression's correctness still depends on input data, so in a match
+context this is not considered an invalid graft, just one that never matches.
+A more intelligent generator could eliminate this subexpression, but is not
+required to, regardless of the configured JGraft validation level.
 
-The `INVALID_GRAFT`, `UNSUPPORTED_GRAFT`, and `RESOURCE_LIMIT` errors always
-immediately terminate the graft operation regardless of match context.
-Likewise, unspecified errors from application callbacks or other
-implementation aspects should terminate the graft operation.
+Second, a logical `RUNTIME_ERROR` guarded behind flow-control (including
+short-circuiting behavior of `AND` / `OR` / `NOT`) that effectively prevents it
+from occurring for all inputs should never become a fatal error.
+Validators may warn about these cases, but should not use them as a reason to
+reject the graft prior to executing it.  For example:
 
-The `UNSUPPORTED_GRAFT` covers the basic case of a new JGraft version seen by
-an old implementation, and also cases where a host language or environment
-is unable to represent (or restricted from representing) certain things that
-are legal in JSON's data model.  For example, on older JavaScript engines, the
-`__proto__` property is problematic and implementations may entirely forbid
-use of that property in any expression or generated value.  Other
-non-JavaScript implementations may also provide an option to forbid that
-property in order to ensure a graft is compatible with old JavaScript
-implementations.
+    [OR, true, [LENGTH]]                     // INVALID_GRAFT
+    [OR, true, [LESS,"a",[CASE,[NUM],1,2]]]  // RUNTIME_ERROR
 
-The error generated by application of a JGraft is not always deterministic.
-Implementations may encounter a nonfatal error that aborts a match before
-finding a different fatal error that also exists, such as when iterating object
-properties in an implementation-defined order where the expression for one
-property hits a resource limit and the expression for another property is
-logically invalid and the expression for a third property simply doesn't
-match.  While deterministic errors would be nice, allowing this nondeterminism
-also allows light-weight implementations to perform lazy validation of the
-graft structure.  The degree of validation effort an implementation uses could
-even be configurable.
+The first expression is an `INVALID_GRAFT` because `LENGTH` always returns an
+integer, not a boolean.  In lazy evaluation mode it will not be detected, due
+to the short-circuiting of `OR`, but in a higher validation level, the graft
+should be rejected before starting execution.  The second expression includes a
+`LESS` subexpression which will always fail with `RUNTIME_ERROR` since the
+arguments are not of the same type.  A lazy evaluation mode will never detect
+this either, due to short circuiting.  If a more robust implementation detects
+this through static evaluation, it may warn but must not reject the graft.
+
+### Resource Limits
+
+One of the design goals for JGraft is to provide a language for editing data
+which can safely handle un-trusted input, however this language can describe
+operations that require infinite memory and execution time.
+Every implementation must enforce limits for memory and execution, and should
+provide a means for applications to tune these limits.  At a minimum, there
+should be a counter for memory allocated and another for processing effort
+expended, and exceeding either should abort execution of JGraft with
+`RESOURCE_LIMIT`.  Implementations must also track any other resource that gets
+consumed on their particular platform.  For instance, if the total number of
+objects allocated in the system degrades the performance of the host language
+garbage collector, then there should be a limit on total objects created in
+addition to just the memory consumed by them.  If the implementation is using
+the host language call stack to implement JGraft expressions, it should include
+a limit on call stack depth.
+
+The specifics of how these are implemented and configured are left to each
+implementation.  The implementation should document the model used, and where
+possible, give the application tools to estimate the limits in terms of
+real processing seconds and physical bytes of memory.
+
+### Failure State
 
 When applying a graft fails, the recommended behavior for an implementation is
 to emit the error along with some diagnostic properties describing the current
