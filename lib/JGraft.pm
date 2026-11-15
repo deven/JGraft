@@ -407,9 +407,18 @@ given to C<parse> settles it either way.  (Every JSON text is a JSON5 text
 that means the same, so C<< json5 => 1 >> refuses nothing that JSON allows.)
 
 A document is written back as what it was read as.  A JSON5 document keeps
-all that JSON5 let it say, as any document keeps its spelling: its comments
-stay beside what they stood beside (and go, if that goes), C<0x10> stays
-C<0x10>, a comma after the last element stays after whatever is then last.
+all that JSON5 let it say, as any document keeps its spelling: C<0x10> stays
+C<0x10>, a comma after the last element stays after whatever is then last, a
+string that changes keeps its quotes and what of it did not change, escapes
+and all.
+
+A comment stays with the element it is about: the one whose line it ends,
+and the one it stands above.  So an element that a graft removes takes its
+comments with it and no other's, one that is moved takes them where it goes,
+and one that is put between two others comes between their comments.  A
+comment at the end of a list, after the last element's line, stays at the
+end of the list.  (On a single line, what is before the comma belongs to the
+element before it, and what is after the comma to the one after.)
 What a graft adds is written as its like is in the text: a new name without
 quotes if the names beside it have none, and it can do without; a new string
 in the quotes that strings there have; a new array or object with a comma

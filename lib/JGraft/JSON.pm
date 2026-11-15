@@ -29,7 +29,7 @@ package JGraft::JSON;
 use v5.36;
 use builtin qw(created_as_number refaddr blessed);
 use overload ();
-no warnings qw(experimental::builtin recursion surrogate nonchar non_unicode utf8);
+no warnings qw(experimental::builtin recursion surrogate nonchar non_unicode utf8 portable);
 use JGraft::Util;
 use JGraft::Ordered;
 use JGraft::Source;
@@ -104,12 +104,16 @@ sub reading ($text, $opt, $five) {
         $text =~ /\G(?:$BLANK|$COMMENT)*/gc;
         $text =~ m{\G/\*} and $fail->('a comment does not end');
     };
+    # A string may not hold a control character as it stands (in JSON), or a line break (in JSON5): it has to be
+    # escaped.  The string is read as far as such a character, and the complaint is of that and not of a missing quote.
     my $string = !$five ? sub {
-        $text =~ /\G"((?:[^"\\]++|\\.)*+)"/gcs or $fail->('a string does not end');
+        $text =~ /\G"((?:[^"\\\x00-\x1F]++|\\.)*+)"/gc
+            or $fail->($text =~ /\G"(?:[^"\\\x00-\x1F]++|\\.)*+[\x00-\x1F]/ ? 'a string has a control character that is not escaped' : 'a string does not end');
         return unquote($1) // $fail->('a string has an escape that means nothing');
     } : sub {
         my $quote = substr $text, pos($text) // 0, 1;
-        ($quote eq '"' ? $text =~ /\G"((?:[^"\\]++|\\(?:\r\n|.))*+)"/gcs : $text =~ /\G'((?:[^'\\]++|\\(?:\r\n|.))*+)'/gcs) or $fail->('a string does not end');
+        ($quote eq '"' ? $text =~ /\G"((?:[^"\\\n\r]++|\\(?:\r\n|.))*+)"/gcs : $text =~ /\G'((?:[^'\\\n\r]++|\\(?:\r\n|.))*+)'/gcs)
+            or $fail->($text =~ /\G["'](?:[^"'\\\n\r]++|\\(?:\r\n|.))*+[\n\r]/s ? 'a string has a line break that is not escaped' : 'a string does not end');
         return unquote($1, 1) // $fail->('a string has an escape that means nothing');
     };
     # (how a JSON5 text writes its first name, the colon after it, and its first string: for what is written new.
@@ -190,7 +194,8 @@ sub reading ($text, $opt, $five) {
 }
 
 # Some text of a JSON5 document without its comments (to be written again where no comment belongs).
-sub uncommented ($text) { $text =~ s/[ \t]*(?:$COMMENT)//gr }      # (and without the space that set a comment off from what it followed)
+# A comment that had a line to itself goes with its line; any other, with the space that set it off from what it followed.
+sub uncommented ($text) { $text =~ s/(?<=\n)[ \t]*(?:$COMMENT)[ \t]*(?:\r\n|[\n\r])//gr =~ s/[ \t]*(?:$COMMENT)//gr }
 
 # The name of a property written without quotes, in JSON5, at the place the
 # text has been read to: what ECMAScript 5 calls an IdentifierName.  Nothing,
@@ -201,7 +206,8 @@ sub name {
     my $name = $1;
     utf8::decode($name);
     $name =~ s/\\u([0-9a-fA-F]{4})/chr hex $1/ge;
-    return $name if $name =~ /\A[\$_\p{L}\p{Nl}][\$_\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}\x{200C}\x{200D}]*\z/;
+    # (A character that this Perl does not know may be a letter in a Unicode newer than the one it has, and is let pass.)
+    return $name if $name =~ /\A[\$_\p{L}\p{Nl}\p{Cn}][\$_\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}\p{Cn}\x{200C}\x{200D}]*\z/;
     pos($_[0]) = $at;       # (what is wrong is said of where it began)
     return undef;
 }
@@ -350,10 +356,8 @@ sub emit ($v, $hint) {
             my $usable = $FIVE || in_json($token);          # (a token of JSON5 alone has no place in JSON)
             return $token                                                                   # it says what the value still is
                 if $usable && type_of($was) == type_of($v) && (is_num($v) ? same_number($v, $was) : match_lit($v, $was, 1));
-            if (is_str($v) && is_str($was)) {
-                return '"' . patched($token, $was, $v) . '"' if in_json($token);
-                return "'" . quoted($v, "'") . "'" if $FIVE && $token =~ /\A'/;       # (in the quotes it had)
-            }
+            # (a string that has changed keeps the quotes it had, and what of it is as it was)
+            if (is_str($v) && is_str($was) && $usable) { my $quote = substr $token, 0, 1; return $quote . patched($token, $was, $v, $quote) . $quote }
         }
     }
     return scalar_text($v);
@@ -419,7 +423,11 @@ sub quoted ($s, $quote = '"') {
 
 # Are two numbers the same, to the place and the sign of a zero?  (As for
 # JGraft::Number::same, but that what is not a number at all is the same as itself.)
-sub same_number ($a, $b) { !ref $a && !ref $b && $a != $a && $b != $b ? 1 : JGraft::Number::same($a, $b) }
+sub same_number ($a, $b) {
+    return JGraft::Number::same($a, $b) unless grep { !ref && $_ - $_ != 0 } $a, $b;      # (an infinity, or not a number: no decimal)
+    return 0 if ref $a || ref $b;
+    return $a != $a ? $b != $b : $a == $b;
+}
 
 # The byte that a character past the end of Unicode stands for.
 sub stray ($char) {
@@ -440,15 +448,9 @@ sub array ($v, $from, $tok) {
     my $gap  = sub ($j) { $cut->($items->[$j][1], $items->[ $j + 1 ][0]) };      # what was between two elements
     my $join = spacing(@$items > 1 ? $gap->($#$items - 1) : ',' . substr $cut->($from->{start}, $items->[0][0]), 1);    # for what is new
     local $STYLE = style($from, $items->[0][0], $items->[-1][1], undef, $join, undef);
-    my ($out, $before) = ($cut->($from->{start}, $items->[0][0]));
-    for my $i (0 .. $#$v) {
-        my $hint = $tok && $tok->[$i];
-        my $j    = $hint ? $was{ refaddr $hint } : undef;
-        $out .= between($gap, $#$items, $before, $j, $join) if $i;
-        $out .= emit($v->[$i], $hint);
-        $before = $j;
-    }
-    return $out . $cut->($items->[-1][1], $from->{end});
+    # each element as it is now written, and which element of the old array it was (if it was one)
+    my @unit = map { my $hint = $tok && $tok->[$_]; [ emit($v->[$_], $hint), $hint ? $was{ refaddr $hint } : undef ] } 0 .. $#$v;
+    return stitched($from, [ map { [ @$_[ 0, 1 ] ] } @$items ], \@unit, $join);
 }
 
 # An object, likewise.  Each member that was read is [ key, start of the key,
@@ -510,12 +512,7 @@ sub object ($v, $from, $tok) {
         push @unit, [ $m == $last{$k} ? $kept->($m) : $cut->($members->[$m][1], $members->[$m][3][1]), $m ];
     }
     push @unit, map { $other->($_) } grep { !$stays{$_} } @coming;
-    my $out = $cut->($from->{start}, $members->[0][1]);
-    for my $i (0 .. $#unit) {
-        $out .= between($gap, $#$members, $unit[ $i - 1 ][1], $unit[$i][1], $join) if $i;
-        $out .= $unit[$i][0];
-    }
-    return $out . $cut->($members->[-1][3][1], $from->{end});
+    return stitched($from, [ map { [ $_->[1], $_->[3][1] ] } @$members ], \@unit, $join);
 }
 
 # How an array or object of the text is laid out, as far as it shows how a
@@ -588,14 +585,116 @@ sub anew ($v, $tok) {
 # Neighbours get what was between them.  Otherwise it is what followed the
 # first of them or what came before the second: the one that ended a line,
 # if only one did, so that lines begin and end where they did.
-# What was between two that are no longer side by side is written without
-# any comment it held: a comment belongs with what it stood beside.
-sub between ($gap, $last, $m, $n, $join) {
-    return $gap->($m) if defined $m && defined $n && $n == $m + 1;
-    my $after  = defined $m && $m < $last ? spacing($gap->($m))     : undef;
-    my $before = defined $n && $n > 0     ? spacing($gap->($n - 1)) : undef;
-    return $before if defined $before && (!defined $after || $before =~ /\n/ && $after !~ /\n/);
-    return $after // (defined $m && $m > 0 ? spacing($gap->($m - 1)) : $join);
+# The elements of an array or object that was read (or its members), put
+# together again with what stood between them.
+#
+# @$span is where each element was in the text, from its start to its end;
+# @$unit is what there is now, each [ its text, which of the old elements it
+# is, if it is one ]; $join is what goes between elements that are new.
+#
+# What stands between two elements belongs partly to the one before and
+# partly to the one after, and goes where they go.  To the one before: all
+# up to the end of its line, which is the comma and any comment that follows
+# it there.  To the one after: whatever lines of comment come next, and the
+# space that it is set in by.  (With no line break between them, the comma
+# is the dividing line.)  And between the two is the line break itself, which
+# is kept if either of them is still there to end or to begin a line.  So an
+# element that is removed takes its comments with it and no other's; one
+# that is put between two others comes between their comments; and elements
+# that stay side by side have between them exactly what they had.
+#
+# The same is done at the two ends.  After the opening bracket, what is left
+# of its line is the bracket's, and what follows is the first element's.
+# Before the closing bracket, the end of the last element's line is that
+# element's (and there, in JSON5, a comma may be), and what follows is the
+# bracket's: comments at the end of a list stay at the end of the list.
+sub stitched ($from, $span, $unit, $join) {
+    my $text = $from->{text};
+    my $cut  = sub ($a, $b) { substr $$text, $a, $b - $a };
+    my $last = $#$span;
+    # [ what belongs to the one before, the line break, what belongs to the one after ]
+    my ($open, $open_break, $lead) = divided($cut->($from->{start} + 1, $span->[0][0]), 'open');
+    my @gap = map { [ divided($cut->($span->[$_][1], $span->[ $_ + 1 ][0]), 'between') ] } 0 .. $last - 1;
+    my ($trail, $close_break, $close) = divided($cut->($span->[$last][1], $from->{end} - 1), 'close');
+    my @trail  = ((map { $_->[0] } @gap), $trail);          # after each element, on its line
+    my @broken = ((map { $_->[1] } @gap), $close_break);     # the line break after each
+    my @lead   = ($lead, map { $_->[2] } @gap);              # before each element
+    my @before = ($open_break, map { $_->[1] } @gap);        # the line break before each
+    my ($new_trail, $new_break, $new_lead) = divided($join, 'between');
+    my $comma_last = uncommented($trail . $close) =~ /,/ ? 1 : 0;       # (JSON5: is there a comma after the last?)
+    my $said = sub ($t) { uncommented($t) ne $t };                      # is there a comment in it?
+    # (an element that stands twice in what there now is brings what was about it only once)
+    my %seen;
+    my @which = map { defined $_->[1] && !$seen{ $_->[1] }++ ? $_->[1] : undef } @$unit;
+    # A comment goes with its element.  What is only space, or a comma, is the space of the place and not of the
+    # element, and is taken from what stood in that place: after an element, what followed it; and failing that,
+    # what came before the one that is now next.  The first element has ahead of it what the first had; and of the
+    # two places that the space ahead of another could be taken from, it is what followed the element before,
+    # unless that one did not end its line and this one began one: so that lines begin where they did.
+    my $ahead = sub ($m, $n, $first) {
+        return $lead[$n] if defined $n && $said->($lead[$n]);
+        return spacing($lead) if $first;
+        my $was_ahead = defined $n && $n > 0 ? $lead[$n] : undef;
+        return $was_ahead if defined $was_ahead && length $before[$n] && !(defined $m && length $broken[$m]);
+        my $followed = defined $m && $m < $last && !$said->($gap[$m][2]) ? $gap[$m][2] : undef;
+        return $followed // $was_ahead // $new_lead;
+    };
+    my $behind = sub ($m, $n) {
+        return $trail[$m] if defined $m && ($m < $last || $said->($trail[$m]));
+        return defined $n && $n > 0 && !$said->($gap[ $n - 1 ][0]) ? $gap[ $n - 1 ][0] : $new_trail;
+    };
+    # (what is ahead of the first element may have come from where there was a comma, and here there is none)
+    my $out = $cut->($from->{start}, $from->{start} + 1) . commas($open . $open_break . $ahead->(undef, $which[0], 1), 0);
+    for my $i (0 .. $#$unit) {
+        my ($m, $n) = @which[ $i, $i + 1 ];
+        $out .= $unit->[$i][0];
+        if ($i == $#$unit) {        # the last: what follows it is what followed the last, but for a comment of its own
+            my $after = defined $m && ($m == $last || $said->($trail[$m])) ? $trail[$m] : spacing($trail);
+            my $break = (defined $m ? $broken[$m] : '') || $close_break;
+            $break ||= "\n" if $after =~ m{//} && $said->($after);      # (a comment that runs to the end of its line has to end)
+            $out .= commas($after . $break . $close, $comma_last);
+            last;
+        }
+        my $after = $behind->($m, $n);
+        my $break = (defined $m ? $broken[$m] : $new_break) || (defined $n ? $before[$n] : $new_break);
+        $break ||= "\n" if $after =~ m{//} && $said->($after);
+        $out .= commas($after . $break . $ahead->($m, $n, 0), 1);
+    }
+    return $out . $cut->($from->{end} - 1, $from->{end});
+}
+
+# Some text that stands between two elements, or after the last, with as many
+# commas in it as there should be: one, or (after the last) one or none.  A
+# comma too many is the last of them; one too few is put at the front, next
+# to the element.  A comma in a comment is not one.
+sub commas ($text, $want) {
+    my @piece = $text =~ /\G($COMMENT|,|[^,\/]+|\/)/gs;         # (a comment is taken whole, where one begins)
+    my @at    = grep { $piece[$_] eq ',' } 0 .. $#piece;
+    return $text if @at == $want;
+    splice @piece, pop(@at), 1 while @at > $want;
+    unshift @piece, ',' if @at < $want;
+    return join '', @piece;
+}
+
+# Some text from between two elements, or between a bracket and an element,
+# as three: what of it belongs to what comes before, the line break after
+# that, and what belongs to what comes after.
+sub divided ($text, $where) {
+    pos($text) = 0;
+    $text =~ /\G(?:(?![\n\r])(?:$COMMENT|.))*/gcs;           # as far as the first line break that is not inside a comment
+    my $before = substr $text, 0, pos $text;
+    my $break  = $text =~ /\G(\r\n|[\n\r])/gc ? $1 : '';
+    my $after  = substr $text, pos $text;
+    return ($before, $break, $after) if length $break || $where eq 'open';
+    # All on one line.  Between two elements the comma divides it; before the closing bracket, what follows
+    # a comma is the bracket's, and so is all of it if there is no comma.
+    # (it is gone through a piece at a time, so that a comma inside a comment is not taken for the comma)
+    pos($text) = 0;
+    while ($text =~ /\G($COMMENT|,|[^,\/]+|\/)/gcs) {
+        next unless $1 eq ',';
+        return (substr($text, 0, pos $text), '', substr($text, pos $text));
+    }
+    return $where eq 'close' ? ('', '', $text) : ($text, '', '');
 }
 
 # A string that has changed, as text between quotes: the parts of it that
@@ -603,7 +702,7 @@ sub between ($gap, $last, $m, $n, $join) {
 # only the rest is written anew.  It is compared line by line; then, in each
 # stretch of lines that differs, by what begins and ends alike, and what is
 # left between by the least change that makes one of the other.
-sub patched ($token, $was, $now) {
+sub patched ($token, $was, $now, $quote = '"') {
     my ($old, $new) = map { [ split /(?<=\n)/, $_ ] } $was, $now;
     my (@piece, @place);        # each piece: text, or [ from, to ] in characters of $was; and every such place
     my $keep = sub ($from, $to) { push @piece, [ $from, $to ] and push @place, $from, $to if $to > $from };
@@ -628,7 +727,7 @@ sub patched ($token, $was, $now) {
         for my $part (differences($in, $out), [ length $in, 0, length $out, 0 ]) {
             my ($ci, $cn, $cj, $cm) = @$part;
             $keep->($base + $done, $base + $cj);
-            push @piece, quoted(substr $in, $ci, $cn);
+            push @piece, quoted(substr($in, $ci, $cn), $quote);
             $done = $cj + $cm;
         }
         $keep->($at + length($gone) - $tail, $at + length $gone);
@@ -723,9 +822,10 @@ sub bytes_at ($body, @place) {
             $char += $run;
             next;
         }
+        next if $body =~ /\G\\(?:\r\n|[\n\r]|\xE2\x80[\xA8\xA9])/gc;       # (in JSON5, a line that goes on: no character at all)
         push @byte, $from and shift @place while @place && $place[0] == $char;
         last if $from >= length $body;
-        $body =~ /\G(?:\\u[dD][89abAB][0-9a-fA-F]{2}\\u[dD][c-fC-F][0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}|\\.|$WIDE|.)/gcs;
+        $body =~ /\G(?:\\u[dD][89abAB][0-9a-fA-F]{2}\\u[dD][c-fC-F][0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}|\\x[0-9a-fA-F]{2}|\\(?:$WIDE)|\\.|$WIDE|.)/gcs;
         $char++;
     }
     return @byte;

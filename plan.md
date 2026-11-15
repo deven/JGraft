@@ -1175,9 +1175,39 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   a JSON5 document written as JSON (`write(..., json5 => 0)`) keeps `1e1`
   and loses `0x10`, and is written anew throughout, since no stretch of it
   can be trusted to be JSON. `Infinity`, `-Infinity` and `NaN` are `null`
-  in JSON, as by custom, and themselves in JSON5. Not done: a string that
-  is in single quotes or uses an escape JSON has not is rewritten whole when
-  it changes, where a JSON string keeps the parts that did not change.
+  in JSON, as by custom, and themselves in JSON5. A string that changes is
+  patched where it changed whatever it is written in (`patched` takes the
+  quote; `bytes_at` counts `\x41` as one character and a continued line as
+  none).
+
+  *What stands between elements.* With comments, the old way of choosing a
+  separator (the whole of what stood after the one element, or before the
+  other) would not do: put an element between two others and the comment
+  between them was lost. What stands between two elements is now divided
+  (`JSON::divided`, `stitched`), by the rule that `json5format` states for
+  the comments it keeps: to the element before, all up to the end of its
+  line; to the element after, the lines above it and the space it is set in
+  by; and between them the line break, kept if either is still there to end
+  or begin a line. On one line the comma divides. A comment goes with its
+  element; what is only space or a comma is the space of the place, taken
+  as before from what stood there, so that texts without comments come out
+  as they did. Commas are then counted (`commas`), since a text may put them
+  first on the line, where they fall in the second part and not the first:
+  exactly one between elements, none ahead of the first, and after the last
+  one or none as the text had. A comma in a comment is not one.
+
+  *Checked against the reference.* The tests of the reference
+  implementation (`json5/json5`, cloned beside this repository) were run
+  through a recorder to collect every text they parse and what comes of it:
+  107 texts, on all of which `JGraft::JSON` now agrees, as to whether it is
+  JSON5 and as to what it says. That found three things: a line break as
+  it stands in a string is not JSON5 (nor is a control character JSON, which
+  the reader had also let pass; such a text is now read as JSON5, which
+  allows all but the line break); a name may hold a letter that this
+  Perl's Unicode does not know yet, and is let pass; and a warning from
+  `hex`. Also fuzzed: 15,000 random JSON5 texts with comments in every gap,
+  each written back as read, and 10,560 changed at random by a graft, each
+  reading back as what the run left, as JSON5 and as JSON.
 - **What is not JSON, in the writer.** A graft passes along whatever value
   it is given, so `JGraft::JSON` can be handed an object, a subroutine, a
   reference to a scalar. It used to die on the last two with Perl's own

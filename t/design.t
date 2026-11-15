@@ -1904,11 +1904,15 @@ b']),                                                                           
     }
     for ([ '[,]' => 'expected a value at byte 1' ], [ '[1,,]' => 'expected a value at byte 3' ], [ '{a b}' => 'expected : at byte 3' ], [ '[012]' => 'expected a value at byte 1' ],
          [ q(["\1"]) => 'a string has an escape that means nothing at byte 5' ], [ '[0x]' => 'expected a value at byte 1' ], [ '{1a: 1}' => 'expected the name of a property at byte 1' ],
-         [ "['a\nb']" => 'read' ], [ '/* [1]' => 'a comment does not end at byte 0' ], [ '[1] 2' => 'there is something after the value at byte 4' ]) {
+         [ "['a\nb']" => 'a string has a line break that is not escaped at byte 1' ], [ "['a\tb']" => 'read' ], [ '/* [1]' => 'a comment does not end at byte 0' ],
+         [ '[1] 2' => 'there is something after the value at byte 4' ], [ "{\x{A7DD}: 1}" => 'read' ]) {
         my ($text, $why) = @$_;
         my $said = eval { JGraft::JSON->parse($text, json5 => 1); 'read' } // $@ =~ s/^JGraft::JSON: //r =~ s/\n\z//r;
-        is $said, $why, sprintf '%s is %s', $text =~ s/\n/\\n/gr, $why eq 'read' ? 'JSON5 (a string may have a line break in it, here as in JSON)' : 'not JSON5';
+        is $said, $why, sprintf '%s is %s', $text =~ s/\n/\\n/gr =~ s/\t/\\t/gr =~ s/[^\x00-\x7F]/?/gr, $why eq 'read' ? 'JSON5' : 'not JSON5';
     }
+    is eval { JGraft::JSON->parse(qq(["a\tb"]), json5 => 0); 'read' } // $@ =~ s/^JGraft::JSON: //r =~ s/\n\z//r, 'a string has a control character that is not escaped at byte 1',
+        'a control character in a string, as it stands, is not JSON';
+    ok JGraft::JSON->parse(qq(["a\tb"]))->json5, '... but it is JSON5, and so the text is read as that';
     like eval { JGraft::JSON->parse('{a: 1,, }'); 1 } // $@, qr/^JGraft::JSON: \(as JSON5\) expected the name of a property at byte 6/, 'a text that is neither is refused for what is wrong with it as JSON5, if that reading got further';
 
     # Changed by a graft, it is written as it was but where it changed; and what is new is written as its like is.
@@ -1927,6 +1931,44 @@ b']),                                                                           
     is $run->([ COPY => [ NODE => 'limits', 'up' ], 'most', [ TEMP => 'nan' ], 'none', [ TEMP => 'least' ], 'least' ]),
         $five =~ s/  \],\n\}/  ],\n  most: +Infinity,\n  none: NaN,\n  least: -Infinity,\n}/r, 'an infinity is written as one: as it was written, where it was moved from';
     is $run->([ MOVE => [ 'NODE', 'limits', 'max' ], [ 'NODE', 'limits', 'most' ] ]), $five =~ s/max: 0x10,/most: 0x10,/r, 'a property renamed keeps its place, its value as it was written, and its comment';
+
+    # A comment belongs to the element it is about: the one whose line it ends, or the one it stands above.
+    my $noted = <<'J5';
+[
+  // the first
+  1, // one
+  // the second
+  2, // two
+  // the third
+  3, // three
+  // no more
+]
+J5
+    my $list = JGraft::JSON->parse($noted);
+    my $with = sub (@actions) { $list->write(graft(@actions)->apply($list->data)) };
+    is $with->([ SPLICE => 1, 0, 9 ]), $noted =~ s{  // the second\n}{  9,\n  // the second\n}r, 'an element put between two others comes between their comments';
+    is $with->([ SPLICE => 1, 1 ]), $noted =~ s{  // the second\n  2, // two\n}{}r, 'one taken out takes its own comments with it, the one above it and the one after';
+    is $with->([ SPLICE => 0, 1 ]), $noted =~ s{  // the first\n  1, // one\n}{}r, '... the first as any other';
+    is $with->([ SPLICE => 2, 1 ]), $noted =~ s{  // the third\n  3, // three\n}{}r, '... and the last, leaving the comment at the end of the list where it was';
+    is $with->([ COPY => 4, $F ]), $noted =~ s{  // no more\n}{  4,\n  // no more\n}r, 'one added at the end comes before the comment that ends the list';
+    is $with->([ MOVE => 0, $F ]), $noted =~ s{  // the first\n  1, // one\n}{}r =~ s{  // no more\n}{  // the first\n  1, // one\n  // no more\n}r, 'one that is moved takes its comments where it goes';
+    is $with->([ COPY => 20, 1 ]), $noted =~ s{2, // two}{20, // two}r, 'and one that is changed keeps them';
+    my $one_line = JGraft::JSON->parse('[1 /* one */, /* two */ 2, 3 /* three */]');
+    is $one_line->write(graft([ SPLICE => 1, 1 ])->apply($one_line->data)), '[1 /* one */, 3 /* three */]', 'on one line, what is before the comma is the one element\'s and what is after it the other\'s';
+    is $one_line->write(graft([ SPLICE => 1, 0, 9 ])->apply($one_line->data)), '[1 /* one */, 9, /* two */ 2, 3 /* three */]', '... and so with one put in';
+    my $commas_first = JGraft::JSON->parse(qq([ 1\n, 2\n, 3\n]));
+    is $commas_first->write(graft([ SPLICE => 1, 1 ])->apply($commas_first->data)), qq([ 1\n, 3\n]), 'a text that puts its commas first has them first still, with an element gone';
+    is $commas_first->write(graft([ COPY => 4, $F ])->apply($commas_first->data)), qq([ 1\n, 2\n, 3\n, 4\n]), '... and with one added';
+    ok !$commas_first->json5, '(which is JSON)';
+    is JGraft::JSON->parse('[1, /* a , in a comment ] */ 2]')->write([ 2 ]) // '', '[2]', 'a comma in a comment is not a comma';
+
+    # A string that changes keeps what of it did not, however it was written.
+    my $strung = JGraft::JSON->parse("{a: 'one\\'s \\x41 line\\\ngoes on', b: \"tab\\tstop\"}");
+    is $strung->data->{a}, "one's A linegoes on", 'a string with escapes that only JSON5 has, and a line that goes on';
+    my $restrung = sub ($new) { $strung->write(graft([ COPY => $new, 'a' ])->apply($strung->data)) };
+    is $restrung->("one's A linegoes off"), "{a: 'one\\'s \\x41 line\\\ngoes off', b: \"tab\\tstop\"}", '... changed at its end, is as it was up to there';
+    is $restrung->(q(one's A linegoes on, "so" it's said)), "{a: 'one\\'s \\x41 line\\\ngoes on, \"so\" it\\'s said', b: \"tab\\tstop\"}", '... and what is new in it is escaped for the quotes it is in';
+    is JGraft::JSON->parse($restrung->("ONE's B linegoes on"))->data->{a}, "ONE's B linegoes on", '... and reads back as what it was made';
 
     # Written as JSON, it is written anew: laid out as it was, without what JSON has no way to say.
     my $json = <<'J';
