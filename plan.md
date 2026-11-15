@@ -1153,6 +1153,16 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   private copy per graft, shared by all outputs. That is what there was;
   the copy would be as exposed as the original, and it is the sharing
   between outputs that is the trap.
+- **What is not JSON, in the writer.** A graft passes along whatever value
+  it is given, so `JGraft::JSON` can be handed an object, a subroutine, a
+  reference to a scalar. It used to die on the last two with Perl's own
+  complaint about a method call, and to write an object as the string
+  `Some::Class=HASH(0x...)`. Now an object is asked for `TO_JSON`, the
+  method other encoders ask for (and what that gives is asked in its turn,
+  to a limit); one without it that reads as a string by `overload` is
+  written as the string; and whatever is left is refused in words that say
+  what it was (`JSON::stand_in`). Still as it was: an infinity or a
+  not-a-number is written `null`, as JavaScript writes it.
 - **Data that holds itself** is not JSON, but a caller can hand it over, and
   a walk through all of a value would not end: the copy for `clone`, the
   writing of JSON, the writing out of a removed value in an undo graft, the

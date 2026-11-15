@@ -27,7 +27,8 @@ package JGraft::JSON;
 # been put there by hand, cannot be written at all.
 
 use v5.36;
-use builtin qw(created_as_number refaddr);
+use builtin qw(created_as_number refaddr blessed);
+use overload ();
 no warnings qw(experimental::builtin recursion surrogate nonchar non_unicode utf8);
 use JGraft::Util;
 use JGraft::Ordered;
@@ -182,6 +183,7 @@ sub emit ($v, $hint) {
         left($w) if $w->[0]-- == $w->[3];
         return $out;
     }
+    return emit(stand_in($v), $hint) if $kind && type_of($v) == T_OTHER;
     if ($hint) {
         my $token = substr ${ $hint->[2] }, $hint->[0], $hint->[1] - $hint->[0];
         if ($token !~ /^[\[{]/) {
@@ -195,6 +197,31 @@ sub emit ($v, $hint) {
     }
     return scalar_text($v);
 }
+
+# What is to be written for something that is no JSON value: an object, or
+# a reference to something that is neither an array nor a set of properties.
+# An object says what stands for it, by the method that JSON encoders ask of
+# one (TO_JSON); or failing that, if it is made to read as a string, it is
+# written as that string.  Nothing else can be written, and the writer says
+# so, where it would once have written something that meant nothing.
+our $STOOD = 0;     # how many stand-ins deep the writer is: one object may stand for another, but not for ever
+
+sub stand_in ($v) {
+    my $class = blessed $v;
+    die sprintf "JGraft::JSON: a reference to %s cannot be written\n", lc(ref $v) =~ s/^code$/a subroutine/r =~ s/^scalar$/a scalar/r unless defined $class;
+    if ($v->can('TO_JSON')) {
+        local $STOOD = $STOOD + 1;
+        $STOOD <= 100 or die "JGraft::JSON: an object of $class cannot be written: what TO_JSON gives for it has TO_JSON asked of it without end\n";
+        my $as = $v->TO_JSON;
+        ref $as && refaddr($as) == refaddr($v) and die "JGraft::JSON: an object of $class cannot be written: its TO_JSON gives the object itself\n";
+        return stood($as);
+    }
+    return "$v" if overload::Method($v, '""');
+    die "JGraft::JSON: an object of $class cannot be written: it has no TO_JSON, and does not read as a string\n";
+}
+
+# (what stands for an object may itself be one, and is asked in its turn while the count above still holds)
+sub stood ($as) { ref $as && ref $as ne 'ARRAY' && ref $as ne 'HASH' && type_of($as) == T_OTHER ? stand_in($as) : $as }
 
 sub scalar_text ($v) {
     my $t = type_of($v);

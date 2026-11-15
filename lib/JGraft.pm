@@ -387,6 +387,15 @@ trusted, though no depth breaks anything: each level costs some four
 kilobytes while the text is read, so that two megabytes of nothing but
 C<[> take four gigabytes.
 
+Data that is not JSON can reach the writer, since a graft passes along
+whatever it is given.  An object is written as what its C<TO_JSON> method
+gives, as other JSON encoders write one (and if that is an object, as what
+I<its> C<TO_JSON> gives); an object without the method that reads as a
+string, by C<overload>, is written as that string.  Anything else (an object
+that is neither, a subroutine, a reference to a scalar) cannot be written,
+nor can data that contains itself: C<write> and C<encode> die, saying what
+it was.
+
 The graft may be read the same way, C<< JGraft->new(JGraft::JSON->parse($g)->data) >>,
 and then an object written in it gives its properties to the output in the
 order written there.

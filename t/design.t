@@ -1301,6 +1301,30 @@ subtest 'JSON is written back as it was read' => sub {
     is $laid->write(JGraft->new($lost->undo)->apply($lost->output)), qq({\n  "b": "x",\n  "a": {\n    "v": [\n      1,\n      2\n    ]\n  }\n}),
         'what was removed is put back as it was laid out (though at the end, there being no way to say where)';
     is JGraft::JSON->encode({ a => [ 1, { b => 2 } ] }), '{"a":[1,{"b":2}]}', 'with no text to go by, what is written is compact';
+
+    # What is not JSON.  An object is asked what stands for it (TO_JSON), as JSON encoders ask; what cannot be written is refused.
+    {
+        package Local::Point   { sub new { bless { x => $_[1], y => $_[2] }, $_[0] } sub TO_JSON { { x => $_[0]{x}, y => $_[0]{y} } } }
+        package Local::Money   { sub new { bless \(my $v = $_[1]), $_[0] } sub TO_JSON { ${ $_[0] } } }
+        package Local::Wrap    { sub new { bless [ $_[1] ], $_[0] } sub TO_JSON { $_[0][0] } }
+        package Local::Mirror  { sub new { bless {}, $_[0] } sub TO_JSON { $_[0] } }
+        package Local::Endless { sub new { bless {}, $_[0] } sub TO_JSON { Local::Endless->new } }
+        package Local::Named   { use overload q("") => sub { 'a thing' }, fallback => 1; sub new { bless {}, $_[0] } }
+        package Local::Plain   { sub new { bless { secret => 1 }, $_[0] } }
+    }
+    my $says = sub ($v) { eval { JGraft::JSON->encode($v) } // $@ =~ s/^JGraft::JSON: //r =~ s/\n\z//r };
+    is $says->({ at => Local::Point->new(1, 2) }), '{"at":{"x":1,"y":2}}', 'an object is written as what its TO_JSON gives';
+    is $says->([ Local::Money->new(12.5), Local::Money->new('12.50') ]), '[12.5,"12.50"]', '... be that a number or a string';
+    is $says->(Local::Wrap->new(Local::Wrap->new(Local::Point->new(3, 4)))), '{"x":3,"y":4}', '... or another object, which is asked in its turn';
+    is $says->([ Local::Mirror->new ]), 'an object of Local::Mirror cannot be written: its TO_JSON gives the object itself', '... but not the object itself';
+    like $says->([ Local::Endless->new ]), qr/^an object of Local::Endless cannot be written: .* without end$/, '... nor objects without end';
+    is $says->({ is => Local::Named->new }), '{"is":"a thing"}', 'an object with no TO_JSON that reads as a string is written as the string';
+    is $says->({ is => Local::Plain->new }), 'an object of Local::Plain cannot be written: it has no TO_JSON, and does not read as a string', 'one that is neither is refused';
+    is $says->([ sub { 1 } ]), 'a reference to a subroutine cannot be written', 'so is a subroutine';
+    is $says->([ \'x' ]), 'a reference to a scalar cannot be written', '... and a reference to a scalar';
+    my $held = JGraft::JSON->parse(qq({\n  "a": 1\n}));
+    is $held->write(graft([ COPY => [ TEMP => 'p' ], 'at' ])->apply($held->data, temp => { p => Local::Point->new(5, 6) })), qq({\n  "a": 1,\n  "at": {\n    "x": 5,\n    "y": 6\n  }\n}),
+        'what stands for an object that a graft put in a text is laid out as the text is';
     my $undone = JGraft::JSON->parse('{"b": 1.0, "a": [1, 2]}');
     my $run    = graft([ MOVE => 'b', 'c' ], [ SPLICE => [ 'NODE', 'a', 0 ], 1 ])->run($undone->data);
     is $undone->write(JGraft->new($run->undo)->apply($run->output)), '{"b": 1.0, "a": [1, 2]}',
