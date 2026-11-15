@@ -390,6 +390,46 @@ trusted, though no depth breaks anything: each level costs some four
 kilobytes while the text is read, so that two megabytes of nothing but
 C<[> take four gigabytes.
 
+=head2 JSON5
+
+L<JSON5|https://json5.org/> is JSON as it may be written by hand: with
+comments, names that need no quotes, a comma after the last element, strings
+in single quotes, numbers in hexadecimal, and C<Infinity> and C<NaN>.
+C<JGraft::JSON> reads and writes it.
+
+    my $doc = JGraft::JSON->parse($bytes);                  # JSON; or, if it is not JSON, JSON5
+    my $doc = JGraft::JSON->parse($bytes, json5 => 1);      # JSON5
+    my $doc = JGraft::JSON->parse($bytes, json5 => 0);      # JSON, and nothing else
+
+A text is taken for JSON.  One that is not JSON but is JSON5 is read as
+JSON5 without being asked, and C<< $doc->json5 >> then says so; C<json5>
+given to C<parse> settles it either way.  (Every JSON text is a JSON5 text
+that means the same, so C<< json5 => 1 >> refuses nothing that JSON allows.)
+
+A document is written back as what it was read as.  A JSON5 document keeps
+all that JSON5 let it say, as any document keeps its spelling: its comments
+stay beside what they stood beside (and go, if that goes), C<0x10> stays
+C<0x10>, a comma after the last element stays after whatever is then last.
+What a graft adds is written as its like is in the text: a new name without
+quotes if the names beside it have none, and it can do without; a new string
+in the quotes that strings there have; a new array or object with a comma
+after its last element if the one it stands in has.
+
+    $doc->write($output, json5 => 0);       # a JSON5 document, as JSON
+    $doc->write($output, json5 => 1);       # a JSON document, as JSON5
+
+C<json5> given to C<write> changes what is written.  A JSON5 document written
+as JSON is written anew from end to end, laid out as it was but without its
+comments or anything else that JSON has no way to say.  A JSON document
+written as JSON5 differs only where JSON5 can say what JSON cannot.
+
+That is the case of C<Infinity>, C<-Infinity> and C<NaN>, which a JSON5 text
+can hold and which Perl data can hold.  They are numbers to a graft
+(arithmetic on one fails, as arithmetic that would produce one does).
+Written as JSON, each is C<null>, which is what JSON encoders write for them
+by custom; written as JSON5, each is itself.  C<< JGraft::JSON->encode($value,
+json5 => 1) >> does the same for a value on its own.
+
 Data that is not JSON can reach the writer, since a graft passes along
 whatever it is given.  An object is written as what its C<TO_JSON> method
 gives, as other JSON encoders write one (and if that is an object, as what

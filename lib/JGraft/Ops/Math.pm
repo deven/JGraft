@@ -233,8 +233,10 @@ sub exactly ($x, $op, $a, $b) {
         }
     }
     else {
-        created_as_number($a) && created_as_number($b) && $a - $a == 0 && $b - $b == 0 or $x->fail_target("$op needs numbers");
+        created_as_number($a) && created_as_number($b) or $x->fail_target("$op needs numbers");
         $check->($x, $a, $b) if $check;
+        # (an infinity, or what is not a number at all, is no decimal: with one of those it is Perl's arithmetic, as ever)
+        return number($x, $native->($x, $a, $b)) unless $a - $a == 0 && $b - $b == 0;
         # (the numbers are what Perl writes them as, as they are in decimal: see JGraft::Number::parts)
         if ($WHOLE{$op} && exact($a) && exact($b)) {
             my $r = $WHOLE{$op}->(0 + "$a", 0 + "$b");

@@ -1493,7 +1493,7 @@ subtest 'JSON is written back as it was read' => sub {
     for ([ '{"a":1,}' => 'expected the name of a property at byte 7' ], [ '[1 2]' => 'expected , or ] at byte 3' ], [ '"\q"' => 'an escape that means nothing' ],
          [ '{"a":1} x' => 'something after the value at byte 8' ], [ '' => 'expected a value at byte 0' ]) {
         my ($bad, $why) = @$_;
-        ok !eval { JGraft::JSON->parse($bad); 1 } && $@ =~ /\Q$why\E/, "'$bad' is not JSON: $why";
+        ok !eval { JGraft::JSON->parse($bad, json5 => 0); 1 } && $@ =~ /\Q$why\E/, "'$bad' is not JSON: $why";
     }
 
     # Random texts, laid out at random, and a random change to each.
@@ -1852,6 +1852,119 @@ subtest 'numbers that are exact' => sub {
     my $long  = JGraft::JSON->parse('[12345678901234567890123]', exact => 1);
     my $drop  = JGraft->new([ JGRAFT => {}, [ COPY => 5, 0 ] ])->run($long->data);
     is $long->write(JGraft->new($drop->undo)->apply($drop->output)), '[12345678901234567890123]', 'and a long number that was lost is put back, digit for digit';
+};
+
+subtest 'JSON5' => sub {
+    my $five = <<'J5';
+// settings
+{
+  name: 'demo',          // the name
+  "quoted": "x",
+  limits: {
+    max: 0x10,  /* sixteen */
+    ratio: .5,
+    up: +Infinity,
+  },
+  list: [
+    1,
+    2,   // two
+    3,
+  ],
+}
+J5
+    my $F   = $JGraft::Util::FALSE;
+    my $doc = JGraft::JSON->parse($five);
+    ok $doc->json5, 'a text that is not JSON, and is JSON5, is read as JSON5 without being asked';
+    ok !JGraft::JSON->parse('{"a": [1, 2]}')->json5, 'a text that is JSON is read as JSON';
+    ok JGraft::JSON->parse('{"a": [1, 2]}', json5 => 1)->json5, '... unless it is asked for as JSON5, which it also is';
+    ok !eval { JGraft::JSON->parse($five, json5 => 0); 1 } && $@ =~ /^JGraft::JSON: expected a value at byte 0/, 'asked for as JSON, a JSON5 text is refused';
+    is $doc->write, $five, 'read and written with no change between, it is the same text';
+
+    # What JSON5 has that JSON has not is read as what it means.
+    my $bare; $bare = sub ($v) { ref $v eq 'ARRAY' ? [ map { $bare->($_) } @$v ] : ref $v eq 'HASH' ? do { my $h = JGraft::Ordered::hash(); $h->{$_} = $bare->($v->{$_}) for keys %$v; $h } : $v };
+    my $read = sub ($text, %opt) { my $d = eval { JGraft::JSON->parse($text, %opt) }; $d ? JGraft::JSON->encode($bare->($d->data), json5 => 1) : $@ =~ s/^JGraft::JSON: //r =~ s/\n\z//r };
+    for (
+        [ 'names without quotes',                 '{a: 1, $b_2: 2, if: 3}',                '{"a":1,"$b_2":2,"if":3}' ],
+        [ '... of any letters, and escaped',       "{\xC3\xA9t\\u00e9: 1}",                 "{\"\xC3\xA9t\xC3\xA9\":1}" ],
+        [ 'strings in single quotes',              q(['it''s', 'say "hi"', "it's"]) =~ s/''/\\'/r, q(["it's","say \"hi\"","it's"]) ],
+        [ 'escapes that JSON has not',             q(["\x41\v\0\'\q", 'a\
+b']),                                                                                       q(["A\u000b\u0000'q","ab"]) ],
+        [ 'a comma after the last',                '[1, 2, ]',                              '[1,2]' ],
+        [ '... in an object',                      '{a: 1, }',                              '{"a":1}' ],
+        [ 'comments',                              "/* one */ [1, // two\n 2] // three",    '[1,2]' ],
+        [ 'numbers in hexadecimal',                '[0x1F, -0XfF, +0x0]',                   '[31,-255,0]' ],
+        [ '... longer than Perl holds',            '[0xFFFFFFFFFFFFFFFFFF]',                '[4722366482869645213695]' ],
+        [ 'a point at either end, and a plus',     '[.5, 5., +1, -.25e1, 1.e2]',            '[0.5,5,1,-2.5,100]' ],
+        [ 'the numbers that JSON cannot say',      '[Infinity, -Infinity, +Infinity, NaN]', '[Infinity,-Infinity,Infinity,NaN]' ],
+        [ 'white space of other kinds',            "[\xC2\xA01,\x0B2,\xE2\x80\xA83\xEF\xBB\xBF]", '[1,2,3]' ],
+    ) {
+        my ($what, $text, $means) = @$_;
+        is $read->($text), $means, "JSON5 has $what";
+        isnt $read->($text, json5 => 0), $means, '    (and JSON has not)';
+    }
+    for ([ '[,]' => 'expected a value at byte 1' ], [ '[1,,]' => 'expected a value at byte 3' ], [ '{a b}' => 'expected : at byte 3' ], [ '[012]' => 'expected a value at byte 1' ],
+         [ q(["\1"]) => 'a string has an escape that means nothing at byte 5' ], [ '[0x]' => 'expected a value at byte 1' ], [ '{1a: 1}' => 'expected the name of a property at byte 1' ],
+         [ "['a\nb']" => 'read' ], [ '/* [1]' => 'a comment does not end at byte 0' ], [ '[1] 2' => 'there is something after the value at byte 4' ]) {
+        my ($text, $why) = @$_;
+        my $said = eval { JGraft::JSON->parse($text, json5 => 1); 'read' } // $@ =~ s/^JGraft::JSON: //r =~ s/\n\z//r;
+        is $said, $why, sprintf '%s is %s', $text =~ s/\n/\\n/gr, $why eq 'read' ? 'JSON5 (a string may have a line break in it, here as in JSON)' : 'not JSON5';
+    }
+    like eval { JGraft::JSON->parse('{a: 1,, }'); 1 } // $@, qr/^JGraft::JSON: \(as JSON5\) expected the name of a property at byte 6/, 'a text that is neither is refused for what is wrong with it as JSON5, if that reading got further';
+
+    # Changed by a graft, it is written as it was but where it changed; and what is new is written as its like is.
+    my $run = sub (@actions) { my $r = graft(@actions)->run($doc->data, temp => { nan => -sin(9**9**9), least => -9**9**9 }); $r->ok ? $doc->write($r->output) : '' . $r->error };
+    is $run->([ COPY => 17, [ 'NODE', 'limits', 'max' ] ]), $five =~ s/0x10,/17,/r, 'a value changed: the comment beside it stays';
+    is $run->([ COPY => 'changed', 'name' ]), $five =~ s/'demo'/'changed'/r, 'a string in single quotes, changed, is in single quotes';
+    is $run->([ COPY => "it's", 'name' ]), $five =~ s/'demo'/'it\\'s'/r, '... with its own quote escaped';
+    is $run->([ COPY => [ CONCAT => [ NODE => 'quoted' ], q(y'z") ], 'quoted' ]), $five =~ s/"x"/"xy'z\\""/r, 'and one in double quotes in those';
+    is $run->([ COPY => 4, [ 'NODE', 'list', $F ] ]), $five =~ s/    3,\n/    3,\n    4,\n/r, 'an element added at the end: the comma after the last is still after the last';
+    is $run->([ SPLICE => [ 'NODE', 'list', 1 ], 1 ]), $five =~ s/    2,   \/\/ two\n//r, 'an element removed: its comment goes with it';
+    is $run->([ SPLICE => [ 'NODE', 'list', 0 ], 1 ]), $five =~ s/    1,\n//r, '... and no other does';
+    is $run->([ COPY => 1, 'count' ]), $five =~ s/  \],\n\}/  ],\n  count: 1,\n}/r, 'a new property has a name without quotes, as the names here are';
+    is $run->([ COPY => 1, 'a-b' ]), $five =~ s/  \],\n\}/  ],\n  'a-b': 1,\n}/r, '... unless it needs them, and then the quotes that strings here have';
+    is $run->([ COPY => { ok => [ [ 1, { n => 's' } ] ] }, 'added' ]), $five =~ s/  \],\n\}/  ],\n  added: {\n    ok: [\n      1,\n      {\n        n: 's',\n      },\n    ],\n  },\n}/r,
+        'a new object is laid out as the text is, comma after the last and all';
+    is $run->([ COPY => [ NODE => 'limits', 'up' ], 'most', [ TEMP => 'nan' ], 'none', [ TEMP => 'least' ], 'least' ]),
+        $five =~ s/  \],\n\}/  ],\n  most: +Infinity,\n  none: NaN,\n  least: -Infinity,\n}/r, 'an infinity is written as one: as it was written, where it was moved from';
+    is $run->([ MOVE => [ 'NODE', 'limits', 'max' ], [ 'NODE', 'limits', 'most' ] ]), $five =~ s/max: 0x10,/most: 0x10,/r, 'a property renamed keeps its place, its value as it was written, and its comment';
+
+    # Written as JSON, it is written anew: laid out as it was, without what JSON has no way to say.
+    my $json = <<'J';
+
+{
+  "name": "demo",
+  "quoted": "x",
+  "limits": {
+    "max": 16,
+    "ratio": 0.5,
+    "up": null
+  },
+  "list": [
+    1,
+    2,
+    3
+  ]
+}
+J
+    is $doc->write($doc->data, json5 => 0), $json, 'a JSON5 document written as JSON keeps its layout, and loses its comments';
+    ok !JGraft::JSON->parse($json)->json5, '... and that is JSON';
+    is JGraft::JSON->parse('[1e1, "ab", 0x10]')->write(undef, json5 => 0) // '', 'null', '(a document that is nothing is null)';
+    my $mixed = JGraft::JSON->parse(q([1e1, "ab", 0x10, 'c', .5]));
+    is $mixed->write($mixed->data, json5 => 0), q([1e1, "ab", 16, "c", 0.5]), 'what was written as JSON has it stays as it was written, and the rest is written as JSON';
+
+    # JSON cannot say an infinity or what is not a number, and writes null for them; JSON5 can.
+    my @odd = (9**9**9, -9**9**9, -sin(9**9**9));
+    is JGraft::JSON->encode(\@odd), '[null,null,null]', 'JSON writes null for Infinity, -Infinity and NaN';
+    is JGraft::JSON->encode(\@odd, json5 => 1), '[Infinity,-Infinity,NaN]', 'JSON5 writes them';
+    my $plain = JGraft::JSON->parse(qq({\n  "a": 1\n}\n));
+    is $plain->write({ a => $odd[0], b => $odd[2] }), qq({\n  "a": null,\n  "b": null\n}\n), 'a JSON document is written as JSON';
+    is $plain->write({ a => $odd[0], b => $odd[2] }, json5 => 1), qq({\n  "a": Infinity,\n  "b": NaN\n}\n), '... unless it is asked for as JSON5: with names in quotes still, as they are there';
+    is graft([ COPY => [ CASE => { up => [ NUM => 1e308 ] }, 'a number, and a great one', 'not' ], ['NODE'] ])->apply($doc->data->{limits}), 'a number, and a great one', 'to a graft an infinity is a number';
+    is graft([ COPY => [ ADD => [ NODE => 'up' ], 1 ], ['NODE'] ])->run($doc->data->{limits})->error->code, 'UNSUPPORTED_GRAFT', '... that arithmetic cannot go beyond';
+
+    # A graft can be written in JSON5.
+    my $g = JGraft::JSON->parse(q(['JGRAFT', {v: 1}, /* rename */ ['MOVE', 'a', 'b'], ['COPY', 0x10, 'n'],]));
+    is show(JGraft->new($g->data)->apply({ a => 1 })), '{"b":1,"n":16}', 'a graft written in JSON5 is a graft';
 };
 
 subtest 'the public interface' => sub {

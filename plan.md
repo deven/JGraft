@@ -1153,6 +1153,31 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   private copy per graft, shared by all outputs. That is what there was;
   the copy would be as exposed as the original, and it is the sharing
   between outputs that is the trap.
+- **JSON5** (json5.org) is read and written by `JGraft::JSON`. A text is
+  read as JSON; one that is not JSON but is JSON5 is read as JSON5 without
+  being asked (the strict reading is tried first, so a JSON text costs
+  nothing more), and `json5 => 1` or `0` settles it. A document is written
+  back as what it was. The reader is the same reader with a flag: comments
+  and JSON5's white space are skipped where space is, a name may be an
+  ECMAScript IdentifierName, a string may be in single quotes and has more
+  escapes, a number may be hexadecimal or have a point at either end or be
+  `Infinity` or `NaN`, and a comma may follow the last element. Nothing in
+  how a document is kept had to change: a comment lies in the text between
+  two tokens, which was already written back as it was. What did change is
+  that such text is not reused elsewhere with a comment in it
+  (`JSON::spacing`): a separator copied for a new element, or put between
+  two elements that were not side by side, is the old one without its
+  comment. What is new takes its manner from the text, as its layout
+  already did: names quoted or not as the names beside them, strings in the
+  quotes of the text's first string, a comma after the last element of a
+  new array or object if its parent has one. A token is used again only if
+  it says what the value still is *and* the text being written can hold it:
+  a JSON5 document written as JSON (`write(..., json5 => 0)`) keeps `1e1`
+  and loses `0x10`, and is written anew throughout, since no stretch of it
+  can be trusted to be JSON. `Infinity`, `-Infinity` and `NaN` are `null`
+  in JSON, as by custom, and themselves in JSON5. Not done: a string that
+  is in single quotes or uses an escape JSON has not is rewritten whole when
+  it changes, where a JSON string keeps the parts that did not change.
 - **What is not JSON, in the writer.** A graft passes along whatever value
   it is given, so `JGraft::JSON` can be handed an object, a subroutine, a
   reference to a scalar. It used to die on the last two with Perl's own

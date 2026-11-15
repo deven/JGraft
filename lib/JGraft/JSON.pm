@@ -47,45 +47,95 @@ sub text ($doc) { ${ $doc->{text} } }
 our $EXACT;      # is the text being written one whose numbers were read exactly?
 our $STYLE;      # how a new array or object is to be laid out where one is being written, if that is known
 our $COLON = ':';
-our $WATCH;      # by which data that holds itself is noticed, for it cannot be written (see JGraft::Util::watch)
+our $WATCH;      # by which data that holds itself is noticed, for it cannot be written (see JSON5 below, and JGraft::Util::watch)
+our $FIVE;       # is what is being written to be JSON5?
+our $PLAIN;      # is nothing of the text to be written as it was (a JSON5 text being written as JSON)?
+our $QUOTE = '"';   # the quote that a new string is written in, and how the name of a new property is written
+our $NAMES = '"';
+
+# JSON5 (json5.org) is JSON as ECMAScript 5 would let it be written: with
+# comments, a comma after the last element, names that need no quotes,
+# strings in single quotes and with more escapes, numbers in hexadecimal or
+# with a point at either end or a plus sign, and Infinity and NaN.  Every
+# JSON text is a JSON5 text that means the same.
+#
+# A text is read as JSON, unless it is asked for as JSON5; and a text that
+# is not JSON but is JSON5 is read as JSON5 all the same.  A document knows
+# which it was (`json5`), and is written back as that.
+
+# White space, and a comment: each as bytes, for the text is bytes.
+my $BLANK   = qr/[ \t\n\r\x0B\x0C]|\xC2\xA0|\xEF\xBB\xBF|\xE1\x9A\x80|\xE2\x80[\x80-\x8A\xA8\xA9\xAF]|\xE2\x81\x9F|\xE3\x80\x80/;
+my $COMMENT = qr{//(?:(?!\xE2\x80[\xA8\xA9])[^\n\r])*+|/\*.*?\*/}s;
+my $NUMBER5 = qr/[-+]?(?:0[xX][0-9a-fA-F]+|Infinity|NaN|(?:(?:0|[1-9][0-9]*)(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?)/;
+my $NUMBER  = qr/-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?/;
+
+sub json5 ($doc) { $doc->{json5} ? 1 : 0 }
 
 sub parse ($class, $text, %opt) {
-    my @unknown = grep { !/\A(?:exact|max_depth|max_size)\z/ } sort keys %opt;
+    my @unknown = grep { !/\A(?:exact|max_depth|max_size|json5)\z/ } sort keys %opt;
     die "JGraft::JSON->parse: unknown option @unknown\n" if @unknown;
     defined $opt{$_} && !($opt{$_} =~ /\A[0-9]+\z/) and die "JGraft::JSON->parse: $_ must be a whole number that is not negative\n" for qw(max_depth max_size);
-    my $exact = $opt{exact} // 1;       # numbers are read with every digit they have, unless it is asked otherwise
+    utf8::downgrade($text, 1) or utf8::encode($text);       # bytes, however they were handed over
+    return bless reading($text, \%opt, $opt{json5} ? 1 : 0), $class if defined $opt{json5};
+    # Nothing was said: it is JSON, or if it is not that, JSON5.  If it is neither, what is wrong with it is said
+    # of the reading that got further, which is the one the text was more likely meant for.
+    my $doc = eval { reading($text, \%opt, 0) };
+    return bless $doc, $class if $doc;
+    my $not_json = $@;
+    $doc = eval { reading($text, \%opt, 1) };
+    return bless $doc, $class if $doc;
+    my $not_json5 = $@;
+    my ($json_at, $json5_at) = map { /at byte ([0-9]+)$/ ? $1 : -1 } $not_json, $not_json5;
+    die $json5_at > $json_at ? $not_json5 =~ s/^JGraft::JSON: /JGraft::JSON: (as JSON5) /r : $not_json;
+}
+
+# A text (which is bytes) as a document: as JSON, or if $five as JSON5.
+sub reading ($text, $opt, $five) {
+    my $exact = $opt->{exact} // 1;     # numbers are read with every digit they have, unless it is asked otherwise
     # How deep arrays and objects may be one inside another, and how long the text may be: as deep and as long as
     # they are, unless it is asked otherwise.
-    my ($deepest, $depth) = ($opt{max_depth}, 0);
-    utf8::downgrade($text, 1) or utf8::encode($text);       # bytes, however they were handed over
+    my ($deepest, $depth) = ($opt->{max_depth}, 0);
     my $src   = \$text;
     my $fail  = sub ($what) { die sprintf "JGraft::JSON: %s at byte %d\n", $what, pos($text) // 0 };
-    $fail->(sprintf 'the text is %d bytes, and max_size is %d', length $text, $opt{max_size}) if defined $opt{max_size} && length $text > $opt{max_size};
+    $fail->(sprintf 'the text is %d bytes, and max_size is %d', length $text, $opt->{max_size}) if defined $opt->{max_size} && length $text > $opt->{max_size};
     my $deeper = sub { defined $deepest && ++$depth > $deepest and $fail->("arrays and objects are more than max_depth ($deepest) deep") };
-    my $space = sub { $text =~ /\G[ \t\n\r]*/gc };
-    my $string = sub {
-        $text =~ /\G"((?:[^"\\]++|\\.)*+)"/gcs or $fail->('a string does not end');
-        return unquote($1) // $fail->('a string has an escape that means nothing');
+    my $space  = !$five ? sub { $text =~ /\G[ \t\n\r]*/gc } : sub {
+        $text =~ /\G(?:$BLANK|$COMMENT)*/gc;
+        $text =~ m{\G/\*} and $fail->('a comment does not end');
     };
+    my $string = sub {
+        my $quote = substr $text, pos($text) // 0, 1;
+        ($quote eq '"' ? $text =~ /\G"((?:[^"\\]++|\\(?:\r\n|.))*+)"/gcs : $text =~ /\G'((?:[^'\\]++|\\(?:\r\n|.))*+)'/gcs) or $fail->('a string does not end');
+        return unquote($1, $five) // $fail->('a string has an escape that means nothing');
+    };
+    # (how the text writes its first name, the colon after it, and its first string: for what is written new)
+    my %first;
     my $value;
     $value = sub {
         $space->();
         my $start = pos($text) // 0;
         my ($v, $record);
+        my $next = substr $text, $start, 1;
         if ($text =~ /\G\{/gc) {
             $deeper->();
             $v      = JGraft::Ordered::hash();
             $record = { text => $src, start => $start, exact => $exact, members => \my @member };
             $space->();
             until ($text =~ /\G\}/gc) {
-                !@member || $text =~ /\G,/gc or $fail->('expected , or }');
-                $space->();
-                my $at = pos $text;
-                substr($text, $at, 1) eq '"' or $fail->('expected the name of a property');
-                my $key = $string->();
+                if (@member) {
+                    $text =~ /\G,/gc or $fail->('expected , or }');
+                    $space->();
+                    last if $five && $text =~ /\G\}/gc;         # (a comma after the last)
+                }
+                my $at  = pos $text;
+                my $key = substr($text, $at, 1) eq '"' || $five && substr($text, $at, 1) eq "'" ? $string->()
+                        : $five ? name($text) // $fail->('expected the name of a property') : $fail->('expected the name of a property');
                 my $to  = pos $text;
+                $first{names} //= substr($text, $at, 1) =~ /(["'])/ ? $1 : 'bare';
                 $space->();
                 $text =~ /\G:/gc or $fail->('expected :');
+                $space->();
+                $first{colon} //= uncommented(substr $text, $to, pos($text) - $to);
                 ($v->{$key}, my $token) = $value->();
                 push @member, [ $key, $at, $to, $token ];
                 $space->();
@@ -97,17 +147,21 @@ sub parse ($class, $text, %opt) {
             $record = { text => $src, start => $start, exact => $exact, items => \my @item };
             $space->();
             until ($text =~ /\G\]/gc) {
-                !@item || $text =~ /\G,/gc or $fail->('expected , or ]');
+                if (@item) {
+                    $text =~ /\G,/gc or $fail->('expected , or ]');
+                    if ($five) { $space->(); last if $text =~ /\G\]/gc }
+                }
                 (my $element, my $token) = $value->();
                 push @$v,   $element;
                 push @item, $token;
                 $space->();
             }
         }
-        elsif (substr($text, $start, 1) eq '"') { $v = $string->() }
-        elsif ($text =~ /\G(-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)/gc) {
+        elsif ($next eq '"' || $five && $next eq "'") { $v = $string->(); $first{quote} //= $next }
+        elsif (!$five && $text =~ /\G($NUMBER)/gc) {
             $v = $exact ? JGraft::Number::read($1) // $fail->('a number is beyond all reason') : JGraft::Number::native($1);
         }
+        elsif ($five && $text =~ /\G($NUMBER5)(?![A-Za-z0-9_\$])/gc) { $v = number($1, $exact) // $fail->('a number is beyond all reason') }
         elsif ($text =~ /\Gtrue\b/gc)   { $v = $TRUE }
         elsif ($text =~ /\Gfalse\b/gc)  { $v = $FALSE }
         elsif ($text =~ /\Gnull\b/gc)   { $v = undef }
@@ -124,12 +178,46 @@ sub parse ($class, $text, %opt) {
     $space->();
     pos($text) == length $text or $fail->('there is something after the value');
     undef $value;       # (it refers to itself)
-    return bless { text => $src, data => $data, root => $root, exact => $exact }, $class;
+    return { text => $src, data => $data, root => $root, exact => $exact, json5 => $five, %first };
+}
+
+# Some text of a JSON5 document without its comments (to be written again where no comment belongs).
+sub uncommented ($text) { $text =~ s/[ \t]*(?:$COMMENT)//gr }      # (and without the space that set a comment off from what it followed)
+
+# The name of a property written without quotes, in JSON5, at the place the
+# text has been read to: what ECMAScript 5 calls an IdentifierName.  Nothing,
+# if there is none there.
+sub name {
+    my $at = pos $_[0];
+    $_[0] =~ /\G((?:[A-Za-z0-9_\$]|\\u[0-9a-fA-F]{4}|$WIDE)+)/gc or return undef;
+    my $name = $1;
+    utf8::decode($name);
+    $name =~ s/\\u([0-9a-fA-F]{4})/chr hex $1/ge;
+    return $name if $name =~ /\A[\$_\p{L}\p{Nl}][\$_\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}\x{200C}\x{200D}]*\z/;
+    pos($_[0]) = $at;       # (what is wrong is said of where it began)
+    return undef;
+}
+
+# The number that a token of JSON5 says (and so any that a token of JSON
+# does): as Perl reads numbers, or $exact with every digit.  Nothing, if it
+# says none that can be held.
+sub number ($token, $exact) {
+    my ($sign, $rest) = $token =~ /\A([-+]?)(.*)\z/s;
+    return $sign eq '-' ? -9**9**9 : 9**9**9 if $rest eq 'Infinity';
+    return -sin(9**9**9)                     if $rest eq 'NaN';
+    if ($rest =~ /\A0[xX]([0-9a-fA-F]+)\z/) {
+        my $digits = $1 =~ s/\A0+(?=.)//r;
+        require Math::BigInt;
+        $rest = length $digits <= 15 ? hex $digits : Math::BigInt->from_hex($digits)->bstr;
+    }
+    $rest =~ s/\A\./0./;
+    $sign = '' if $sign eq '+';
+    return $exact ? JGraft::Number::read("$sign$rest") : JGraft::Number::native("$sign$rest");
 }
 
 # What is between the quotes of a string, as characters: or nothing, if an
-# escape in it is not one that JSON has.
-sub unquote ($body) {
+# escape in it is not one that JSON has (or, if it is $five, that JSON5 has).
+sub unquote ($body, $five = 0) {
     if ($body !~ /\\/) {        # the usual case: no escapes, and (as is then checked) good UTF-8
         my $s = $body;
         return $s if utf8::decode($s) && $s !~ /[^\x{0}-\x{D7FF}\x{E000}-\x{10FFFF}]/;
@@ -144,6 +232,12 @@ sub unquote ($body) {
         }
         elsif ($body =~ /\G\\u([0-9a-fA-F]{4})/gc)  { $s .= chr hex $1 }
         elsif ($body =~ /\G\\(["\\\/bfnrt])/gc)     { $s .= $ESCAPE{$1} }
+        elsif ($five && $body =~ /\G\\(?:\r\n|[\n\r]|\xE2\x80[\xA8\xA9])/gc) { }       # a line that goes on: nothing
+        elsif ($five && $body =~ /\G\\x([0-9a-fA-F]{2})/gc) { $s .= chr hex $1 }
+        elsif ($five && $body =~ /\G\\v/gc)         { $s .= "\x0B" }
+        elsif ($five && $body =~ /\G\\0(?![0-9])/gc) { $s .= "\0" }
+        elsif ($five && $body =~ /\G\\(?=[0-9xu])/gc) { return undef }
+        elsif ($five && $body =~ /\G\\((?:$WIDE)|[\x00-\x7F])/gc) { my $char = $1; utf8::decode($char); $s .= $char }    # any other: itself
         elsif ($body =~ /\G\\/gc)                   { return undef }
         else { $body =~ /\G(.)/gcs; $s .= chr STRAY + ord $1 }      # a byte (0x80 or more) that is not UTF-8
     }
@@ -153,21 +247,76 @@ sub unquote ($body) {
 #---------------------------------------------------------------------------
 # Writing
 
-# The text of the document with $value as its data.
-sub write ($doc, $value = $doc->{data}) {
+# The text of the document with $value as its data: as JSON if the document
+# was JSON, and as JSON5 if it was that, unless `json5` says which.
+#
+# A JSON5 document written as JSON is written anew throughout, for nothing
+# of it can be taken as it stands: it keeps its layout, and loses its
+# comments and whatever JSON has no way to write.
+sub write ($doc, $value = $doc->{data}, %opt) {
+    my @unknown = grep { $_ ne 'json5' } sort keys %opt;
+    die "JGraft::JSON->write: unknown option @unknown\n" if @unknown;
     my ($start, $end, $text) = @{ $doc->{root} };
     local $EXACT = $doc->{exact};
-    # How what is new is to be laid out: as what is around it is (see `style`).  Until some array or object
-    # of the text says how, all that is known is how the text writes the colon after a name.
-    local $COLON = $$text =~ /"(?:[^"\\]|\\.)*"(\s*:\s*)/ ? $1 : ':';
+    local $FIVE  = $opt{json5} // $doc->{json5} ? 1 : 0;
+    local $PLAIN = $doc->{json5} && !$FIVE ? 1 : 0;
+    # How what is new is to be written: as the text writes such things, as far as that is known.  The first name
+    # in the text and the first string say how those are quoted and what follows a name; and some array or
+    # object of the text will say how one is laid out (see `style`).
+    local $COLON = spacing($doc->{colon} // ':');
+    local ($QUOTE, $NAMES) = $FIVE ? ($doc->{quote} // '"', $doc->{names} // '"') : ('"', '"');
     local $STYLE = outermost($doc);
     local $WATCH = watch();
-    return substr($$text, 0, $start) . emit($value, $doc->{root}) . substr($$text, $end);
+    my ($before, $after) = (substr($$text, 0, $start), substr($$text, $end));
+    ($before, $after) = map { spacing($_) } $before, $after if $PLAIN;
+    return $before . emit($value, $doc->{root}) . $after;
 }
 
 # The text of any value, on its own: what was read from a text as it was,
-# and the rest as plainly as JSON can be written.
-sub encode ($class, $value) { local $WATCH = watch(); emit($value, undef) }
+# and the rest as plainly as JSON can be written; or with `json5`, as JSON5,
+# which differs for what JSON cannot say (an infinity is Infinity, not null).
+sub encode ($class, $value, %opt) {
+    my @unknown = grep { $_ ne 'json5' } sort keys %opt;
+    die "JGraft::JSON->encode: unknown option @unknown\n" if @unknown;
+    local ($FIVE, $PLAIN, $QUOTE, $NAMES) = ($opt{json5} ? 1 : 0, 0, '"', '"');
+    local $WATCH = watch();
+    return emit($value, undef);
+}
+
+# Some of the text between things, as it may be written again between other
+# things: without the comments, which belong where they are; and in JSON,
+# with a space for whatever JSON5 counts as white space and JSON does not.
+sub spacing ($text) {
+    $text = uncommented($text);
+    $text =~ s/(?![ \t\n\r])$BLANK/ /g unless $FIVE;
+    return $text;
+}
+
+# What a token of a text says: (1, the value), or nothing if it says none.
+# It is read as JSON5, which reads all that JSON does.
+sub said ($token, $exact) {
+    return (1, $TRUE)  if $token eq 'true';
+    return (1, $FALSE) if $token eq 'false';
+    return (1, undef)  if $token eq 'null';
+    if ($token =~ /\A["']/) {
+        my $s = unquote(substr($token, 1, -1), 1);
+        return defined $s ? (1, $s) : ();
+    }
+    return () unless $token =~ /\A$NUMBER5\z/;
+    my $n = number($token, $exact);
+    return defined $n ? (1, $n) : ();
+}
+
+# Is a token one that JSON has, and so one that can stand in either kind of text?
+sub in_json ($token) { $token =~ /\A(?:true|false|null|$NUMBER)\z/ || $token =~ /\A"/ && defined unquote(substr($token, 1, -1), 0) }
+
+# The name of a property as it is to be written: as $how says ('"', "'", or
+# 'bare', which is without quotes if the name can do without them).
+sub named ($k, $how) {
+    return $k if $how eq 'bare' && $k =~ /\A[A-Za-z_\$][A-Za-z0-9_\$]*\z/;
+    my $quote = $how eq 'bare' ? $QUOTE : $how;
+    return $quote . quoted($k, $quote) . $quote;
+}
 
 # A value as text.  $hint is the token of the place it is in, if there is
 # one: where in some text the value there was written.
@@ -176,23 +325,27 @@ sub emit ($v, $hint) {
     if ($kind eq 'ARRAY' || $kind eq 'HASH') {
         my $sheet = JGraft::Source::sheet($v) // {};
         my $rec   = $sheet->{rec};
-        return substr ${ $rec->{text} }, $rec->{start}, $rec->{end} - $rec->{start} if $rec;       # just as it was read
+        return substr ${ $rec->{text} }, $rec->{start}, $rec->{end} - $rec->{start} if $rec && !$PLAIN;        # just as it was read
         my $w = $WATCH;
         if (++$w->[0] >= $w->[1] || $w->[2]) { inside($w, $v) and die "JGraft::JSON: data that contains itself cannot be written\n" }
-        my $out = $kind eq 'ARRAY' ? array($v, @$sheet{qw(from tok)}) : object($v, @$sheet{qw(from tok)});
+        my $out = $PLAIN               ? anew($v, JGraft::Source::tokens($v))
+                : $kind eq 'ARRAY'     ? array($v, @$sheet{qw(from tok)})
+                :                        object($v, @$sheet{qw(from tok)});
         left($w) if $w->[0]-- == $w->[3];
         return $out;
     }
     return emit(stand_in($v), $hint) if $kind && type_of($v) == T_OTHER;
     if ($hint) {
         my $token = substr ${ $hint->[2] }, $hint->[0], $hint->[1] - $hint->[0];
-        if ($token !~ /^[\[{]/) {
-            # (a number is read as it was when the text was: with every digit, if that is how it is kept)
-            my $was = $token =~ /^"/ ? unquote(substr $token, 1, -1) : $token eq 'true' ? $TRUE : $token eq 'false' ? $FALSE
-                    : $token eq 'null' ? undef : $EXACT || ref $v ? JGraft::Number::read($token) : JGraft::Number::native($token);
+        # (a number is read as it was when the text was: with every digit, if that is how it is kept)
+        if ($token !~ /^[\[{]/ and my ($read, $was) = said($token, $EXACT || ref $v)) {
+            my $usable = $FIVE || in_json($token);          # (a token of JSON5 alone has no place in JSON)
             return $token                                                                   # it says what the value still is
-                if type_of($was) == type_of($v) && (is_num($v) ? JGraft::Number::same($v, $was) : match_lit($v, $was, 1));
-            return '"' . patched($token, $was, $v) . '"' if is_str($v) && is_str($was);
+                if $usable && type_of($was) == type_of($v) && (is_num($v) ? same_number($v, $was) : match_lit($v, $was, 1));
+            if (is_str($v) && is_str($was)) {
+                return '"' . patched($token, $was, $v) . '"' if in_json($token);
+                return "'" . quoted($v, "'") . "'" if $FIVE && $token =~ /\A'/;       # (in the quotes it had)
+            }
         }
     }
     return scalar_text($v);
@@ -227,11 +380,15 @@ sub scalar_text ($v) {
     my $t = type_of($v);
     return 'null' if $t == T_NULL;
     return $v ? 'true' : 'false' if $t == T_BOOL;
-    return '"' . quoted($t == T_STR ? $v : $v->can('str') ? $v->str : "$v") . '"' if $t != T_NUM;
-    return ref($v) eq 'JGraft::Number' || !$v->is_nan && !$v->is_inf ? JGraft::Number::str($v) : 'null' if ref $v;
+    return $QUOTE . quoted($t == T_STR ? $v : $v->can('str') ? $v->str : "$v", $QUOTE) . $QUOTE if $t != T_NUM;
+    if (ref $v) {
+        return JGraft::Number::str($v) if ref $v eq 'JGraft::Number' || !$v->is_nan && !$v->is_inf;
+        $v = $v->numify;
+    }
     return '-0' if JGraft::Number::negative_zero($v);           # (which Perl would write as 0)
+    # An infinity, or what is not a number: JSON has no way to write these, and by custom writes null.  JSON5 has.
+    return !$FIVE ? 'null' : $v != $v ? 'NaN' : $v > 0 ? 'Infinity' : '-Infinity' unless $v - $v == 0;
     return "$v" if "$v" =~ /\A-?[0-9]+\z/;
-    $v - $v == 0 or return 'null';                              # JSON has no way to write these
     for my $digits (15, 16) {                                   # as few as give the same number back
         my $text = sprintf '%.*g', $digits, $v;
         return $text if $text == $v;
@@ -239,15 +396,22 @@ sub scalar_text ($v) {
     return sprintf '%.17g', $v;
 }
 
-# The characters of a string as they are written between quotes.
-sub quoted ($s) {
+# The characters of a string as they are written between quotes: double
+# ones, or in JSON5 perhaps single, where it is the single quote that has to
+# be escaped and the double that need not be.
+sub quoted ($s, $quote = '"') {
+    my $special = $quote eq '"' ? qr/[\x{D800}-\x{DFFF}"\\\x00-\x1F]|[^\x{0}-\x{10FFFF}]/ : qr/[\x{D800}-\x{DFFF}'\\\x00-\x1F]|[^\x{0}-\x{10FFFF}]/;
     return join '', map {
         my $part = $_;
-        length $part == 1 && $part =~ /[\x{D800}-\x{DFFF}"\\\x00-\x1F]|[^\x{0}-\x{10FFFF}]/
-            ? (ord $part > 0x10FFFF ? stray($part) : $ESCAPED{$part} // sprintf '\\u%04x', ord $part)
+        length $part == 1 && $part =~ $special
+            ? (ord $part > 0x10FFFF ? stray($part) : $part eq "'" ? "\\'" : $ESCAPED{$part} // sprintf '\\u%04x', ord $part)
             : do { utf8::encode($part); $part };
-    } grep { length } split /([\x{D800}-\x{DFFF}"\\\x00-\x1F]|[^\x{0}-\x{10FFFF}])/, $s;
+    } grep { length } split /($special)/, $s;
 }
+
+# Are two numbers the same, to the place and the sign of a zero?  (As for
+# JGraft::Number::same, but that what is not a number at all is the same as itself.)
+sub same_number ($a, $b) { !ref $a && !ref $b && $a != $a && $b != $b ? 1 : JGraft::Number::same($a, $b) }
 
 # The byte that a character past the end of Unicode stands for.
 sub stray ($char) {
@@ -266,8 +430,8 @@ sub array ($v, $from, $tok) {
     my $cut  = sub ($a, $b) { substr $$text, $a, $b - $a };
     my %was; @was{ map { refaddr $_ } @$items } = 0 .. $#$items;       # which element of the old array a token is
     my $gap  = sub ($j) { $cut->($items->[$j][1], $items->[ $j + 1 ][0]) };      # what was between two elements
-    my $join = @$items > 1 ? $gap->($#$items - 1) : ',' . substr $cut->($from->{start}, $items->[0][0]), 1;    # for what is new
-    local $STYLE = style($from, $items->[0][0], $items->[-1][1], undef, $join);
+    my $join = spacing(@$items > 1 ? $gap->($#$items - 1) : ',' . substr $cut->($from->{start}, $items->[0][0]), 1);    # for what is new
+    local $STYLE = style($from, $items->[0][0], $items->[-1][1], undef, $join, undef);
     my ($out, $before) = ($cut->($from->{start}, $items->[0][0]));
     for my $i (0 .. $#$v) {
         my $hint = $tok && $tok->[$i];
@@ -284,10 +448,12 @@ sub array ($v, $from, $tok) {
 sub object ($v, $from, $tok) {
     my @order   = JGraft::Ordered::is($v) ? keys %$v : sort keys %$v;
     my $members = $from && $from->{members};
-    my $pair    = sub ($k, $colon = ':') { '"' . quoted($k) . '"' . $colon . emit($v->{$k}, $tok && $tok->{$k}) };
     return anew($v, $tok) unless $members && @$members && @order;
     my $text = $from->{text};
     my $cut  = sub ($a, $b) { substr $$text, $a, $b - $a };
+    # (a new name is written as the first name here is: in its quotes, or in JSON5 perhaps without)
+    my $names = !$FIVE ? '"' : $cut->($members->[0][1], $members->[0][1] + 1) =~ /(["'])/ ? $1 : 'bare';
+    my $pair  = sub ($k, $colon) { named($k, $names) . $colon . emit($v->{$k}, $tok && $tok->{$k}) };
     my (%first, %last);         # the members that had each key: one, unless the text gave a key twice
     for my $m (0 .. $#$members) {
         my $k = $members->[$m][0];
@@ -302,10 +468,10 @@ sub object ($v, $from, $tok) {
         $stays{$k} = 1;
         $reached = $first{$k};
     }
-    my $colon = $cut->($members->[0][2], $members->[0][3][0]);
+    my $colon = spacing($cut->($members->[0][2], $members->[0][3][0]));
     my $gap   = sub ($m) { $cut->($members->[$m][3][1], $members->[ $m + 1 ][1]) };      # what was between two members
-    my $join  = @$members > 1 ? $gap->($#$members - 1) : ',' . substr $cut->($from->{start}, $members->[0][1]), 1;
-    local $STYLE = style($from, $members->[0][1], $members->[-1][3][1], $colon, $join);
+    my $join  = spacing(@$members > 1 ? $gap->($#$members - 1) : ',' . substr $cut->($from->{start}, $members->[0][1]), 1);
+    local $STYLE = style($from, $members->[0][1], $members->[-1][3][1], $colon, $join, $names);
     # a member that was read, with the value its key has now
     my $kept  = sub ($m) {
         my $k = $members->[$m][0];
@@ -351,15 +517,18 @@ sub object ($v, $from, $tok) {
 # they are; the step is as much as they are further in than it is.
 # Otherwise a new one is written on one line, with what this one has between
 # its elements and inside its brackets.
-sub style ($from, $first, $last, $colon, $join) {
+sub style ($from, $first, $last, $colon, $join, $names) {
     my $text = $from->{text};
-    my $lead = substr $$text, $from->{start} + 1, $first - $from->{start} - 1;
-    my $tail = substr $$text, $last, $from->{end} - 1 - $last;
-    $colon //= $STYLE ? $STYLE->{colon} : $COLON;
-    return { pad => $lead, join => $join, colon => $colon } unless $lead =~ /(\r?\n)([ \t]*)\z/;
+    my $lead = spacing(substr $$text, $from->{start} + 1, $first - $from->{start} - 1);
+    my $tail = spacing(substr $$text, $last, $from->{end} - 1 - $last);
+    # What does not show here is as it was further out: the colon after a name and how a name is written, of
+    # which an array says nothing.  And in JSON5, if this one has a comma after its last element, so has a new one.
+    my %also = (colon => spacing($colon // ($STYLE ? $STYLE->{colon} : $COLON)), names => $names // ($STYLE ? $STYLE->{names} : $NAMES),
+        last => $FIVE && $tail =~ /\A\s*,/ ? ',' : '');
+    return { pad => $lead, join => spacing($join), %also } unless $lead =~ /(\r?\n)([ \t]*)\z/;
     my ($line, $inner) = ($1, $2);
     my $own = $tail =~ /\n([ \t]*)\z/ ? $1 : '';
-    return { line => $line, at => $inner, step => index($inner, $own) == 0 ? substr($inner, length $own) : $inner, colon => $colon };
+    return { line => $line, at => $inner, step => index($inner, $own) == 0 ? substr($inner, length $own) : $inner, %also };
 }
 
 # How the whole of a text was laid out, by which to write a whole new one in
@@ -380,7 +549,8 @@ sub outermost ($doc) {
         ($first, $last, $colon) = ($members->[0][1], $members->[-1][3][1], $cut->($members->[0][2], $members->[0][3][0]));
         @between = ($members->[-2][3][1], $members->[-1][1]) if @$members > 1;
     }
-    my $style = style($record, $first, $last, $colon, @between ? $cut->(@between) : ',' . $cut->($record->{start} + 1, $first));
+    my $names = !$record->{members} || !$FIVE ? undef : $cut->($first, $first + 1) =~ /(["'])/ ? $1 : 'bare';
+    my $style = style($record, $first, $last, $colon, @between ? $cut->(@between) : ',' . $cut->($record->{start} + 1, $first), $names);
     # (it says how what is inside the text's array or object is laid out: that array or object is a step further out)
     $style->{at} = substr $style->{at}, 0, length($style->{at}) - length $style->{step} if defined $style->{line};
     return $style;
@@ -396,13 +566,13 @@ sub anew ($v, $tok) {
     my $s = $STYLE;
     local $STYLE = $s && defined $s->{line} ? { %$s, at => $s->{at} . $s->{step} } : $s;       # what is inside it is a step further in
     my @part = map {
-        my $name = $array ? '' : '"' . quoted($_) . '"' . ($s ? $s->{colon} : ':');
+        my $name = $array ? '' : named($_, $s ? $s->{names} : $NAMES) . ($s ? $s->{colon} : ':');
         $name . emit($array ? $v->[$_] : $v->{$_}, $tok && ($array ? $tok->[$_] : $tok->{$_}));
     } @keys;
     return $open . join(',', @part) . $close unless $s;
     return $open . $s->{pad} . join($s->{join}, @part) . $s->{pad} . $close unless defined $s->{line};
     my $in = $s->{line} . $s->{at} . $s->{step};
-    return $open . join(',', map { $in . $_ } @part) . $s->{line} . $s->{at} . $close;
+    return $open . join(',', map { $in . $_ } @part) . $s->{last} . $s->{line} . $s->{at} . $close;
 }
 
 # What to write between two things that now stand side by side, the $m-th
@@ -410,12 +580,14 @@ sub anew ($v, $tok) {
 # Neighbours get what was between them.  Otherwise it is what followed the
 # first of them or what came before the second: the one that ended a line,
 # if only one did, so that lines begin and end where they did.
+# What was between two that are no longer side by side is written without
+# any comment it held: a comment belongs with what it stood beside.
 sub between ($gap, $last, $m, $n, $join) {
     return $gap->($m) if defined $m && defined $n && $n == $m + 1;
-    my $after  = defined $m && $m < $last ? $gap->($m)     : undef;
-    my $before = defined $n && $n > 0     ? $gap->($n - 1) : undef;
+    my $after  = defined $m && $m < $last ? spacing($gap->($m))     : undef;
+    my $before = defined $n && $n > 0     ? spacing($gap->($n - 1)) : undef;
     return $before if defined $before && (!defined $after || $before =~ /\n/ && $after !~ /\n/);
-    return $after // (defined $m && $m > 0 ? $gap->($m - 1) : $join);
+    return $after // (defined $m && $m > 0 ? spacing($gap->($m - 1)) : $join);
 }
 
 # A string that has changed, as text between quotes: the parts of it that
