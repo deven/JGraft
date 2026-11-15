@@ -9,7 +9,7 @@ package JGraft::Exec;
 # structure, and RAISE data is a snapshot.
 
 use v5.36;
-use builtin qw(refaddr);
+use builtin qw(refaddr blessed);
 no warnings qw(experimental::builtin recursion);
 use JGraft::Util;
 use JGraft::Error;
@@ -36,7 +36,7 @@ my $ROUND = bless [], 'JGraft::Exec::Round';
 # places is larger than the value; that is counted.
 sub apart ($x, $v) {
     my $kind = ref $v;
-    return $v unless $kind eq 'ARRAY' || $kind eq 'HASH';
+    return $kind ? $x->another($v) : $v unless $kind eq 'ARRAY' || $kind eq 'HASH';
     my $w = $x->{watch};
     if (++$w->[0] >= $w->[1] || $w->[2]) { inside($w, $v) and die $ROUND }
     $x->charge(1, sizeof($v));
@@ -68,9 +68,31 @@ sub replica ($x, $v) {
     return $x->twin($v, {});
 }
 
+# A copy of something in the data that is neither an array nor an object of
+# JSON: a Perl object, or a reference of some other kind.
+#
+# What cannot be changed is not copied, there being nothing a caller could do
+# to it: true and false, a date, a number of the engine's own, a subroutine,
+# a compiled regex.  Anything else is copied as it would itself be copied: by
+# its own `clone` method if it has one, and otherwise by Storable, which
+# copies whatever is made of data alone.  What neither can copy cannot be in
+# an output that is to share nothing, and the run fails saying so.
+sub another ($x, $v) {
+    my $kind = ref $v;
+    my $type = type_of($v);
+    return $v->copy if $kind eq 'Math::BigInt' || $kind eq 'Math::BigFloat';       # (which their methods change in place)
+    return $v if $type != T_OTHER || $kind eq 'CODE' || $kind eq 'Regexp';
+    $x->charge(1, 16);
+    my $class = blessed $v;
+    my $copy  = defined $class && $v->can('clone') ? eval { $v->clone } : undef;
+    $copy //= do { require Storable; eval { Storable::dclone($v) } };
+    return $copy if ref $copy;
+    $x->fail(INVALID_TARGET => (defined $class ? "an object of $class" : 'a reference to a ' . lc $kind) . ' cannot be cloned');
+}
+
 sub twin ($x, $v, $made) {
     my $kind = ref $v;
-    return $v unless $kind eq 'ARRAY' || $kind eq 'HASH';
+    return $kind ? $made->{ refaddr $v } //= $x->another($v) : $v unless $kind eq 'ARRAY' || $kind eq 'HASH';
     return $made->{ refaddr $v } if $made->{ refaddr $v };
     $x->charge(1, sizeof($v));
     my $copy = $made->{ refaddr $v } = $kind eq 'ARRAY' ? [] : JGraft::Ordered::is($v) ? JGraft::Ordered::hash() : {};

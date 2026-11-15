@@ -1163,6 +1163,15 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   written as the string; and whatever is left is refused in words that say
   what it was (`JSON::stand_in`). Still as it was: an infinity or a
   not-a-number is written `null`, as JavaScript writes it.
+- **`clone` copies what is not JSON as well** (`Exec::another`). It had
+  passed an object through uncopied, which made "shares nothing" untrue of
+  it. An object is copied by its own `clone` method, or failing that by
+  `Storable::dclone`, as a reference to a scalar is; a `Math::BigInt` or
+  `Math::BigFloat` by `copy`, since their methods change them in place.
+  What cannot be changed is left: booleans (each of which is one object),
+  dates and the engine's numbers, subroutines, compiled regexes. An object
+  that cannot be copied fails the run (`INVALID_TARGET`) and is not shared
+  instead; what the run left is then handed back uncopied.
 - **Data that holds itself** is not JSON, but a caller can hand it over, and
   a walk through all of a value would not end: the copy for `clone`, the
   writing of JSON, the writing out of a removed value in an undo graft, the

@@ -91,7 +91,10 @@ sub run ($self, $input, %opt) {
     if ($opt{clone}) {
         $done = eval { $given = $x->replica($left); 1 } or $error = $@ if $done;
         die $error unless $done || blessed $error && $error->isa('JGraft::Error');      # (something of the caller's own, as above)
-        ($given) = $x->aside(sub { $x->replica($left) }) if !$done;
+        if (!$done) {       # (and if even that cannot be copied, it is handed back as it is)
+            my @copy = $x->aside(sub { $x->replica($left) });
+            $given = $copy[0] if @copy;
+        }
     }
     return bless { ok => 1, output => $given, logs => $x->{logs}, input => $input, left => $left, origin => $x->{origin} }, 'JGraft::Result' if $done;
     # The error takes with it what the run left behind, for a caller of
@@ -563,6 +566,15 @@ back as it was read wherever the caller has not changed it.
 Data that holds itself (which JSON cannot say, but Perl data can be) is
 copied with the shape it has: the copy holds itself in the same places, and
 holds once what the data holds in several.
+
+Whatever else is in the data is copied as it would itself be copied: an
+object by its own C<clone> method if it has one, and otherwise, like a
+reference to a scalar, by C<Storable::dclone>, which copies anything made of
+data alone.  What cannot be changed is left as it is: C<true> and C<false>,
+a subroutine, a compiled regex.  An object that neither way can copy (one
+that holds a subroutine or a file handle, say) cannot be in an output that
+shares nothing, and the run fails with C<INVALID_TARGET>, handing back what
+it left as it is.
 
 Such a run is itself handed the graft's own arrays and objects, as with
 C<share>: all that it leaves is copied in any case, so nothing of the graft

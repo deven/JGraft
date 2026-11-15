@@ -161,6 +161,30 @@ subtest 'what a graft supplies is copied for each run, unless it is shared' => s
     is $ends->(sub { graft([ COPY => { d => [ CASTDATE => '2024-01-01' ], c => [ NODE => 'self' ] }, 'both' ])->run($itself->())->error }) =~ s/ in COPY.*//r, 'INVALID_TARGET: the data contains itself, and a date',
         'and a value that holds itself cannot be searched for dates to hand out';
 
+    # What is in the data and is not JSON is copied too, as it would itself be copied; and what cannot be changed is left.
+    {
+        package Local::Card   { sub new { bless { n => $_[1], tags => [ 1, 2 ] }, $_[0] } }
+        package Local::Handle { my $made = 0; sub new { bless { id => ++$made }, $_[0] } sub clone { my $c = Local::Handle->new; $c->{of} = $_[0]{id}; $c } }
+        package Local::Hook   { sub new { bless { cb => sub { 1 } }, $_[0] } }
+    }
+    require Math::BigInt;
+    my $odd = { card => Local::Card->new(5), handle => Local::Handle->new, big => Math::BigInt->new(2)->bpow(70), code => sub { 1 }, re => qr/x/, text => \'t', yes => $JGraft::Util::TRUE };
+    my $dup = graft()->apply($odd, clone => 1);
+    my $at  = sub ($v) { builtin::refaddr($v) };
+    ok ref $dup->{card} eq 'Local::Card' && $dup->{card} != $odd->{card} && $dup->{card}{tags} != $odd->{card}{tags} && $dup->{card}{n} == 5, 'clone copies an object made of data, to its depths';
+    ok $dup->{handle} != $odd->{handle} && $dup->{handle}{of} == $odd->{handle}{id}, '... and one that has a clone method, by that method';
+    ok $at->($dup->{big}) != $at->($odd->{big}) && $dup->{big} == $odd->{big} && ref $dup->{big} eq 'Math::BigInt', '... and a number of Math::BigInt, which can be changed where it is';
+    ok $dup->{text} != $odd->{text} && ${ $dup->{text} } eq 't', '... and a reference to a scalar';
+    ok $dup->{code} == $odd->{code} && $dup->{re} == $odd->{re} && $at->($dup->{yes}) == $at->($odd->{yes}), 'what cannot be changed is not copied: a subroutine, a compiled regex, true';
+    my $hooked = graft([ COPY => 1, 'n' ])->run({ hook => Local::Hook->new, list => [1] }, clone => 1);
+    is $hooked->ok ? 'ok' : $hooked->error->code . ': ' . $hooked->error->message, 'INVALID_TARGET: an object of Local::Hook cannot be cloned', 'an object that cannot be copied is not shared instead: the run fails';
+    is join(' ', sort keys %{ $hooked->partial }), 'hook list n', '... and hands back what it left, as it is';
+    ok graft([ COPY => 1, 'n' ])->run({ hook => Local::Hook->new })->ok, '... which a run without clone has no quarrel with';
+    my $both = { obj => Local::Card->new(1) };
+    $both->{self} = $both;
+    my $round = graft()->apply($both, clone => 1);
+    ok $round->{self} == $round && $round->{obj} != $both->{obj}, 'an object in data that holds itself is copied with it';
+
     # A run with clone has no need of the copies that a run is otherwise handed, and makes none.
     my $counted = JGraft->new([ JGRAFT => {}, [ COPY => [ LENGTH => [ MAP => [ [ 1, 2, 3, 4, 5, 6, 7, 8 ] ], ['NODE'] ] ], ['NODE'] ] ]);
     is $counted->run([ 1 .. 50 ], limits => { mem => 3000 })->error->code, 'RESOURCE_LIMIT', 'fifty copies of a literal are memory';
