@@ -41,6 +41,9 @@ my %ESCAPED = ('"' => '\\"', '\\' => '\\\\', "\b" => '\\b', "\f" => '\\f', "\n" 
 sub data ($doc) { $doc->{data} }
 sub text ($doc) { ${ $doc->{text} } }
 
+# How many names in the text had to be put in quotes for it to be JSON5 (see `name`): none, for a text that was right.
+sub repaired ($doc) { $doc->{repaired} // 0 }
+
 #---------------------------------------------------------------------------
 # Reading
 
@@ -119,6 +122,7 @@ sub reading ($text, $opt, $five) {
     # (how a JSON5 text writes its first name, the colon after it, and its first string: for what is written new.
     # Of a JSON text all that is not already known is the colon, which is looked for when it is wanted.)
     my ($names, $colon, $quote) = $five ? () : ('"', undef, '"');
+    my @mend;       # the names that were written without quotes and cannot be: [ from, to, the name ]
     my $value;
     $value = sub {
         $space->();
@@ -139,7 +143,12 @@ sub reading ($text, $opt, $five) {
                 my $key = substr($text, $at, 1) eq '"' ? $string->()
                         : !$five                         ? $fail->('expected the name of a property')
                         : substr($text, $at, 1) eq "'"   ? $string->()
-                        :                                  name($text) // $fail->('expected the name of a property');
+                        :                                  do {
+                            my ($name, $well) = name($text);
+                            $fail->('expected the name of a property') unless defined $name;
+                            push @mend, [ $at, pos $text, $name ] unless $well;
+                            $name;
+                        };
                 my $to  = pos $text;
                 $space->();
                 $text =~ /\G:/gc or $fail->('expected :');
@@ -190,7 +199,16 @@ sub reading ($text, $opt, $five) {
     $space->();
     pos($text) == length $text or $fail->('there is something after the value');
     undef $value;       # (it refers to itself)
-    return { text => $src, data => $data, root => $root, exact => $exact, json5 => $five, names => $names, colon => $colon, quote => $quote };
+    return { text => $src, data => $data, root => $root, exact => $exact, json5 => $five, names => $names, colon => $colon, quote => $quote } unless @mend;
+    # The text is not JSON5 as it stands, for the names that it cannot write so.  It is held as it should have
+    # been written, with those in quotes (the quotes that it puts its names in, or failing that its strings),
+    # and so that is how it is written back.  The mended text is read over again, which finds everything in it
+    # where it now is.
+    my $in = ($names // '') =~ /\A["']\z/ ? $names : $quote // '"';
+    substr($text, $_->[0], $_->[1] - $_->[0]) = $in . quoted($_->[2], $in) . $in for reverse @mend;
+    my $doc = reading($text, { %$opt, max_size => undef }, 1);
+    @$doc{qw(names repaired)} = ($names, scalar @mend);
+    return $doc;
 }
 
 # Some text of a JSON5 document without its comments (to be written again where no comment belongs).
@@ -198,18 +216,32 @@ sub reading ($text, $opt, $five) {
 sub uncommented ($text) { $text =~ s/(?<=\n)[ \t]*(?:$COMMENT)[ \t]*(?:\r\n|[\n\r])//gr =~ s/[ \t]*(?:$COMMENT)//gr }
 
 # The name of a property written without quotes, in JSON5, at the place the
-# text has been read to: what ECMAScript 5 calls an IdentifierName.  Nothing,
-# if there is none there.
+# text has been read to, and whether it is one that may be so written: what
+# ECMAScript 5 calls an IdentifierName.  Nothing, if there is no name there.
+#
+# A name that may not be written so is read all the same, if it is plain
+# what it says: one that has in it a character from beyond ASCII that the
+# specification does not let into a name (a sign, a picture, one for private
+# use).  The text is wrong, and whoever reads it is told so that the name can
+# be put in quotes (see `reading`).  Within ASCII there is no such latitude:
+# those characters are the ones that a text is put together with.
 sub name {
     my $at = pos $_[0];
-    $_[0] =~ /\G((?:[A-Za-z0-9_\$]|\\u[0-9a-fA-F]{4}|$WIDE)+)/gc or return undef;
+    # (white space that is not ASCII ends a name, as any does)
+    $_[0] =~ /\G((?:[A-Za-z0-9_\$]|\\u[0-9a-fA-F]{4}|(?!$BLANK)$WIDE)+)/gc or return;
     my $name = $1;
     utf8::decode($name);
     $name =~ s/\\u([0-9a-fA-F]{4})/chr hex $1/ge;
-    # (A character that this Perl does not know may be a letter in a Unicode newer than the one it has, and is let pass.)
-    return $name if $name =~ /\A[\$_\p{L}\p{Nl}\p{Cn}][\$_\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}\p{Cn}\x{200C}\x{200D}]*\z/;
+    # The specification's own terms: a letter (Lu, Ll, Lt, Lm, Lo) or a letter number (Nl), $ or _ ; and after
+    # the first, also a mark (Mn, Mc), a digit (Nd), a connector (Pc), or one of the two joiners.  Which
+    # characters those are depends on the Unicode in force, and this Perl has the one it has.  A code point
+    # that it knows nothing of may be a letter in a newer one, as the specification would then have it, and is
+    # let pass; but not one that Unicode has set aside never to be a character.
+    my $unknown = qr/(?!\p{Noncharacter_Code_Point})\p{Cn}/;
+    return ($name, 1) if $name =~ /\A(?:[\$_\p{L}\p{Nl}]|$unknown)(?:[\$_\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}\x{200C}\x{200D}]|$unknown)*\z/;
+    return ($name, 0) if $name =~ /\A(?:[A-Za-z_\$]|[^\x00-\x7F])(?:[A-Za-z0-9_\$]|[^\x00-\x7F])*\z/ && $name !~ /[\p{Zs}\x{FEFF}\x{2028}\x{2029}]/;
     pos($_[0]) = $at;       # (what is wrong is said of where it began)
-    return undef;
+    return;
 }
 
 # The number that a token of JSON5 says (and so any that a token of JSON

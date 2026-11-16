@@ -1920,11 +1920,35 @@ b']),                                                                           
     for ([ '[,]' => 'expected a value at byte 1' ], [ '[1,,]' => 'expected a value at byte 3' ], [ '{a b}' => 'expected : at byte 3' ], [ '[012]' => 'expected a value at byte 1' ],
          [ q(["\1"]) => 'a string has an escape that means nothing at byte 5' ], [ '[0x]' => 'expected a value at byte 1' ], [ '{1a: 1}' => 'expected the name of a property at byte 1' ],
          [ "['a\nb']" => 'a string has a line break that is not escaped at byte 1' ], [ "['a\tb']" => 'read' ], [ '/* [1]' => 'a comment does not end at byte 0' ],
-         [ '[1] 2' => 'there is something after the value at byte 4' ], [ "{\x{A7DD}: 1}" => 'read' ]) {
+         [ '[1] 2' => 'there is something after the value at byte 4' ], [ "{\x{A7DD}: 1}" => 'read' ], [ "{a\x{0378}: 1}" => 'read' ],
+         [ sprintf('{a%su0020b: 1}', chr 92) => 'expected the name of a property at byte 1' ], [ sprintf('{a%su00A0b: 1}', chr 92) => 'expected the name of a property at byte 1' ],
+         [ "{\x{4E2D}\x{6587}_1: 1}" => 'read' ], [ "{a\x{3000}: 1}" => 'read' ], [ "{a\x{FEFF}:1}" => 'read' ], [ "{a\x{2003}b: 1}" => 'expected : at byte 5' ]) {
         my ($text, $why) = @$_;
         my $said = eval { JGraft::JSON->parse($text, json5 => 1); 'read' } // $@ =~ s/^JGraft::JSON: //r =~ s/\n\z//r;
         is $said, $why, sprintf '%s is %s', $text =~ s/\n/\\n/gr =~ s/\t/\\t/gr =~ s/[^\x00-\x7F]/?/gr, $why eq 'read' ? 'JSON5' : 'not JSON5';
     }
+    # A name without quotes is a letter and then letters, digits, marks and connectors, as Unicode sorts characters.
+    my $bytes = sub ($s) { utf8::encode($s); $s };
+    for ([ "{\x{A7DD}: 1, a\x{0378}: 2, \x{4E2D}_1\x{0301}: 3}" => 'a name of letters, and of characters that this Perl does not know and a later Unicode may make letters' ],
+         [ "{a\x{A0}: 1, b\x{2003}:\x{FEFF}2}" => 'white space that is not ASCII, which ends a name' ]) {
+        my ($text, $what) = @$_;
+        my $doc = JGraft::JSON->parse($bytes->($text));
+        ok $doc->json5 && !$doc->repaired && $doc->write eq $bytes->($text), "$what: read, and written back as it was";
+    }
+    is join(' ', keys %{ JGraft::JSON->parse($bytes->("{a\x{A0}: 1, b\x{2003}:\x{FEFF}2}"))->data }), 'a b', '... the names being what stands before the space';
+    # Other characters JSON5 does not let into a name without quotes.  From beyond ASCII they are read all the
+    # same, for there is no doubt what is meant; and the text is held, and written, with the name in quotes.
+    for ([ "{\x{1F600}: 1}" => qq({"\x{1F600}": 1}), 1, 'a picture' ], [ "{a: 'x', \x{20AC}: 1, b\x{E000}c: [2]}" => "{a: 'x', '\x{20AC}': 1, 'b\x{E000}c': [2]}", 2, 'a sign, and a character for private use' ],
+         [ "{'k': {x\x{FFFE}: 3}}" => qq({'k': {'x\x{FFFE}': 3}}), 1, 'what is never to be a character' ], [ sprintf('{%su20AC:1, ok: 2}', chr 92) => qq({"\x{20AC}":1, ok: 2}), 1, 'a sign that is written as an escape' ]) {
+        my ($text, $mended, $count, $what) = @$_;
+        my $doc = JGraft::JSON->parse($bytes->($text));
+        is $doc->write, $bytes->($mended), "a name with $what in it is read, and written in quotes";
+        ok $doc->json5 && $doc->repaired == $count && $doc->text eq $bytes->($mended), '... the document saying how many it mended, and holding the text as mended';
+        ok !JGraft::JSON->parse($doc->write)->repaired, '... which is then JSON5 as it stands';
+    }
+    my $mended = JGraft::JSON->parse($bytes->("{\x{1F600}: 1, b: 2}"));
+    is $mended->write(graft([ COPY => 3, 'c' ])->apply($mended->data)), $bytes->(qq({"\x{1F600}": 1, b: 2, "c": 3})), 'a new name is written as the first name beside it is, which is now in quotes';
+    like eval { JGraft::JSON->parse($bytes->("{\x{1F600}: 1}"), json5 => 0); 1 } // $@, qr/expected the name of a property at byte 1/, 'none of which is JSON';
     is eval { JGraft::JSON->parse(qq(["a\tb"]), json5 => 0); 'read' } // $@ =~ s/^JGraft::JSON: //r =~ s/\n\z//r, 'a string has a control character that is not escaped at byte 1',
         'a control character in a string, as it stands, is not JSON';
     ok JGraft::JSON->parse(qq(["a\tb"]))->json5, '... but it is JSON5, and so the text is read as that';

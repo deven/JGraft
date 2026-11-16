@@ -418,6 +418,22 @@ C<0x10>, a comma after the last element stays after whatever is then last, a
 string that changes keeps its quotes and what of it did not change, escapes
 and all.
 
+The name of a property may stand without quotes if it is what JSON5 takes
+for a name: a letter, C<$> or C<_>, and then more of those, digits, marks
+and connectors, by Unicode's sorting of characters into such kinds.  A
+character that this Perl's Unicode does not know is let pass, for a later
+Unicode may have made it a letter.  A name with any other character from
+beyond ASCII in it (a sign, a picture, one for private use) is not JSON5
+without its quotes, but there is no doubt what it says, and so it is read:
+C<{E<0x20AC>: 1, b: 2}>, whose first name is a euro sign, is read, and is
+written C<{"E<0x20AC>": 1, b: 2}>.
+
+The document holds the text as it should have been written, with such names
+in quotes, so that C<< $doc->text >> and C<< $doc->write >> give the mended
+text even if nothing else has changed; and C<< $doc->repaired >> says how
+many names were mended (none, for a text that was right).  Within ASCII
+there is no such latitude: C<{1a: 1}> and C<{a-b: 1}> are refused.
+
 A comment stays with the element it is about: the one whose line it ends,
 and the one it stands above.  So an element that a graft removes takes its
 comments with it and no other's, one that is moved takes them where it goes,

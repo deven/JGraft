@@ -1196,6 +1196,20 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   exactly one between elements, none ahead of the first, and after the last
   one or none as the text had. A comma in a comment is not one.
 
+  *Names without quotes.* `JSON::name` reads what the specification allows
+  (ECMAScript 5.1 IdentifierName: Lu Ll Lt Lm Lo Nl, `$`, `_`; then also
+  Mn Mc Nd Pc, U+200C, U+200D; `\uXXXX` for any of them), by this Perl's
+  Unicode, taking an unassigned code point (but not a noncharacter) for a
+  letter that a later Unicode may have added. White space beyond ASCII ends
+  a name (it had been taken into it, and the name then refused: `{a<NBSP>:
+  1}` is JSON5). A name that is wrong only for a character from beyond
+  ASCII that is not of those kinds is read, since nothing else could be
+  meant, and mended: `reading` rewrites each such name in quotes in the
+  text it holds and reads the mended text over again, so that every
+  recorded position is right and the writer needs to know nothing of it.
+  `$doc->repaired` counts them. The cost is that such a text is not written
+  back byte for byte, which is the point: what is written is JSON5.
+
   *Checked against the reference.* The tests of the reference
   implementation (`json5/json5`, cloned beside this repository) were run
   through a recorder to collect every text they parse and what comes of it:
