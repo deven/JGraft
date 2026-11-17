@@ -51,18 +51,26 @@ with JGraft:
 
     ["ATSPLIT", ["NODE"], "\n",
       ["MATCH",
-        ["ARRAY", 9, // 0-based 9 is 1-based "line 10"
-          "Line ten",
-          "Line eleven",
-          "Line twelve",
-          "Line thirteen"
-        ],
-        ["SPLICE", 10, 2,
+        [[
+          ["NEAR", 9,          // 0-based 9 is 1-based "line 10"
+            "Line ten",
+            ["GROUP", "edit",
+              "Line eleven",
+              "Line twelve"
+            ],
+            "Line thirteen"
+          ]
+        ]],
+        ["SPLICE", ["NODE"], ["CAP", "edit"],
           "New Line eleven"
           // no line 12
         ]
       ]
     ]
+
+This searches for the four context lines nearest their expected starting
+position.  The `edit` capture records the two lines to replace, so the splice
+uses their actual location even if earlier lines have been inserted or removed.
 
 #### Record re-ordering
 
