@@ -1210,6 +1210,14 @@ Each of these made the code smaller; none changes behaviour the suite can see.
   `$doc->repaired` counts them. The cost is that such a text is not written
   back byte for byte, which is the point: what is written is JSON5.
 
+  *New names.* A new name stands without quotes if any name of its object
+  does (`JSON::naming`; it had gone by the first name alone), and it can
+  (`named`, by the same rule the reader has, so `café` needs none; an
+  unassigned code point does, for the writer gives no benefit of the
+  doubt). A mended name counts as one without quotes, which is how it was
+  written: the second reading marks those members. With every name in
+  quotes, a new one has the quotes of the first.
+
   *Checked against the reference.* The tests of the reference
   implementation (`json5/json5`, cloned beside this repository) were run
   through a recorder to collect every text they parse and what comes of it:

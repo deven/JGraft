@@ -434,6 +434,12 @@ text even if nothing else has changed; and C<< $doc->repaired >> says how
 many names were mended (none, for a text that was right).  Within ASCII
 there is no such latitude: C<{1a: 1}> and C<{a-b: 1}> are refused.
 
+A new name is written as the names beside it are.  If any name of the object
+it goes into stands without quotes (or did, until it was mended), so does
+the new one, if it can: C<{"a": 1, b: 2}> gains C<c: 3>, and C<"a-b": 3>.
+If they all have quotes, it has the quotes of the first.  A new object writes
+its names as the object that it is put into does.
+
 A comment stays with the element it is about: the one whose line it ends,
 and the one it stands above.  So an element that a graft removes takes its
 comments with it and no other's, one that is moved takes them where it goes,

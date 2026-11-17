@@ -1947,7 +1947,21 @@ b']),                                                                           
         ok !JGraft::JSON->parse($doc->write)->repaired, '... which is then JSON5 as it stands';
     }
     my $mended = JGraft::JSON->parse($bytes->("{\x{1F600}: 1, b: 2}"));
-    is $mended->write(graft([ COPY => 3, 'c' ])->apply($mended->data)), $bytes->(qq({"\x{1F600}": 1, b: 2, "c": 3})), 'a new name is written as the first name beside it is, which is now in quotes';
+    # A new name is written without quotes, if it can be, where a name beside it is; and one that was mended is such a name.
+    my $renamed = sub ($text, @new) {
+        my $doc = JGraft::JSON->parse($bytes->($text), json5 => 1);
+        my $out = $doc->write(graft(map { [ COPY => 3, ref $_ ? [ NODE => @$_ ] : $_ ] } @new)->apply($doc->data));
+        utf8::decode($out);
+        $out;
+    };
+    is $renamed->("{\x{1F600}: 1, b: 2}", 'c'), qq({"\x{1F600}": 1, b: 2, c: 3}), 'a new name is written without quotes beside others that are';
+    is $renamed->("{\x{1F600}: 1}", 'c'), qq({"\x{1F600}": 1,c: 3}), '... or beside one that was, until it was mended';
+    is $renamed->(q({"a": 1, b: 2}), 'c', "caf\x{E9}", 'a-b', '1a', ''), qq({"a": 1, b: 2, c: 3, caf\x{E9}: 3, "a-b": 3, "1a": 3, "": 3}), '... if any beside it is: and a name that cannot do without quotes has them';
+    is $renamed->(q({'a': 1, "b": 2}), 'c'), q({'a': 1, "b": 2, 'c': 3}), 'where every name has quotes a new one has those of the first';
+    is $renamed->(q([{"q": 1}, {r: 2}]), [ 0, 'c' ], [ 1, 'c' ]), q([{"q": 1,"c": 3}, {r: 2,c: 3}]), 'each object is gone by for itself';
+    is $renamed->(q({'k': {x: 1}, "s": []}), [ 'k', 'y' ], 'z', [ 's', 0, 'n' ]), q({'k': {x: 1,y: 3}, "s": [{'n': 3}], 'z': 3}), '... and a new object writes its names as the object it is put in does';
+    is $renamed->(q({k: {'x': 1}, "s": []}), [ 's', 0, 'n' ], [ 'k', 'new', 'm' ]), q({k: {'x': 1,'new': {'m': 3}}, "s": [{n: 3}]}), '... whichever way that is';
+    is $renamed->("{'k': {x\x{FFFE}: 3}}", [ 'k', 'c' ]), qq({'k': {'x\x{FFFE}': 3,c: 3}}), 'a name is mended with the quotes that the text puts names in';
     like eval { JGraft::JSON->parse($bytes->("{\x{1F600}: 1}"), json5 => 0); 1 } // $@, qr/expected the name of a property at byte 1/, 'none of which is JSON';
     is eval { JGraft::JSON->parse(qq(["a\tb"]), json5 => 0); 'read' } // $@ =~ s/^JGraft::JSON: //r =~ s/\n\z//r, 'a string has a control character that is not escaped at byte 1',
         'a control character in a string, as it stands, is not JSON';

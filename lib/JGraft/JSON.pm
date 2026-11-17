@@ -72,6 +72,8 @@ my $COMMENT = qr{//(?:(?!\xE2\x80[\xA8\xA9])[^\n\r])*+|/\*.*?\*/}s;
 my $NUMBER5 = qr/[-+]?(?:0[xX][0-9a-fA-F]+|Infinity|NaN|(?:(?:0|[1-9][0-9]*)(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?)/;
 my $NUMBER  = qr/-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?/;
 my $NEXT_NUMBER5 = qr/\G($NUMBER5)(?![A-Za-z0-9_\$])/;      # (as the next thing in a text)
+# A name that JSON5 lets stand without quotes, by the Unicode that this Perl has (see `name`).
+my $NAME = qr/\A[\$_\p{L}\p{Nl}][\$_\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}\x{200C}\x{200D}]*\z/;
 
 sub json5 ($doc) { $doc->{json5} ? 1 : 0 }
 
@@ -123,6 +125,8 @@ sub reading ($text, $opt, $five) {
     # Of a JSON text all that is not already known is the colon, which is looked for when it is wanted.)
     my ($names, $colon, $quote) = $five ? () : ('"', undef, '"');
     my @mend;       # the names that were written without quotes and cannot be: [ from, to, the name ]
+    my $mended = $opt->{mended};        # where the names are that were mended, in a text that is read over again
+    my $in;         # the quotes of the first name that has them
     my $value;
     $value = sub {
         $space->();
@@ -153,11 +157,15 @@ sub reading ($text, $opt, $five) {
                 $space->();
                 $text =~ /\G:/gc or $fail->('expected :');
                 if ($five) {
-                    $names //= substr($text, $at, 1) =~ /(["'])/ ? $1 : 'bare';
+                    # (names are written without quotes if any is; and else in the quotes of the first)
+                    my $how = substr($text, $at, 1) =~ /(["'])/ ? $1 : 'bare';
+                    $names = $how if !defined $names || $how eq 'bare';
+                    $in  //= $how if $how ne 'bare';
                     if (!defined $colon) { $space->(); $colon = uncommented(substr $text, $to, pos($text) - $to) }
                 }
                 ($v->{$key}, my $token) = $value->();
                 push @member, [ $key, $at, $to, $token ];
+                $member[-1][4] = 1 if $mended && $mended->{$at};        # (a name that this reader put in quotes)
                 $space->();
             }
         }
@@ -204,9 +212,17 @@ sub reading ($text, $opt, $five) {
     # been written, with those in quotes (the quotes that it puts its names in, or failing that its strings),
     # and so that is how it is written back.  The mended text is read over again, which finds everything in it
     # where it now is.
-    my $in = ($names // '') =~ /\A["']\z/ ? $names : $quote // '"';
-    substr($text, $_->[0], $_->[1] - $_->[0]) = $in . quoted($_->[2], $in) . $in for reverse @mend;
-    my $doc = reading($text, { %$opt, max_size => undef }, 1);
+    # Each is marked as one that had no quotes, for that is how the text meant to write its names.
+    $in //= $quote // '"';
+    my ($moved, %at) = (0);
+    for (@mend) {
+        my ($from, $to, $name) = @$_;
+        my $as = $in . quoted($name, $in) . $in;
+        substr($text, $from + $moved, $to - $from) = $as;
+        $at{ $from + $moved } = 1;
+        $moved += length($as) - ($to - $from);
+    }
+    my $doc = reading($text, { %$opt, max_size => undef, mended => \%at }, 1);
     @$doc{qw(names repaired)} = ($names, scalar @mend);
     return $doc;
 }
@@ -237,6 +253,7 @@ sub name {
     # characters those are depends on the Unicode in force, and this Perl has the one it has.  A code point
     # that it knows nothing of may be a letter in a newer one, as the specification would then have it, and is
     # let pass; but not one that Unicode has set aside never to be a character.
+    return ($name, 1) if $name =~ $NAME;
     my $unknown = qr/(?!\p{Noncharacter_Code_Point})\p{Cn}/;
     return ($name, 1) if $name =~ /\A(?:[\$_\p{L}\p{Nl}]|$unknown)(?:[\$_\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}\x{200C}\x{200D}]|$unknown)*\z/;
     return ($name, 0) if $name =~ /\A(?:[A-Za-z_\$]|[^\x00-\x7F])(?:[A-Za-z0-9_\$]|[^\x00-\x7F])*\z/ && $name !~ /[\p{Zs}\x{FEFF}\x{2028}\x{2029}]/;
@@ -359,9 +376,23 @@ sub in_json ($token) { $token =~ /\A(?:true|false|null|$NUMBER)\z/ || $token =~ 
 # The name of a property as it is to be written: as $how says ('"', "'", or
 # 'bare', which is without quotes if the name can do without them).
 sub named ($k, $how) {
-    return $k if $how eq 'bare' && $k =~ /\A[A-Za-z_\$][A-Za-z0-9_\$]*\z/;
+    if ($how eq 'bare' && $k =~ $NAME) {
+        my $bytes = $k;
+        utf8::encode($bytes);
+        return $bytes;
+    }
     my $quote = $how eq 'bare' ? $QUOTE : $how;
     return $quote . quoted($k, $quote) . $quote;
+}
+
+# How an object of the text writes its names, for a new one among them:
+# without quotes if any of them is (a name that needs quotes has them all
+# the same); and if they all have quotes, in the quotes of the first.
+sub naming ($record) {
+    my ($text, $members) = @$record{qw(text members)};
+    # (a name that the reader had to put in quotes was written without)
+    $_->[4] || substr($$text, $_->[1], 1) !~ /["']/ and return 'bare' for @$members;
+    return substr $$text, $members->[0][1], 1;
 }
 
 # A value as text.  $hint is the token of the place it is in, if there is
@@ -494,7 +525,7 @@ sub object ($v, $from, $tok) {
     my $text = $from->{text};
     my $cut  = sub ($a, $b) { substr $$text, $a, $b - $a };
     # (a new name is written as the first name here is: in its quotes, or in JSON5 perhaps without)
-    my $names = !$FIVE ? '"' : $cut->($members->[0][1], $members->[0][1] + 1) =~ /(["'])/ ? $1 : 'bare';
+    my $names = $FIVE ? naming($from) : '"';
     my $pair  = sub ($k, $colon) { named($k, $names) . $colon . emit($v->{$k}, $tok && $tok->{$k}) };
     my (%first, %last);         # the members that had each key: one, unless the text gave a key twice
     for my $m (0 .. $#$members) {
@@ -586,7 +617,7 @@ sub outermost ($doc) {
         ($first, $last, $colon) = ($members->[0][1], $members->[-1][3][1], $cut->($members->[0][2], $members->[0][3][0]));
         @between = ($members->[-2][3][1], $members->[-1][1]) if @$members > 1;
     }
-    my $names = !$record->{members} || !$FIVE ? undef : $cut->($first, $first + 1) =~ /(["'])/ ? $1 : 'bare';
+    my $names = !$record->{members} || !$FIVE ? undef : naming($record);
     my $style = style($record, $first, $last, $colon, @between ? $cut->(@between) : ',' . $cut->($record->{start} + 1, $first), $names);
     # (it says how what is inside the text's array or object is laid out: that array or object is a step further out)
     $style->{at} = substr $style->{at}, 0, length($style->{at}) - length $style->{step} if defined $style->{line};
