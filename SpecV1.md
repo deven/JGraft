@@ -481,7 +481,6 @@ expressions adapt to the width of their arguments, and all others (classified
 as node-test expressions) test a node in isolation.  The successor state
 produced by successful a node-test expression is the position following the
 current element; i.e. they consume one element.
-
 Implementations are likely to need to iterate the successor states as they look
 for an overall match for the array specification, but no specific order is
 required for this iteration and implementations are free to apply optimizations
@@ -499,11 +498,40 @@ are ignored for sequences in the same match state which occur inside of `ANY`,
 `REP`, `CAN`, `CANT`, and `NONE` expressions.  The preferences are
 resolved with respect to the entire match of the array, selecting among
 successful matches; they do not restrict which spans can match.
+
+Before each array match invocation, the algorithm must prepare by expanding all
+pattern macros (or regex macros, in regex context) which can participate in
+sequence matching, and evaluating the configuration of every participating
+configured sequence.  These computed values must remain constant for the entire
+match attempt; the choice of which macro to expand and how to resolve each
+capture group may never have a dependency on the match position being tested
+*during* the array match.
+Preparation starts with the lexical environment in effect when the array-match
+invocation begins.  It follows expressions operating on that array’s sequence
+up to boundaries of node-match expressions, sub-structure matches, or function
+calls.  This traversal must occur even for "lazy" evaluation mode on pattern
+branches that are otherwise unused.
+The current node is set to the array being matched, rather than the node that
+would normally be implied by the position of the expressions.
+This may involve evaluating `WITH` expressions along the path to the relevant
+sequences.  `WITH` normally gets to assume that `NODE` is an array element;
+since it will instead be an array during preparation, errors need deferred.
+If evaluating a `WITH` binding during preparation raises `RUNTIME_ERROR`,
+retain the error as the value of that binding without raising it immediately.
+The binding still shadows any previous value.  Accessing it during preparation
+raises the retained error.  Except for errors retained in `WITH` bindings, any
+error escaping configuration or macro-reference evaluation aborts the
+preparation step.  A `RUNTIME_ERROR` is handled as failure of the array match;
+other errors propagate according to the normal error rules.
+
 Implementations may omit preference resolution wherever doing so cannot affect
-the captures or overall match bounds returned by the enclosing match.
-When only a boolean result is required, they may stop after finding any match
-that satisfies the complete enclosing specification, but this does not permit
-discarding successor positions needed to satisfy surrounding expressions.
+the captures or overall match bounds returned by the enclosing match, however
+the preparation step must still be performed to ensure that any macro expansion
+and group flags like `exact` get calculated correctly.
+When only a boolean result is required, the algorithm may stop after finding
+any match that satisfies the complete enclosing specification, but this does
+not permit discarding successor positions needed to satisfy surrounding
+expressions.
 
 Of all the final states which can match the complete specification for the
 array, the algorithm chooses one according to these priorities, using a
@@ -533,7 +561,6 @@ from 5, "prefix" breaks the tie pushing "target" to the latter position.
       [NEAR, 5, [GROUP, "target", {tag:"H3"}]],
       [GROUP, "suffix", [REP]],
     ]]
-
 
 The fourth rule has no bearing on the boundaries of captures in the current
 array; it resolves ambiguities in selecting which array element should provide
@@ -1992,9 +2019,10 @@ references to other trees rather than deep-cloning the data.
     // config_args:
     {
       name: capture_name,
+      prefix: capture_name_prefix,
       near: integer,
       long: boolean,
-      exact: boolean,
+      exact: boolean
     }
 
 Match a series of array elements against a series of match expressions.
@@ -2010,14 +2038,20 @@ no arguments are required (but the `SEQ` expresison is an alias for that).
 If `config_args` is a boolean, it supplies the `long` property.
 If `config_args` is an integer or string, it supplies the `name` property.
 Otherwise, `config_args` must be an object with zero or more of the properties
-`name`, `near`, `long`, and `exact`.
+`name`, `prefix`, `near`, `long`, and `exact`.
 
 `name` specifies a string (or integer to be coerced to a string) for the
-[capture namespace](#ex-cap).  `long` is a boolean that expresses a
-preference for capturing greater or fewer elements in this group, when
-considering the successful final match states for the whole array.  A named
-group must have a width preference.  If `name` is supplied and `long` is
-not, `long` defaults to `true`.
+[capture namespace](#ex-cap).  When a group defines `prefix` (which must be a
+string), the declared `name` and `prefix` values in any nested group
+participating in the same match state implicitly get prefixed with this string.
+The prefix system is useful when expanding macros so that capture names of the
+macro can be localized and avoid collision with other expansions of that same
+macro.
+
+`long` is a boolean that expresses a preference for capturing greater or fewer
+elements in this group, when considering the successful final match states for
+the whole array.  A named group must have a width preference.  If `name` is
+supplied and `long` is not, `long` defaults to `true`.
 
 `near` specifies a preferred array index where the group should begin.  It must
 be an integer, but may be specified as a negative integer to count backward
