@@ -797,12 +797,14 @@ In this case, the outer `IS` match expression passes `node.a` as the current
 node to the `NONE` expression with `IS` context.  The `NONE` expression tests
 whether `node.a` is not exactly identical to `{b:1}`.
 
-    [IS, [NODE,"a"], [NODE,"b"] ]
+    [IS, [NODE,"b"], [NODE,"a"] ]
     // deep_equals(node.a, node.b)
 
-The `IS` and `HAS` expressions have a 2-argument form to specify both the
-pattern and the target to match.  In this case, `node.a` becomes the current
-node, and `node.b` becomes the fully-evaluated structure to match against.
+The `IS` and `HAS` expressions take the pattern first and an optional target
+value second.  In this case, `node.a` becomes the current node, and `node.b`
+becomes the fully-evaluated structure to match against.  Both references are
+evaluated relative to the initial current node, as described under
+[`HAS`](#ex-has).
 
 Return values from functions are considered to be data to match against, and
 do not participate as match specifications:
@@ -820,7 +822,7 @@ expression) and uses the return value as *a value to match against*.
     // This doesn't work:
     [IS, { "a": [LESS, [CASTNUM], 8] }]
     // This does:
-    [IS, { "a": [IS, [LESS, [CASTNUM], 8], true] }]
+    [IS, { "a": [IS, true, [LESS, [CASTNUM], 8]] }]
     // (parseNumber(node.a) < 8) === true
 
 If you want the return value of a function to be used as the match *result*,
@@ -1017,7 +1019,7 @@ will cause a recipient to reject the graft.  For example:
 
     [ALL,
       {offset: "2"},
-      [IS, [SLICE, [NODE, "offset"], "abcdef"], "c"]
+      [IS, "c", [SLICE, [NODE, "offset"], "abcdef"]]
     ]
 
 The first condition only passes when `offset` is the string "2", which
@@ -1792,12 +1794,12 @@ the last two elements under the name "last".
 #### <span id="ex-has">HAS</span>
 
     [HAS, match_spec]
-    [HAS, value_expr, match_spec]
+    [HAS, match_spec, value_expr]
 
 Match when the target has at least the properties described in `match_spec`.
 
-The `match_spec` argument is declared using [match context](#match-context)
-and the `value_expr` is declared using [value context](#value-context).
+The first argument, `match_spec`, is declared using [match context](#match-context).
+The optional second argument, `value_expr`, uses [value context](#value-context).
 In the 1-argument form, the value being compared is the current node.
 
 The `HAS` expression is the default for match context; when "has" mode is
@@ -1805,8 +1807,9 @@ already in effect, a `[HAS,...]` expression at the root of a match structure is
 redundant unless used in the 2-argument form to establish an alternate current
 node.
 
-In the 2-argument form, the current node does not change until matching begins
-in the subexpression; this means that if `match_spec` is a reference or
+In the 2-argument form, `value_expr` is evaluated with the initial current node.
+The current node does not change until matching begins in the subexpression;
+this means that if `match_spec` is a reference or
 function expression or expansion of a value macro, `NODE` references within
 still refer to the initial current node, but if `match_spec` is a structure or
 match expression or expansion of an appropriate pattern macro, `NODE`
@@ -1824,7 +1827,7 @@ Examples:
     { a: [[]] }                         isArray(node.a)
     { a: [ARRAY, 3, 6, 7] }             isArray(node.a) && node.a[3] === 6
                                           && node.a[4] === 7
-    [HAS, [TEMP,0], { a: 1 }]           temp['0'].a === 1
+    [HAS, { a: 1 }, [TEMP,0]]           temp['0'].a === 1
 
 When [matching array elements](#matching-arrays), this continues to match
 one node in isolation and prohibits sequence expressions used at the root node.
@@ -1836,14 +1839,15 @@ use `[GROUP, { exact: false }, ...]`.
 #### <span id="ex-is">IS</span>
 
     [IS, match_spec]
-    [IS, value_expr, match_spec]
+    [IS, match_spec, value_expr]
 
 Match according to `HAS` but fail if the object/array contains unspecified
 properties/elements.
 
-The `match_spec` argument is [match context](#match-context) and the
-`value_expr` is [value context](#value-context).  In the 1-argument
-form, the value being compared is the current node.
+The first argument, `match_spec`, is [match context](#match-context), and the
+optional second argument, `value_expr`, is [value context](#value-context).
+In the 1-argument form, the value being compared is the current node.
+The 2-argument form uses the same evaluation-context rules as [`HAS`](#ex-has).
 
 As described in the [matching section](#matching), the entire contiguous tree
 of match structure and match expressions within the `IS` expression inherits
@@ -1858,9 +1862,9 @@ Examples:
     [IS, {a:1}]                         is_deeply(node, {a:1})
     [IS, [ANY, {a:1}, {b:1}]]           is_deeply(node, {a:1})
                                          || is_deeply(node, {b:1})
-    [IS, [TEMP,0], {a:1}]               is_deeply(temp['0'], {a:1})
-    [IS, [NODE,'a'], [NODE,'b']]        is_deeply(node.a, node.b)
-    [IS, [NODE,'a'], [IS,[NODE,'b']]]   is_deeply(node.a, node.a.b)
+    [IS, {a:1}, [TEMP,0]]               is_deeply(temp['0'], {a:1})
+    [IS, [NODE,'b'], [NODE,'a']]        is_deeply(node.a, node.b)
+    [IS, [IS,[NODE,'b']], [NODE,'a']]   is_deeply(node.a, node.a.b)
 
 #### <span id="ex-none">NONE</span>
 
@@ -1892,10 +1896,10 @@ When one argument is provided (path context), the existence of the implied
 reference expression will be tested without attempting to read the property.
 This is similar to a 2-argument `IS` expression like:
 
-    [IS, [NODE, "a"], [EXISTS]]
+    [IS, [EXISTS], [NODE, "a"]]
     vs. [EXISTS, "a"]
 
-    [IS, [CONST, "known_keys", [CURPROP]], [EXISTS]],
+    [IS, [EXISTS], [CONST, "known_keys", [CURPROP]]],
     vs. [EXISTS, [CONST, "known_keys", [CURPROP]]]
 
 but more efficient, since those 2-argument `IS` expressions are actually
@@ -2842,7 +2846,7 @@ false values to a `NONE` expression, optionally combined with an `EXISTS` test:
     // return true/false for current node, fail on undefined
     [CASE, [EXISTS], [NONE, false, 0, "", null]]
     // return true/false for an arbitrary value expression
-    [IS, value_expr, [NONE, false, 0, "", null]]
+    [IS, [NONE, false, 0, "", null], value_expr]
 
 #### <span id="ex-castnum">CASTNUM</span>
 
@@ -3196,7 +3200,7 @@ Note that the plain-integer form of the options argument is used as the `shift`
 parameter to enable easy tests against floating-point numbers:
 
     // foo == 1.234, without relying on floating point equality
-    { foo: [IS, [ROUND,6], 1234000] }
+    { foo: [IS, 1234000, [ROUND,6]] }
 
 ## Implementation Hints
 
