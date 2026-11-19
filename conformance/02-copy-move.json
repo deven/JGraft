@@ -1,0 +1,2309 @@
+{
+  "version": 1,
+  "name": "COPY MOVE",
+  "desc": "Core COPY and MOVE semantics: JSON value construction, replacement across types, pair evaluation order, writable paths, auto-vivification, overlapping moves, deferred array deletion, queued half-index insertion, immediate appends, logical ownership, namespace permissions, validation, and abort behavior. Simple references, LENGTH, EXISTS, SLICE, CASTSTR, IF, and RAISE serve only as probes. Matching algorithms, named captures, macros, SPLIT metadata, resource stress, and implementation-specific partial failure trees are outside this collection. Where strict is absent, lazy expectations also apply under full local validation.",
+  "tests": [
+    {
+      "name": "COPY value construction and replacement",
+      "desc": "COPY accepts every JSON value and can replace an existing value of any type. Literal arrays use value-context escaping; reference results are already data.",
+      "tests": [
+        {
+          "name": "New property containing null",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",null,"added"]],
+          "lazy": {"output":{"keep":1,"added":null}}
+        },
+        {
+          "name": "Root replaced by null",
+          "input": {"old":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",null,["NODE"]]],
+          "lazy": {"output":null}
+        },
+        {
+          "name": "New property containing false",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",false,"added"]],
+          "lazy": {"output":{"keep":1,"added":false}}
+        },
+        {
+          "name": "Root replaced by false",
+          "input": {"old":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",false,["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "New property containing true",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",true,"added"]],
+          "lazy": {"output":{"keep":1,"added":true}}
+        },
+        {
+          "name": "Root replaced by true",
+          "input": {"old":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",true,["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "New property containing zero",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",0,"added"]],
+          "lazy": {"output":{"keep":1,"added":0}}
+        },
+        {
+          "name": "Root replaced by zero",
+          "input": {"old":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",0,["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "New property containing fraction",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",-1.25,"added"]],
+          "lazy": {"output":{"keep":1,"added":-1.25}}
+        },
+        {
+          "name": "Root replaced by fraction",
+          "input": {"old":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",-1.25,["NODE"]]],
+          "lazy": {"output":-1.25}
+        },
+        {
+          "name": "New property containing empty string",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","","added"]],
+          "lazy": {"output":{"keep":1,"added":""}}
+        },
+        {
+          "name": "Root replaced by empty string",
+          "input": {"old":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","",["NODE"]]],
+          "lazy": {"output":""}
+        },
+        {
+          "name": "New property containing Unicode and controls",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","雪😀\n\u0000","added"]],
+          "lazy": {"output":{"keep":1,"added":"雪😀\n\u0000"}}
+        },
+        {
+          "name": "Root replaced by Unicode and controls",
+          "input": {"old":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","雪😀\n\u0000",["NODE"]]],
+          "lazy": {"output":"雪😀\n\u0000"}
+        },
+        {
+          "name": "New property containing empty array",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[]],"added"]],
+          "lazy": {"output":{"keep":1,"added":[]}}
+        },
+        {
+          "name": "Root replaced by empty array",
+          "input": {"old":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[]],["NODE"]]],
+          "lazy": {"output":[]}
+        },
+        {
+          "name": "New property containing empty object",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{},"added"]],
+          "lazy": {"output":{"keep":1,"added":{}}}
+        },
+        {
+          "name": "Root replaced by empty object",
+          "input": {"old":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{},["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "New property containing array",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[1,null,{"n":2}]],"added"]],
+          "lazy": {"output":{"keep":1,"added":[1,null,{"n":2}]}}
+        },
+        {
+          "name": "Root replaced by array",
+          "input": {"old":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[1,null,{"n":2}]],["NODE"]]],
+          "lazy": {"output":[1,null,{"n":2}]}
+        },
+        {
+          "name": "New property containing object",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"a":[[1,2]]},"added"]],
+          "lazy": {"output":{"keep":1,"added":{"a":[1,2]}}}
+        },
+        {
+          "name": "Root replaced by object",
+          "input": {"old":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"a":[[1,2]]},["NODE"]]],
+          "lazy": {"output":{"a":[1,2]}}
+        },
+        {
+          "name": "Overwrite type 0 with type 0",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",null,"value"]],
+          "lazy": {"output":{"value":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 0 with type 1",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",false,"value"]],
+          "lazy": {"output":{"value":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 0 with type 2",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",3,"value"]],
+          "lazy": {"output":{"value":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 0 with type 3",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","old","value"]],
+          "lazy": {"output":{"value":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 0 with type 4",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[1]],"value"]],
+          "lazy": {"output":{"value":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 0 with type 5",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"old":1},"value"]],
+          "lazy": {"output":{"value":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with type 0",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",null,"value"]],
+          "lazy": {"output":{"value":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with type 1",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",false,"value"]],
+          "lazy": {"output":{"value":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with type 2",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",3,"value"]],
+          "lazy": {"output":{"value":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with type 3",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","old","value"]],
+          "lazy": {"output":{"value":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with type 4",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[1]],"value"]],
+          "lazy": {"output":{"value":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with type 5",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"old":1},"value"]],
+          "lazy": {"output":{"value":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with type 0",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",null,"value"]],
+          "lazy": {"output":{"value":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with type 1",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",false,"value"]],
+          "lazy": {"output":{"value":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with type 2",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",3,"value"]],
+          "lazy": {"output":{"value":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with type 3",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","old","value"]],
+          "lazy": {"output":{"value":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with type 4",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[1]],"value"]],
+          "lazy": {"output":{"value":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with type 5",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"old":1},"value"]],
+          "lazy": {"output":{"value":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with type 0",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",null,"value"]],
+          "lazy": {"output":{"value":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with type 1",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",false,"value"]],
+          "lazy": {"output":{"value":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with type 2",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",3,"value"]],
+          "lazy": {"output":{"value":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with type 3",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","old","value"]],
+          "lazy": {"output":{"value":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with type 4",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[1]],"value"]],
+          "lazy": {"output":{"value":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with type 5",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"old":1},"value"]],
+          "lazy": {"output":{"value":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with type 0",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",null,"value"]],
+          "lazy": {"output":{"value":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with type 1",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",false,"value"]],
+          "lazy": {"output":{"value":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with type 2",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",3,"value"]],
+          "lazy": {"output":{"value":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with type 3",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","old","value"]],
+          "lazy": {"output":{"value":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with type 4",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[1]],"value"]],
+          "lazy": {"output":{"value":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with type 5",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"old":1},"value"]],
+          "lazy": {"output":{"value":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with type 0",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",null,"value"]],
+          "lazy": {"output":{"value":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with type 1",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",false,"value"]],
+          "lazy": {"output":{"value":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with type 2",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",3,"value"]],
+          "lazy": {"output":{"value":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with type 3",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","old","value"]],
+          "lazy": {"output":{"value":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with type 4",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[1]],"value"]],
+          "lazy": {"output":{"value":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with type 5",
+          "desc": "Types 0-5 are null, boolean, number, string, array, and object. Replacing a value does not require its old and new types to agree.",
+          "input": {"value":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"old":1},"value"]],
+          "lazy": {"output":{"value":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Escaped array is one value",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[["NODE",[["UNKNOWN"]]]],"value"]],
+          "lazy": {"output":{"value":["NODE",["UNKNOWN"]]}}
+        },
+        {
+          "name": "References return data without interpreting it",
+          "input": {"source":["UNKNOWN",["NODE"]]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","source"],"copy"]],
+          "lazy": {"output":{"source":["UNKNOWN",["NODE"]],"copy":["UNKNOWN",["NODE"]]}}
+        },
+        {
+          "name": "Constructed values recursively evaluate expressions",
+          "input": {"n":7},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"list":[[["NODE","n"],{"n":["NODE","n"]}]]},"copy"]],
+          "lazy": {"output":{"n":7,"copy":{"list":[7,{"n":7}]}}}
+        },
+        {
+          "name": "Numeric action and reference IDs",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},[5,7,[0,"x"]]],
+          "lazy": {"output":{"x":7}}
+        }
+      ]
+    },
+    {
+      "name": "COPY paths, ordering, and logical cloning",
+      "desc": "Pairs execute sequentially, including changes to lengths and root values. Auto-vivification creates missing containers but never converts an existing scalar or container. Copies must remain logically independent under edits.",
+      "tests": [
+        {
+          "name": "Overwrite first array element",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,0]],
+          "lazy": {"output":[7,2]}
+        },
+        {
+          "name": "Overwrite last with negative index",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,-1]],
+          "lazy": {"output":[1,7]}
+        },
+        {
+          "name": "Negative index at first element",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,-2]],
+          "lazy": {"output":[7,2]}
+        },
+        {
+          "name": "Append at numeric length",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,2]],
+          "lazy": {"output":[1,2,7]}
+        },
+        {
+          "name": "Append with false",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,false]],
+          "lazy": {"output":[1,2,7]}
+        },
+        {"name":"Append to empty array","input":[],"jgraft":["JGRAFT",{"v":1},["COPY",7,false]],"lazy":{"output":[7]}},
+        {
+          "name": "Create object ancestors",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE","a","b"]]],
+          "lazy": {"output":{"a":{"b":7}}}
+        },
+        {
+          "name": "Create mixed ancestors",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE","a",0,"b"]]],
+          "lazy": {"output":{"a":[{"b":7}]}}
+        },
+        {
+          "name": "Create multiple array levels",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE","a",0,0]]],
+          "lazy": {"output":{"a":[[7]]}}
+        },
+        {
+          "name": "Create object at appended element",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE",false,"x"]]],
+          "lazy": {"output":[{"x":7}]}
+        },
+        {"name":"Empty string key","input":{},"jgraft":["JGRAFT",{"v":1},["COPY",7,""]],"lazy":{"output":{"":7}}},
+        {
+          "name": "Numeric-looking string is a key",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,"0"]],
+          "lazy": {"output":{"0":7}}
+        },
+        {
+          "name": "Punctuation is not a path",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,"a.b/c"]],
+          "lazy": {"output":{"a.b/c":7}}
+        },
+        {
+          "name": "Own constructor property is writable",
+          "input": {"constructor":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,"constructor"]],
+          "lazy": {"output":{"constructor":7}}
+        },
+        {
+          "name": "Sequential pairs read earlier writes",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",1,"a",["NODE","a"],"b",2,"a"]],
+          "lazy": {"output":{"a":2,"b":1}}
+        },
+        {
+          "name": "A later pair uses a newly created parent",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{},["NODE","a"],7,["NODE","a","b"]]],
+          "lazy": {"output":{"a":{"b":7}}}
+        },
+        {
+          "name": "Root replacement is visible to the next pair",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"n":7},["NODE"],["NODE","n"],"saved"]],
+          "lazy": {"output":{"n":7,"saved":7}}
+        },
+        {
+          "name": "Repeated destinations retain the last assignment",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",1,"x",null,"x",false,"x"]],
+          "lazy": {"output":{"x":false}}
+        },
+        {
+          "name": "Earlier pair supplies a computed destination",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","target","key",7,["NODE",["NODE","key"]]]],
+          "lazy": {"output":{"key":"target","target":7}}
+        },
+        {
+          "name": "Appends affect later negative aliases",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",2,false,7,-1]],
+          "lazy": {"output":[1,7]}
+        },
+        {
+          "name": "Appends affect later length selectors",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",2,false,7,["NODE",["LENGTH"]]]],
+          "lazy": {"output":[1,2,7]}
+        },
+        {
+          "name": "Expanded computed path",
+          "input": {"path":["a",0,"x"]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE",["NODE","path"]]]],
+          "lazy": {"output":{"path":["a",0,"x"],"a":[{"x":7}]}}
+        },
+        {
+          "name": "Destination paths use the entry NODE",
+          "input": {"key":"a","index":0,"a":[]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE",["NODE","key"],["NODE","index"]]]],
+          "lazy": {"output":{"key":"a","index":0,"a":[7]}}
+        },
+        {
+          "name": "Value is captured before destination changes it",
+          "input": {"x":{"n":1}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","x"],["NODE","x","saved"]]],
+          "lazy": {"output":{"x":{"n":1,"saved":{"n":1}}}}
+        },
+        {
+          "name": "Copy a child over its ancestor",
+          "input": {"a":{"b":{"n":7},"discard":1}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","a","b"],"a"]],
+          "lazy": {"output":{"a":{"n":7}}}
+        },
+        {
+          "name": "Copy root into a descendant without a cycle",
+          "input": {"n":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE"],"snapshot"],["COPY",2,"n"]],
+          "lazy": {"output":{"n":2,"snapshot":{"n":1}}}
+        },
+        {
+          "name": "Copying onto itself preserves the tree",
+          "input": {"a":[1,{"n":2}]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","a"],"a"]],
+          "lazy": {"output":{"a":[1,{"n":2}]}}
+        },
+        {
+          "name": "Two copies can be edited independently",
+          "input": {"source":{"list":[1,2]}},
+          "jgraft": [
+            "JGRAFT",
+            {"v":1},
+            ["COPY",["NODE","source"],"a"],
+            ["COPY",["NODE","source"],"b"],
+            ["COPY",9,["NODE","a","list",0]]
+          ],
+          "lazy": {"output":{"source":{"list":[1,2]},"a":{"list":[9,2]},"b":{"list":[1,2]}}}
+        },
+        {
+          "name": "Replacing the AT current node updates its location",
+          "input": {"child":1},
+          "jgraft": ["JGRAFT",{"v":1},["AT","child",["COPY",{"n":7},["NODE"]],["COPY",8,"n"]]],
+          "lazy": {"output":{"child":{"n":8}}}
+        },
+        {
+          "name": "TEMP can swap values within one COPY",
+          "input": {"a":1,"b":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","a"],["TEMP","saved"],["NODE","b"],"a",["TEMP","saved"],"b"]],
+          "lazy": {"output":{"a":2,"b":1}}
+        },
+        {
+          "name": "STASH copy remains independent of its source",
+          "input": {"a":{"n":1}},
+          "jgraft": [
+            "JGRAFT",
+            {"v":1},
+            ["COPY",["NODE","a"],["STASH","saved"]],
+            ["COPY",2,["NODE","a","n"]],
+            ["COPY",["STASH","saved"],"saved"]
+          ],
+          "lazy": {"output":{"a":{"n":2},"saved":{"n":1}}}
+        },
+        {
+          "name": "Copying constant data makes a writable value",
+          "input": {},
+          "jgraft": [
+            "JGRAFT",
+            {"v":1,"const":["x",{"n":1}]},
+            ["COPY",["CONST","x"],"copy"],
+            ["COPY",2,["NODE","copy","n"]],
+            ["COPY",["CONST","x"],"constant"]
+          ],
+          "lazy": {"output":{"copy":{"n":2},"constant":{"n":1}}}
+        }
+      ]
+    },
+    {
+      "name": "COPY failures and validation",
+      "desc": "Errors distinguish malformed syntax from input-dependent resolution failures. No partial output is asserted on failure, since failure-state exposure and rollback are implementation choices.",
+      "tests": [
+        {
+          "name": "Cannot descend through null",
+          "input": {"x":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE","x","child"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Cannot descend through false",
+          "input": {"x":false},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE","x","child"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Cannot descend through true",
+          "input": {"x":true},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE","x","child"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Cannot descend through 3",
+          "input": {"x":3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE","x","child"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Cannot descend through \"text\"",
+          "input": {"x":"text"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE","x","child"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Integer does not select an object property",
+          "input": {"0":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,0]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "String does not select an array element",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,"0"]],
+          "lazy": {"runtime_error":true}
+        },
+        {"name":"Sparse array write","input":[1],"jgraft":["JGRAFT",{"v":1},["COPY",7,2]],"lazy":{"runtime_error":true}},
+        {
+          "name": "Cannot create parents through a hole",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE",1,"x"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Negative index before array start",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,-2]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Append alias on object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,false]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Missing source",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","missing"],"x"]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Read append position as a source",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE",false],0]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true},
+          "desc": "Deeper analysis may prove that the reference or span cannot succeed; local validation alone need not do so."
+        },
+        {
+          "name": "Later pair cannot descend through an earlier scalar",
+          "desc": "The first pair establishes an impossible container type for the second.",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",3,"x",7,["NODE","x","child"]]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true}
+        },
+        {
+          "name": "Invalid literal destination null",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid literal destination true",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,true]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid literal destination 0.5",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,0.5]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid literal destination {}",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,{}]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid literal destination [[\"x\"]]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,[["x"]]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid literal destination [\"LENGTH\"]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["LENGTH"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid computed destination null",
+          "input": {"selector":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid computed destination true",
+          "input": {"selector":true},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid computed destination 0.5",
+          "input": {"selector":0.5},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid computed destination {}",
+          "input": {"selector":{}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid computed destination [[\"x\"]]",
+          "input": {"selector":[["x"]]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Illegal arity [\"COPY\"]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Illegal arity [\"COPY\",1]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",1]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Illegal arity [\"COPY\",1,\"x\",2]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",1,"x",2]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Unescaped empty value is not data",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[],"x"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Unknown value directive",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["UNKNOWN"],"x"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Value failure precedes destination evaluation",
+          "desc": "COPY must evaluate the value before attempting the destination. Intentional FAIL is not statically promoted.",
+          "input": {"selector":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FAIL"],["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Lazy value failure precedes malformed destination",
+          "desc": "The invalid destination operand is never required in lazy mode. Full local validation rejects it.",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FAIL"],null]],
+          "lazy": {"runtime_error":true},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "MOVE transfer, deletion, and replacement",
+      "desc": "MOVE relocates values without retaining a second reference. Literal null is special only as the complete source or destination argument. Existing self-moves are no-ops; the source still has to exist.",
+      "tests": [
+        {
+          "name": "Move null into a new property",
+          "input": {"source":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":null,"keep":1}}
+        },
+        {
+          "name": "Delete null",
+          "input": {"source":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Move false into a new property",
+          "input": {"source":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":false,"keep":1}}
+        },
+        {
+          "name": "Delete false",
+          "input": {"source":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Move true into a new property",
+          "input": {"source":true,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":true,"keep":1}}
+        },
+        {
+          "name": "Delete true",
+          "input": {"source":true,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Move zero into a new property",
+          "input": {"source":0,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":0,"keep":1}}
+        },
+        {
+          "name": "Delete zero",
+          "input": {"source":0,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Move fraction into a new property",
+          "input": {"source":-1.25,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":-1.25,"keep":1}}
+        },
+        {
+          "name": "Delete fraction",
+          "input": {"source":-1.25,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Move empty string into a new property",
+          "input": {"source":"","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":"","keep":1}}
+        },
+        {
+          "name": "Delete empty string",
+          "input": {"source":"","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Move Unicode and controls into a new property",
+          "input": {"source":"雪😀\n\u0000","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":"雪😀\n\u0000","keep":1}}
+        },
+        {
+          "name": "Delete Unicode and controls",
+          "input": {"source":"雪😀\n\u0000","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Move empty array into a new property",
+          "input": {"source":[],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":[],"keep":1}}
+        },
+        {
+          "name": "Delete empty array",
+          "input": {"source":[],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Move empty object into a new property",
+          "input": {"source":{},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":{},"keep":1}}
+        },
+        {
+          "name": "Delete empty object",
+          "input": {"source":{},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Move array into a new property",
+          "input": {"source":[1,null,{"n":2}],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":[1,null,{"n":2}],"keep":1}}
+        },
+        {
+          "name": "Delete array",
+          "input": {"source":[1,null,{"n":2}],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Move object into a new property",
+          "input": {"source":{"a":[1,2]},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":{"a":[1,2]},"keep":1}}
+        },
+        {
+          "name": "Delete object",
+          "input": {"source":{"a":[1,2]},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Overwrite type 0 with moved type 0",
+          "input": {"source":null,"target":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 0 with moved type 1",
+          "input": {"source":false,"target":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 0 with moved type 2",
+          "input": {"source":3,"target":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 0 with moved type 3",
+          "input": {"source":"old","target":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 0 with moved type 4",
+          "input": {"source":[1],"target":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 0 with moved type 5",
+          "input": {"source":{"old":1},"target":null,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with moved type 0",
+          "input": {"source":null,"target":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with moved type 1",
+          "input": {"source":false,"target":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with moved type 2",
+          "input": {"source":3,"target":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with moved type 3",
+          "input": {"source":"old","target":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with moved type 4",
+          "input": {"source":[1],"target":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 1 with moved type 5",
+          "input": {"source":{"old":1},"target":false,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with moved type 0",
+          "input": {"source":null,"target":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with moved type 1",
+          "input": {"source":false,"target":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with moved type 2",
+          "input": {"source":3,"target":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with moved type 3",
+          "input": {"source":"old","target":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with moved type 4",
+          "input": {"source":[1],"target":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 2 with moved type 5",
+          "input": {"source":{"old":1},"target":3,"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with moved type 0",
+          "input": {"source":null,"target":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with moved type 1",
+          "input": {"source":false,"target":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with moved type 2",
+          "input": {"source":3,"target":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with moved type 3",
+          "input": {"source":"old","target":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with moved type 4",
+          "input": {"source":[1],"target":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 3 with moved type 5",
+          "input": {"source":{"old":1},"target":"old","keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with moved type 0",
+          "input": {"source":null,"target":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with moved type 1",
+          "input": {"source":false,"target":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with moved type 2",
+          "input": {"source":3,"target":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with moved type 3",
+          "input": {"source":"old","target":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with moved type 4",
+          "input": {"source":[1],"target":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 4 with moved type 5",
+          "input": {"source":{"old":1},"target":[1],"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with moved type 0",
+          "input": {"source":null,"target":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":null,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with moved type 1",
+          "input": {"source":false,"target":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":false,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with moved type 2",
+          "input": {"source":3,"target":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":3,"keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with moved type 3",
+          "input": {"source":"old","target":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":"old","keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with moved type 4",
+          "input": {"source":[1],"target":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":[1],"keep":1}}
+        },
+        {
+          "name": "Overwrite type 5 with moved type 5",
+          "input": {"source":{"old":1},"target":{"old":1},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","target"]],
+          "lazy": {"output":{"target":{"old":1},"keep":1}}
+        },
+        {
+          "name": "Null source creates a null property",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,"x"]],
+          "lazy": {"output":{"x":null}}
+        },
+        {
+          "name": "Null source replaces an existing subtree",
+          "input": {"x":{"n":1}},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,"x"]],
+          "lazy": {"output":{"x":null}}
+        },
+        {
+          "name": "Null to null is a no-op",
+          "input": {"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Recreate moved property as null",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a","b",null,"a"]],
+          "lazy": {"output":{"b":7,"a":null}}
+        },
+        {
+          "name": "Existing source moved onto itself is unchanged",
+          "input": {"a":{"n":7}},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a","a"]],
+          "lazy": {"output":{"a":{"n":7}}}
+        },
+        {
+          "name": "Array aliases can designate the same location",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,-2]],
+          "lazy": {"output":[1,2]}
+        },
+        {
+          "name": "Current root can move onto itself",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE"],["NODE"]]],
+          "lazy": {"output":{"a":7}}
+        },
+        {
+          "name": "Numeric MOVE and NODE identifiers",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},[6,[0,"a"],[0,"b"]]],
+          "lazy": {"output":{"b":7}}
+        },
+        {
+          "name": "Host-like names are ordinary properties",
+          "input": {"constructor":1,"toString":2,"hasOwnProperty":3},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","constructor","valueOf","toString","prototype","hasOwnProperty",""]],
+          "lazy": {"output":{"valueOf":1,"prototype":2,"":3}}
+        },
+        {
+          "name": "Integer-looking object names remain strings",
+          "input": {"0":1,"a.b":2},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","0","-1","a.b","a/b"]],
+          "lazy": {"output":{"-1":1,"a/b":2}}
+        }
+      ]
+    },
+    {
+      "name": "MOVE overlap, path evaluation, and scope",
+      "desc": "Paths are resolved for each pair before detaching its source. Destination auto-vivification uses the state after detachment, allowing overlap without cycles. TEMP and STASH examples exercise ownership and current-node locations.",
+      "tests": [
+        {
+          "name": "Create mixed destination ancestors",
+          "input": {"source":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",["NODE","a",0,"x"]]],
+          "lazy": {"output":{"a":[{"x":7}]}}
+        },
+        {
+          "name": "Detach then recreate source as an object",
+          "input": {"a":{"n":7}},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","a","child"]]],
+          "lazy": {"output":{"a":{"child":{"n":7}}}}
+        },
+        {
+          "name": "Detach then recreate source as an array",
+          "input": {"a":{"n":7}},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","a",0]]],
+          "lazy": {"output":{"a":[{"n":7}]}}
+        },
+        {
+          "name": "Move child over its ancestor",
+          "input": {"a":{"child":{"n":7},"discard":1}},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","a","child"],"a"]],
+          "lazy": {"output":{"a":{"n":7}}}
+        },
+        {
+          "name": "Replace root with a descendant",
+          "input": {"a":{"n":7},"discard":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE"]]],
+          "lazy": {"output":{"n":7}}
+        },
+        {
+          "name": "Root can be detached through TEMP and restored",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE"],["TEMP","saved"],["TEMP","saved"],["NODE"]]],
+          "lazy": {"output":{"a":7}}
+        },
+        {
+          "name": "Detached root can be replaced by null",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE"],["TEMP","saved"],null,["NODE"]]],
+          "lazy": {"output":null}
+        },
+        {
+          "name": "Root can move into a newly created descendant",
+          "input": {"n":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE"],["NODE","saved"]]],
+          "lazy": {"output":{"saved":{"n":7}}}
+        },
+        {
+          "name": "Swap properties via TEMP",
+          "input": {"a":1,"b":2},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["TEMP","saved"],"b","a",["TEMP","saved"],"b"]],
+          "lazy": {"output":{"a":2,"b":1}}
+        },
+        {
+          "name": "Sequential rotation observes overwritten destinations",
+          "input": {"a":1,"b":2,"c":3},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a","b","c","a"]],
+          "lazy": {"output":{"a":3,"b":1}}
+        },
+        {
+          "name": "Later pair can move an earlier destination",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a","b","b","c"]],
+          "lazy": {"output":{"c":7}}
+        },
+        {
+          "name": "Resolve destination before removing its selector source",
+          "input": {"a":"target"},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE",["NODE","a"]]]],
+          "lazy": {"output":{"target":"target"}}
+        },
+        {
+          "name": "Both paths may be computed from input",
+          "input": {"src":"a","dst":"b","a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE",["NODE","src"]],["NODE",["NODE","dst"]]]],
+          "lazy": {"output":{"src":"a","dst":"b","b":7}}
+        },
+        {
+          "name": "Expand source and destination paths once",
+          "input": {"src":["a","x"],"dst":["b",0],"a":{"x":7}},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE",["NODE","src"]],["NODE",["NODE","dst"]]]],
+          "lazy": {"output":{"src":["a","x"],"dst":["b",0],"a":{},"b":[7]}}
+        },
+        {
+          "name": "Source expression is resolved before pair mutation",
+          "input": {"pick":"a","a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE",["NODE","pick"]],"pick"]],
+          "lazy": {"output":{"pick":7}}
+        },
+        {
+          "name": "Append object property into an array",
+          "input": {"source":{"n":7},"list":[]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",["NODE","list",false]]],
+          "lazy": {"output":{"list":[{"n":7}]}}
+        },
+        {
+          "name": "Move array element into an object",
+          "input": {"list":[1,2]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","list",0],"saved"]],
+          "lazy": {"output":{"list":[2],"saved":1}}
+        },
+        {
+          "name": "Move through STASH across actions",
+          "input": {"a":{"n":7}},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["STASH","saved"]],["MOVE",["STASH","saved"],"b"]],
+          "lazy": {"output":{"b":{"n":7}}}
+        },
+        {
+          "name": "Move between TEMP and STASH within one action",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["TEMP","x"],["TEMP","x"],["STASH","x"]],["COPY",["STASH","x"],"saved"]],
+          "lazy": {"output":{"saved":7}}
+        },
+        {
+          "name": "Replace the current node selected by AT",
+          "input": {"child":{"n":7}},
+          "jgraft": ["JGRAFT",{"v":1},["AT","child",["MOVE","n",["NODE"]]]],
+          "lazy": {"output":{"child":7}}
+        },
+        {
+          "name": "Restore a detached AT current node",
+          "input": {"child":{"n":7},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["AT","child",["MOVE",["NODE"],["TEMP","saved"],["TEMP","saved"],["NODE"]]]],
+          "lazy": {"output":{"child":{"n":7},"keep":1}}
+        },
+        {
+          "name": "Saved copy does not share a moved subtree",
+          "input": {"a":{"n":1}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","a"],"saved"],["MOVE","a","moved"],["COPY",2,["NODE","moved","n"]]],
+          "lazy": {"output":{"saved":{"n":1},"moved":{"n":2}}}
+        }
+      ]
+    },
+    {
+      "name": "MOVE deferred deletions and immediate appends",
+      "desc": "Array indices and LENGTH stay fixed for pending deletions. Appending at length is immediate, while writing a deleted position cancels its deletion. Bookkeeping follows the array instance, including when it moves or becomes unreachable.",
+      "tests": [
+        {
+          "name": "Delete original positions without shifting later sources",
+          "input": [0,1,2,3,4],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,2,null,4,null]],
+          "lazy": {"output":[1,3]}
+        },
+        {
+          "name": "Delete every original element",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,1,null,2,null]],
+          "lazy": {"output":[]}
+        },
+        {
+          "name": "Swap array endpoints through TEMP",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,["TEMP","saved"],-1,0,["TEMP","saved"],-1]],
+          "lazy": {"output":[2,1,0]}
+        },
+        {
+          "name": "Overwrite an original array position",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,1]],
+          "lazy": {"output":[0,2]}
+        },
+        {
+          "name": "Append an original element immediately",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,false]],
+          "lazy": {"output":[1,2,0]}
+        },
+        {
+          "name": "Append at the explicit length",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,2]],
+          "lazy": {"output":[1,0]}
+        },
+        {
+          "name": "Appended element can be moved again",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,false,2,0]],
+          "lazy": {"output":[0,1]}
+        },
+        {
+          "name": "Negative aliases observe immediate append",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,false,-1,0]],
+          "lazy": {"output":[null,1]}
+        },
+        {
+          "name": "Deletion does not change negative aliases",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,-1,["TEMP","saved"],["TEMP","saved"],0]],
+          "lazy": {"output":[2,1]}
+        },
+        {
+          "name": "Writing deleted index cancels its deletion",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,2,0]],
+          "lazy": {"output":[2,1]}
+        },
+        {
+          "name": "Write through deleted index recreates an object",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,2,["NODE",0,"child"]]],
+          "lazy": {"output":[{"child":2},1]}
+        },
+        {
+          "name": "Write through deleted index recreates an array",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,2,["NODE",0,0]]],
+          "lazy": {"output":[[2],1]}
+        },
+        {
+          "name": "Deleting the same slot again after repair works",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,2,0,0,null]],
+          "lazy": {"output":[1]}
+        },
+        {
+          "name": "Move array with pending deletions",
+          "input": {"list":[0,1,2]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","list",1],null,"list","moved"]],
+          "lazy": {"output":{"moved":[0,2]}}
+        },
+        {
+          "name": "Pending deletions follow an array through TEMP",
+          "input": {"list":[0,1,2]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","list",1],null,"list",["TEMP","held"],["TEMP","held"],"moved"]],
+          "lazy": {"output":{"moved":[0,2]}}
+        },
+        {
+          "name": "Repair pending deletion after moving its array",
+          "input": {"list":[0,1,2]},
+          "jgraft": [
+            "JGRAFT",
+            {"v":1},
+            ["MOVE",["NODE","list",1],null,"list",["TEMP","held"],null,["TEMP","held",1],["TEMP","held"],"moved"]
+          ],
+          "lazy": {"output":{"moved":[0,null,2]}}
+        },
+        {
+          "name": "Overwritten pending array is not resurrected",
+          "input": {"list":[0,1,2]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","list",1],null,null,"list"]],
+          "lazy": {"output":{"list":null}}
+        },
+        {
+          "name": "Deleting ancestor discards its pending array",
+          "input": {"outer":{"list":[0,1,2]},"keep":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","outer","list",1],null,"outer",null]],
+          "lazy": {"output":{"keep":1}}
+        },
+        {
+          "name": "Different pending arrays finalize independently",
+          "input": {"a":[0,1,2],"b":[3,4,5]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","a",0],null,["NODE","b",1],null]],
+          "lazy": {"output":{"a":[1,2],"b":[3,5]}}
+        },
+        {
+          "name": "Following action sees compacted indices",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null],["COPY",7,0]],
+          "lazy": {"output":[7,2]}
+        },
+        {
+          "name": "Deletion keeps LENGTH until MOVE completes",
+          "input": [0,1,2],
+          "jgraft": [
+            "JGRAFT",
+            {"v":1},
+            ["MOVE",0,null,null,["STASH",["LENGTH"]]],
+            ["COPY",{"array":["NODE"],"seen":["STASH"]},["NODE"]]
+          ],
+          "lazy": {"output":{"array":[1,2],"seen":{"3":null}}}
+        },
+        {
+          "name": "Append changes LENGTH during MOVE",
+          "input": [0,1],
+          "jgraft": [
+            "JGRAFT",
+            {"v":1},
+            ["MOVE",null,false,null,["STASH",["LENGTH"]]],
+            ["COPY",{"array":["NODE"],"seen":["STASH"]},["NODE"]]
+          ],
+          "lazy": {"output":{"array":[0,1,null],"seen":{"3":null}}}
+        },
+        {
+          "name": "Pending deletion still EXISTS",
+          "input": [0,1],
+          "jgraft": [
+            "JGRAFT",
+            {"v":1},
+            ["MOVE",0,null,null,["STASH",["CASTSTR",["EXISTS",["NODE",0]]]]],
+            ["COPY",{"array":["NODE"],"seen":["STASH"]},["NODE"]]
+          ],
+          "lazy": {"output":{"array":[1],"seen":{"true":null}}}
+        },
+        {
+          "name": "Deleted object property no longer EXISTS",
+          "input": {"a":7},
+          "jgraft": [
+            "JGRAFT",
+            {"v":1},
+            ["MOVE","a",null,null,["STASH",["CASTSTR",["EXISTS",["NODE","a"]]]]],
+            ["COPY",{"object":["NODE"],"seen":["STASH"]},["NODE"]]
+          ],
+          "lazy": {"output":{"object":{},"seen":{"false":null}}}
+        }
+      ]
+    },
+    {
+      "name": "MOVE queued half-index insertions",
+      "desc": "Half indices are legal only at the final destination selector. Their insertion order is stable, they do not affect LENGTH until finalization, and negative aliases use the length at the time of each pair.",
+      "tests": [
+        {
+          "name": "Destination -0.5 on length two",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,-0.5]],
+          "lazy": {"output":[null,"a","b"]}
+        },
+        {
+          "name": "Destination 0 on length two",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,0]],
+          "lazy": {"output":[null,"b"]}
+        },
+        {
+          "name": "Destination 0.5 on length two",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,0.5]],
+          "lazy": {"output":["a",null,"b"]}
+        },
+        {
+          "name": "Destination 1 on length two",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,1]],
+          "lazy": {"output":["a",null]}
+        },
+        {
+          "name": "Destination 1.5 on length two",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,1.5]],
+          "lazy": {"output":["a","b",null]}
+        },
+        {
+          "name": "Destination 2 on length two",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,2]],
+          "lazy": {"output":["a","b",null]}
+        },
+        {
+          "name": "Destination false on length two",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,false]],
+          "lazy": {"output":["a","b",null]}
+        },
+        {
+          "name": "Destination -1 on length two",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,-1]],
+          "lazy": {"output":["a",null]}
+        },
+        {
+          "name": "Destination -1.5 on length two",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,-1.5]],
+          "lazy": {"output":["a",null,"b"]}
+        },
+        {
+          "name": "Destination -2 on length two",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,-2]],
+          "lazy": {"output":[null,"b"]}
+        },
+        {
+          "name": "Destination -2.5 on length two",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,-2.5]],
+          "lazy": {"output":[null,"a","b"]}
+        },
+        {
+          "name": "Insert before an empty array",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,-0.5]],
+          "lazy": {"output":[null]}
+        },
+        {
+          "name": "Insertions at the same half index retain pair order",
+          "input": {"a":1,"b":2,"list":[0]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","list",-0.5],"b",["NODE","list",-0.5]]],
+          "lazy": {"output":{"list":[1,2,0]}}
+        },
+        {
+          "name": "Final order follows indices rather than pair order",
+          "input": {"a":1,"b":2,"list":[0,3]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","list",1.5],"b",["NODE","list",-0.5]]],
+          "lazy": {"output":{"list":[2,0,3,1]}}
+        },
+        {
+          "name": "Positive and negative half aliases share insertion order",
+          "input": {"a":1,"b":2,"list":[0,3]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","list",0.5],"b",["NODE","list",-1.5]]],
+          "lazy": {"output":{"list":[0,1,2,3]}}
+        },
+        {
+          "name": "Queue insertion beside a deleted position",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",1,-0.5]],
+          "lazy": {"output":[1,0,2]}
+        },
+        {
+          "name": "Queued insertion does not change LENGTH",
+          "input": [0,1],
+          "jgraft": [
+            "JGRAFT",
+            {"v":1},
+            ["MOVE",null,0.5,null,["STASH",["LENGTH"]]],
+            ["COPY",{"array":["NODE"],"seen":["STASH"]},["NODE"]]
+          ],
+          "lazy": {"output":{"array":[0,null,1],"seen":{"2":null}}}
+        },
+        {
+          "name": "Immediate append follows queued insertion at the former end",
+          "input": {"a":7,"list":[0,1]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","list",1.5],null,["NODE","list",false]]],
+          "lazy": {"output":{"list":[0,1,7,null]}}
+        },
+        {
+          "name": "Half-index aliases resolve using each pair's current length",
+          "input": {"a":7,"b":8,"list":[0,1]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["NODE","list",false],"a",["NODE","list",-1.5],"b",["NODE","list",-0.5]]],
+          "lazy": {"output":{"list":[8,0,1,7,null]}}
+        },
+        {
+          "name": "Queued insertions follow an array to another property",
+          "input": {"a":7,"list":[0]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","list",-0.5],"list","moved"]],
+          "lazy": {"output":{"moved":[7,0]}}
+        },
+        {
+          "name": "Queued insertions follow an array through TEMP",
+          "input": {"a":7,"list":[0]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","list",-0.5],"list",["TEMP","held"],["TEMP","held"],"moved"]],
+          "lazy": {"output":{"moved":[7,0]}}
+        },
+        {
+          "name": "Overwriting array drops queued insertions",
+          "input": {"a":7,"list":[0]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","list",-0.5],null,"list"]],
+          "lazy": {"output":{"list":null}}
+        },
+        {
+          "name": "Modify in TEMP before inserting",
+          "input": {"a":{"n":1},"replacement":7,"list":[]},
+          "jgraft": [
+            "JGRAFT",
+            {"v":1},
+            ["MOVE","a",["TEMP","held"],"replacement",["TEMP","held","n"],["TEMP","held"],["NODE","list",-0.5]]
+          ],
+          "lazy": {"output":{"list":[{"n":7}]}}
+        },
+        {
+          "name": "Following action can read completed insertions",
+          "input": [0],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,-0.5],["COPY",["NODE",0],["NODE"]]],
+          "lazy": {"output":null}
+        },
+        {
+          "name": "Array move can carry both pending deletion and insertion",
+          "input": {"a":7,"list":[0,1,2]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","list",1],null,"a",["NODE","list",0.5],"list","moved"]],
+          "lazy": {"output":{"moved":[0,7,2]}}
+        }
+      ]
+    },
+    {
+      "name": "MOVE invalid paths and inaccessible positions",
+      "desc": "Pending deletions are still indexed but unreadable. Queued insertions cannot be read or traversed. Literal path-domain violations are INVALID_GRAFT; computed selectors and input-dependent bounds fail at runtime. Partial trees on failure are intentionally not specified.",
+      "tests": [
+        {
+          "name": "Missing source cannot move",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","missing","target"]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Missing self-move is not a no-op",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","missing","missing"]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Deleted object property cannot move twice",
+          "desc": "The earlier pair removes the source.",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",null,"a","b"]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true}
+        },
+        {
+          "name": "Pending array deletion cannot move twice",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,0,1]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true},
+          "desc": "Deeper analysis may prove that the reference or span cannot succeed; local validation alone need not do so."
+        },
+        {
+          "name": "Cannot descend through a pending deletion",
+          "input": [{"x":7},1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,["NODE",0,"x"],1]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true},
+          "desc": "Deeper analysis may prove that the reference or span cannot succeed; local validation alone need not do so."
+        },
+        {
+          "name": "Destination expression cannot read a pending deletion",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,null,["NODE",["NODE",0]]]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true},
+          "desc": "Deeper analysis may prove that the reference or span cannot succeed; local validation alone need not do so."
+        },
+        {
+          "name": "SLICE cannot enumerate pending deletions",
+          "desc": "The simple SLICE forces a value read of the removed element; this is not a test of slice span selection. Deeper analysis may prove that the reference or span cannot succeed; local validation alone need not do so.",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,null,["STASH",["SLICE",{"len":1}]]]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true}
+        },
+        {
+          "name": "Pending deletion remains unreadable after array moves",
+          "input": {"list":[0,1]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","list",0],null,"list",["TEMP","held"],["TEMP","held",0],"saved"]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true},
+          "desc": "Deeper analysis may prove that the reference or span cannot succeed; local validation alone need not do so."
+        },
+        {
+          "name": "Current root cannot remain deleted",
+          "desc": "The action must restore a defined current node before finishing.",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE"],["TEMP","saved"]]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true}
+        },
+        {
+          "name": "AT current node cannot remain deleted",
+          "desc": "AT does not allow a MOVE to leave its current node absent.",
+          "input": {"child":{"a":7}},
+          "jgraft": ["JGRAFT",{"v":1},["AT","child",["MOVE",["NODE"],["TEMP","saved"]]]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true}
+        },
+        {
+          "name": "Sparse array destination",
+          "input": [0],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,2]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Cannot create array through a leading hole",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["NODE","list",1]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Append alias is not a readable source",
+          "input": [0],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",false,0]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true},
+          "desc": "Deeper analysis may prove that the reference or span cannot succeed; local validation alone need not do so."
+        },
+        {
+          "name": "Source index before array start",
+          "input": [0],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",-2,0]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Integer cannot select object source",
+          "input": {"0":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,"target"]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "String cannot select array source",
+          "input": [7],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","0",0]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Destination object cannot become an array",
+          "input": {"a":7,"target":{}},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","target",0]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Destination array cannot become an object",
+          "input": {"a":7,"target":[]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","target","x"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "TEMP does not survive between MOVE actions",
+          "desc": "TEMP is action-local.",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["TEMP","saved"]],["MOVE",["TEMP","saved"],"b"]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true}
+        },
+        {
+          "name": "Cannot descend through destination null",
+          "input": {"a":7,"target":null},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","target","x"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Cannot descend through destination false",
+          "input": {"a":7,"target":false},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","target","x"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Cannot descend through destination true",
+          "input": {"a":7,"target":true},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","target","x"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Cannot descend through destination 3",
+          "input": {"a":7,"target":3},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","target","x"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Cannot descend through destination \"text\"",
+          "input": {"a":7,"target":"text"},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","target","x"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Out-of-range destination 2.5",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,2.5]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Out-of-range destination 3",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,3]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Out-of-range destination -3",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,-3]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Out-of-range destination -3.5",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,-3.5]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid source path true",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",true,null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid destination path true",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,true]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid source path 0.25",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0.25,null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid destination path 0.25",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,0.25]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid source path {}",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",{},null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid destination path {}",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,{}]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid source path [[\"x\"]]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",[["x"]],null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid destination path [[\"x\"]]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,[["x"]]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid source path [\"LENGTH\"]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["LENGTH"],null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid destination path [\"LENGTH\"]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["LENGTH"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Nested null is not the literal-null source",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE",null],"x"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Nested null is not the literal-null destination",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE",null]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal half-index source is forbidden",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0.5,0]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal half-index cannot be an intermediate destination",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["NODE",-0.5,"x"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Queued half-index cannot be a literal source",
+          "desc": "Only destination paths admit half indices.",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,-0.5,-0.5,0]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Cannot write through a queued half index",
+          "input": {"a":{"n":7},"list":[]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE","list",-0.5],null,["NODE","list",-0.5,"x"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Computed invalid destination null",
+          "input": {"selector":null},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed invalid destination true",
+          "input": {"selector":true},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed invalid destination 0.25",
+          "input": {"selector":0.25},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed invalid destination {}",
+          "input": {"selector":{}},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed invalid destination [[\"x\"]]",
+          "input": {"selector":[["x"]]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed half-index is not a source",
+          "input": {"selector":0.5,"list":[0,1]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","list",["NODE","selector"]],null]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed half-index cannot be traversed",
+          "input": {"selector":-0.5,"list":[]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["NODE","list",["NODE","selector"],"x"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed null source selector is not the null shorthand",
+          "input": {"selector":null},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE",["NODE","selector"]],"target"]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed null destination selector is not deletion",
+          "input": {"selector":null,"source":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Illegal arity [\"MOVE\"]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Illegal arity [\"MOVE\",\"x\"]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","x"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Illegal arity [\"MOVE\",\"x\",\"y\",\"z\"]",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","x","y","z"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "FAIL while computing a source remains runtime failure",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE",["FAIL"]],null]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "FAIL while computing a destination remains runtime failure",
+          "input": {"a":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","a",["NODE",["FAIL"]]]],
+          "lazy": {"runtime_error":true}
+        }
+      ]
+    },
+    {
+      "name": "Action namespace permissions",
+      "desc": "Exercise each mutating action's own namespace checks. CAP is never populated. Namespace construction and broader reference behavior are covered in 01-jgraft-namespaces.json.",
+      "tests": [
+        {
+          "name": "COPY cannot write CONST",
+          "input": {"source":1},
+          "jgraft": ["JGRAFT",{"v":1,"const":["x",[[1,2]]]},["COPY",7,["CONST","x"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "COPY cannot write CAP",
+          "input": {"source":1},
+          "jgraft": ["JGRAFT",{"v":1,"const":["x",[[1,2]]]},["COPY",7,["CAP","x"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "COPY cannot replace STASH root",
+          "input": {"source":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["STASH"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "COPY cannot replace TEMP root",
+          "input": {"source":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["TEMP"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE cannot write CONST",
+          "input": {"source":1},
+          "jgraft": ["JGRAFT",{"v":1,"const":["x",[[1,2]]]},["MOVE","source",["CONST","x"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE cannot write CAP",
+          "input": {"source":1},
+          "jgraft": ["JGRAFT",{"v":1,"const":["x",[[1,2]]]},["MOVE","source",["CAP","x"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE cannot replace STASH root",
+          "input": {"source":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",["STASH"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE cannot replace TEMP root",
+          "input": {"source":1},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",["TEMP"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE cannot remove CONST root",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["CONST"],null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE cannot remove CAP root",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["CAP"],null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE cannot remove STASH root",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["STASH"],null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE cannot remove TEMP root",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["TEMP"],null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE cannot remove constant child",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1,"const":["x",7]},["MOVE",["CONST","x"],null]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "Lazy validation and abort behavior",
+      "desc": "Basic IF and RAISE actions provide reachability and execution-order probes only. This collection does not test matching semantics, captures, SPLIT metadata, rollback, or implementation-specific partial failure trees.",
+      "tests": [
+        {
+          "name": "COPY malformed unselected action",
+          "desc": "IF is used only to skip an action; no matching algorithm or captures are under test.",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["IF",false,["COPY",7,["NODE",null]],["COPY","safe",["NODE"]]]],
+          "lazy": {"output":"safe"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "COPY encountered malformed action follows earlier log",
+          "desc": "The earlier action executes in lazy mode. Strict validation may reject before execution, so its log sequence is not asserted.",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["COPY",7,["NODE",null]]],
+          "lazy": {"invalid_graft":true,"emits":[{"level":0,"message":"before"}]},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE malformed unselected action",
+          "desc": "IF is used only to skip an action; no matching algorithm or captures are under test.",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["IF",false,["MOVE",null,["NODE",true]],["COPY","safe",["NODE"]]]],
+          "lazy": {"output":"safe"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE encountered malformed action follows earlier log",
+          "desc": "The earlier action executes in lazy mode. Strict validation may reject before execution, so its log sequence is not asserted.",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["MOVE",null,["NODE",true]]],
+          "lazy": {"invalid_graft":true,"emits":[{"level":0,"message":"before"}]},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "COPY runtime failure aborts later actions",
+          "desc": "No output is specified on failure. The complete log prefix establishes that following actions did not run.",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["COPY",["NODE","missing"],"x"],["RAISE","info","after"]],
+          "lazy": {"runtime_error":true,"emits":[{"level":0,"message":"before"}]}
+        },
+        {
+          "name": "MOVE runtime failure aborts later actions",
+          "desc": "No output is specified on failure. The complete log prefix establishes that following actions did not run.",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["MOVE","missing","x"],["RAISE","info","after"]],
+          "lazy": {"runtime_error":true,"emits":[{"level":0,"message":"before"}]}
+        }
+      ]
+    },
+    {
+      "name": "Cross-checks for expanded paths and moved containers",
+      "desc": "Small combinations expose mistakes in treating path expansion, numeric property names, snapshot ownership, and array bookkeeping as interchangeable.",
+      "tests": [
+        {
+          "name": "MOVE string half-index spelling is an object key",
+          "input": {"source":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source","0.5"]],
+          "lazy": {"output":{"0.5":7}}
+        },
+        {
+          "name": "MOVE half index cannot name a STASH property",
+          "desc": "Internal namespace roots are objects, and only integer selectors receive name coercion.",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["STASH",0.5]]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true}
+        },
+        {
+          "name": "MOVE computed half index cannot name an object property",
+          "input": {"selector":0.5},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,["NODE",["NODE","selector"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "MOVE empty expansions still permit a final half index",
+          "input": {"source":7,"list":[0]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",["NODE","list",[[]],-0.5]]],
+          "lazy": {"output":{"list":[7,0]}}
+        },
+        {
+          "name": "MOVE expanded destination path may end in a half index",
+          "input": {"source":7,"path":["list",-0.5],"list":[0]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",["NODE",["NODE","path"]]]],
+          "lazy": {"output":{"path":["list",-0.5],"list":[7,0]}}
+        },
+        {
+          "name": "MOVE expanded half index cannot be intermediate",
+          "input": {"source":7,"path":["list",-0.5,"x"],"list":[]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",["NODE",["NODE","path"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "MOVE repairs a pending slot with explicit null",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",0,null,null,0]],
+          "lazy": {"output":[null,1]}
+        },
+        {
+          "name": "MOVE appended null can be deleted before finalization",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",null,false,-1,null]],
+          "lazy": {"output":[0,1]}
+        },
+        {
+          "name": "MOVE queued inserts survive deletion of every original element",
+          "input": {"source":7,"list":[0,1]},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","source",["NODE","list",0.5],["NODE","list",0],null,["NODE","list",1],null]],
+          "lazy": {"output":{"list":[7]}}
+        },
+        {
+          "name": "MOVE pending state follows descendant moved over its ancestor",
+          "input": {"outer":{"list":[0,1,2],"discard":7}},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","outer","list",1],null,["NODE","outer","list"],"outer"]],
+          "lazy": {"output":{"outer":[0,2]}}
+        },
+        {
+          "name": "MOVE finalizes an array moved to the root",
+          "input": {"list":[0,1,2],"discard":7},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","list",1],null,"list",["NODE"]]],
+          "lazy": {"output":[0,2]}
+        },
+        {
+          "name": "MOVE sibling snapshot does not acquire pending edits",
+          "input": {"list":[0,1,2]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","list"],"saved"],["MOVE",["NODE","list",0],null,null,["NODE","list",0.5]]],
+          "lazy": {"output":{"list":[null,1,2],"saved":[0,1,2]}}
+        }
+      ]
+    }
+  ]
+}

@@ -1538,9 +1538,10 @@ programming languages.  The `path` argument is specified in path context and
 `option_args` in value context.  There are two permitted combinations:
 
   * If `option_args` evaluates to an integer, `path` must refer to an element
-    of an array (or its insertion point at `LENGTH`).  That index supplies the
-    offset.  A non-negative integer supplies `len`; a negative integer supplies
-    a limit counting backward from the length of the array.
+    of an array (or its insertion point at `LENGTH`) and may not be `[NODE]`
+    itself as that would alter a parent of the current node.
+    That index supplies the offset.  A non-negative integer supplies `len`;
+    a negative integer supplies a limit counting backward from the length of the array.
   * If `option_args` evaluates to an object, `path` supplies the source node.
     The object accepts the same optional `ofs`, `len`, `lim`, and `path`
     properties as the object configuration of [`SLICE`](#ex-slice), with the

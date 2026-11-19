@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "name": "Over resource limits",
+  "desc": "Nonterminating execution and output allocations exceeding practical configured limits. Run with finite work, memory, and applicable nesting limits, plus an external watchdog. Only RESOURCE_LIMIT is an expected engine outcome; host exceptions, process termination, watchdog expiry, NO_MATCH, and successful completion are failures. The large ROUND cases request at least 100 trillion output characters and require a configured allocation budget below that amount. All structures are valid; these are not malformed-graft or catastrophic-backtracking tests.",
+  "tests": [
+    {
+      "name": "Unbounded execution",
+      "desc": "These grafts have no successful terminating execution. Even loops with no net data growth must consume a finite processing budget.",
+      "tests": [
+        {
+          "name": "Repeated constant assignment",
+          "desc": "A true WHILE condition never changes. Repeatedly overwriting the root with 1 does not require growing memory, so execution accounting must still stop it.",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",true,["COPY",1,["NODE"]]]],
+          "lazy": {"resource_limit":true}
+        },
+        {
+          "name": "Recursive action macro",
+          "desc": "The ACT body calls its own constant binding indefinitely. Construction is finite; invocation must be limited even if calls are implemented without growing the host stack.",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1,"const":["again",["ACT",["CALL","again"]]]},["CALL","again"]],
+          "lazy": {"resource_limit":true}
+        },
+        {
+          "name": "Recursive value macro",
+          "desc": "The VAL body expands its own constant binding indefinitely. Resource checks must cover expression expansion as well as actions.",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1,"const":["again",["VAL",["EX","again"]]]},["COPY",["EX","again"],["NODE"]]],
+          "lazy": {"resource_limit":true}
+        }
+      ]
+    },
+    {
+      "name": "Unbounded data growth",
+      "desc": "Infinite loops grow different representations. Implementations may hit work, memory, object, or nesting budgets first; every such outcome must be RESOURCE_LIMIT.",
+      "tests": [
+        {
+          "name": "Repeated string doubling",
+          "desc": "Each iteration doubles the root string. Account for native string allocation before allowing host memory exhaustion.",
+          "input": "x",
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",true,["COPY",["CONCAT",["NODE"],["NODE"]],["NODE"]]]],
+          "lazy": {"resource_limit":true}
+        },
+        {
+          "name": "Repeated array doubling",
+          "desc": "Each iteration doubles the logical array length. Sharing element storage must not bypass limits indefinitely.",
+          "input": [0],
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",true,["COPY",["CONCAT",["NODE"],["NODE"]],["NODE"]]]],
+          "lazy": {"resource_limit":true}
+        },
+        {
+          "name": "Repeated tree wrapping",
+          "desc": "Each iteration creates a new object containing the previous root. Account for work and object growth even if the previous subtree is shared.",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",true,["COPY",{"child":["NODE"]},["NODE"]]]],
+          "lazy": {"resource_limit":true}
+        }
+      ]
+    },
+    {
+      "name": "Unavoidable decimal output",
+      "desc": "Unlike the compact ROUND cases in 90-under-resource-limit.json, the final STR representation itself must contain at least 100 trillion characters. All exponent arithmetic stays within portable integer precision.",
+      "tests": [
+        {
+          "name": "Huge integer digit string",
+          "desc": "STR forbids scientific notation. The required result has 100000000000001 characters; reject against the configured output allocation budget before constructing it.",
+          "input": "1e100000000000000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR"}],["NODE"]]],
+          "lazy": {"resource_limit":true}
+        },
+        {
+          "name": "Huge fractional padding",
+          "desc": "STR requires exactly at digits after the decimal point, even for zero. The required result has 100000000000002 characters.",
+          "input": "0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":100000000000000,"as":"STR"}],["NODE"]]],
+          "lazy": {"resource_limit":true}
+        },
+        {
+          "name": "Allocation failure inside a match remains fatal",
+          "desc": "The ROUND expression is evaluated as the alternate target of IS. RESOURCE_LIMIT must escape match error trapping rather than becoming a false match and NO_MATCH.",
+          "input": "1e100000000000000",
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["IS","unreachable",["ROUND",{"as":"STR"}]]]],
+          "lazy": {"resource_limit":true}
+        }
+      ]
+    }
+  ]
+}

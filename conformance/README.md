@@ -39,6 +39,8 @@ setups or related assertions.  Each test has the shape:
         no_match: bool,
         runtime_error: bool,
         invalid_graft: bool,
+        unsupported_graft: bool,
+        resource_limit: bool
       },
       strict: {
         output:     // the result of applying the graft, if it can succeed
@@ -60,6 +62,12 @@ not indicate anything.  Each of the error flags `no_match`, `runtime_error`,
 `invalid_graft` are booleans since the error is not deterministic. Lazy
 evaluation may encounter a RUNTIME_ERROR before testing an expression path that
 triggers INVALID_GRAFT, and may result in NO_MATCH if that error is caught.
+The `unsupported_graft` is only seen when testing the rejection of an
+unsupported `JGRAFT` version.  Each implementation must be aware of its own
+nonformance, rather than being told by the conformance test.
+Likewise, `resource_limit` will only be specified for cases which are designed
+to consume an impossible amount of resources, and each implementation will need
+to set limits large enough to pass the normal conformance tests.
 Flag properties may be omitted when false, to reduce file size.
 
 If the graft contains an error that could allow a more strict validation
