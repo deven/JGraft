@@ -652,6 +652,15 @@ gets priority on a minimal length.  When you change both to `long: true`,
 the final state with the most elements for sequence 1 is a split of
 `[1,2,3]` / `[4,5]`.
 
+While algorithms are generally left unspecified, implementations must match an
+array against a chain of NEAR expressions in polynomial time in the combined
+size of the input and pattern when each expression has a literal integer index,
+contains only literal string operands, and its operand sequence matches at
+exactly one position in the input.  When these matches occur at their
+respective preferred indices and together satisfy the complete chain, matching
+must take at most linear time in that combined size.  Size includes array
+elements, pattern operands, and the lengths of their strings.
+
 ### Matching String Characters
 
 JGraft can match the characters of a string using the same expressions used for
@@ -1486,6 +1495,10 @@ are:
     Every deletion will be paired with an insertion and the `MOVE` action can
     run in `O(N)` time without actual splice() calls.
 
+In a conforming implementation, a single `MOVE` rearranging a flat array
+through literal indices must take `O(n + m)` time, where `n` is the array
+length and `m` the number of move pairs.
+
 Examples:
 
     ['MOVE', 0,[TEMP,0],           // tmp['0']= node[0];
@@ -1733,10 +1746,12 @@ When [matching array elements](#matching-arrays), sequence expressions are
 permitted and each argument is treated as a constraint that must be satisfiable
 over the same list of matched elements.  The successor positions of the `ALL`
 expression are the intersection of the positions returned from each
-subexpression.  Because all subexpressions must match, `ALL` is not exempt from
-collecting captures.  For each position, the captures are simply the union of
-the captures from each subexpression, and duplicates trigger failures using the
-normal rules.
+subexpression.  `ALL` is not exempt from collecting captures.  For each
+position, the captures are simply the union of the captures from each
+subexpression, and duplicates trigger failures using the normal rules.
+For capture-free branches consisting of simple wildcard repetitions,
+intersection must be polynomial in input and pattern size, including
+unsuccessful surrounding matches.
 
 If `ALL` subexpressions contain sequences with position or length preferences,
 they participate in the selection of a match for the overall array, using
@@ -2149,12 +2164,15 @@ Regex Notation               | REP notation
  `(...){5}`                  | [REP,5,0,...]
  `(...){3,5}`                | [REP,3,5,...]
 
-Implementations should optimize the pattern `[REP, ... [EXISTS]]` (specifically
+Implementations must optimize the pattern `[REP, ... [EXISTS]]` (specifically
 the no-argument form of `EXISTS`) to simply identify successor states based on
 the elements which exist, rather than executing an `EXISTS` expression at each
 of them.  This prevents quadratic application of `EXISTS` when testing possible
 successor states from expressions like `[SEQ, [REP], "needle", [REP] ]` and
-avoids running into resource limits unnecessarily.
+avoids running into resource limits unnecessarily.  Also, for the default
+operand or a literal empty `SEQ`, processing must not enumerate repetitions
+beyond what is necessary to determine the distinct successor positions.
+Large bounds must not be expanded into repeated pattern nodes.  
 
 #### <span id="ex-start">START</span>
 
@@ -2468,13 +2486,15 @@ Concatenate one or more arrays or strings into a larger array or string.
 
 All arguments must evaluate to the same type.  If they are all strings, they
 get joined into a string.  If they are all arrays, a new array of the combined
-lists of elements is returned.
+lists of elements is returned.  Construction of the resulting string/array must
+take no worse than `O(N log(N))` time in the number of operands/elements plus
+the result size.
 
 When [`SPLIT` metadata](#split-metadata) is present on an input array, it gets
 copied to the output array unless an earlier input array already copied `SPLIT`
 metadata with a different `origin`.  This causes all other elements to receive
 "adjacent element metadata" unless they have some from a matching `origin`.
-
+  
 #### <span id="ex-reduce">REDUCE</span>
 
     [REDUCE, reduce_expr, temp_prop, initial_value]
@@ -2523,7 +2543,9 @@ With one argument, the current node must be an array.  Otherwise, the
 `array_expr` specified in value context must evaluate to an array.
 Each element of the array is localized as the current node while evaluating
 `match_expr`.  The elements which match become part of the returned array, in
-the same order they appeared in the original array.
+the same order they appeared in the original array.  Construction of the
+resulting array must take no worse than `O(N log(N))` time in the number of
+elements.
 
 If the source array contains [`SPLIT` metadata](#split-metadata), the metadata
 for the selected elements gets copied to the new array.
@@ -2544,7 +2566,9 @@ evaluated and likewise must return an array to be used as the input.
 Then, for each element of the input array, the current node is localized to
 reference it, and `transform_expr` is evaluated in that context.
 The values returned by each evaluation of `transform_expr` become the elements
-of the array returned by `MAP`.
+of the array returned by `MAP`.  Construction of the
+resulting array must take no worse than `O(N log(N))` time in the number of
+elements.
 
 If you need to replace one element with a differing number of elements you
 need to use `REDUCE`, which may construct an array in its accumulator.
@@ -3194,7 +3218,9 @@ logical size of intermediate numbers vs. the available numeric storage types,
 unless the output format requires a number and the final computed value would
 also exceed those limits.  Implementations may fail if the addition/subtraction
 on the exponent number itself would exceed the portable integer-size
-requirements.
+requirements.  For string inputs, work and storage should be bounded by the
+encoded input, options, and required output sizes, not by the magnitude of an
+exponent that can be handled symbolically.
 
 Note that the plain-integer form of the options argument is used as the `shift`
 parameter to enable easy tests against floating-point numbers:
