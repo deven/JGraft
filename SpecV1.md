@@ -126,8 +126,8 @@ structure as general matching, but operating on a virtual array of characters.
     match expression forbids sequence expressions.
   * Non-negative integers describe Unicode codepoints
   * Arrays represent expressions.  Literal match expressions become part of the
-    matching algorithm.  Match expressions macros created with `REG` may be
-    inserted with `EX` and participate in the match.  Literal values, Value
+    matching algorithm.  Match expression macros created with `REG` may be
+    inserted with `EX` and participate in the match.  Literal values, value
     expressions, and expansion of value expression macros evaluate to a plain
     value which then gets interpreted according to these rules.
     Structural pattern macros (despite also being match expressions) are not
@@ -436,7 +436,8 @@ elements of an array, or characters of a string in regex context.
 When the match specification contains an object, it can only match against an
 object in the data.  There are two modes of operation for comparing the
 properties: "is" mode and "has" mode.  This mode is inherited lexically from
-the nearest parent `IS` or `HAS` expression, and the initial value is "has".
+the nearest parent `IS` or `HAS` expression or `GROUP` with an explicit
+`exact` setting, and the initial value is "has".
 In "is" mode, any object property in the data object which was not specified
 in the specification object causes an automatic match failure; in "has" mode
 they do not.
@@ -449,7 +450,7 @@ property of `spec_obj`.  For each, it temporarily sets the current node to the
 corresponding property of `data_obj`, even if no such property exists in
 `data_obj`.  It then recursively tests the specification for that property.
 This may succeed even on a nonexistent current node if the specification uses
-the [`NONE` expression](#ex-cant), which is an assertion that returns true when
+the [`NONE` expression](#ex-none), which is an assertion that returns true when
 a pattern *doesn't* match.
 For example, in "has" mode `{ a: [NONE, [EXISTS]] }` asserts that an object
 does not have a property named "a".  In "is" mode a test like this is not
@@ -462,11 +463,11 @@ to the property being tested.
 #### Matching Arrays
 
 When the match specification contains an (escaped) array, it can only match
-against an array in the data.  The "is"/"has" mode from object matching serve
+against an array in the data.  The "is"/"has" mode from object matching serves
 a parallel purpose here, determining whether all elements of the array must
 match, but the process for matching elements of an array is much different from
-the process of matching object properties.  Match expresisons classified as
-sequence-test expresions may be used here, and consume a variable number of
+the process of matching object properties.  Match expressions classified as
+sequence-test expressions may be used here, and consume a variable number of
 array elements based on a regular language automata theme.
 These expressions have behavior defined in terms of "initial state" and
 "generated successor states"; the initial state has a position within
@@ -479,7 +480,7 @@ the `END` assertion.
 Among the non-sequence match expressions, the `ANY`, `ALL`, and `WITH`
 expressions adapt to the width of their arguments, and all others (classified
 as node-test expressions) test a node in isolation.  The successor state
-produced by successful a node-test expression is the position following the
+produced by a successful node-test expression is the position following the
 current element; i.e. they consume one element.
 Implementations are likely to need to iterate the successor states as they look
 for an overall match for the array specification, but no specific order is
@@ -513,9 +514,10 @@ calls.  This traversal must occur even for "lazy" evaluation mode on pattern
 branches that are otherwise unused.
 The current node is set to the array being matched, rather than the node that
 would normally be implied by the position of the expressions.
-This may involve evaluating `WITH` expressions along the path to the relevant
-sequences.  `WITH` normally gets to assume that `NODE` is an array element;
-since it will instead be an array during preparation, errors need deferred.
+This may involve evaluating `WITH` expressions (local to this preparation step)
+along the path to the relevant sequences.
+`WITH` normally gets to assume that `NODE` is an array element;
+since it will instead be an array during preparation, errors need to be deferred.
 If evaluating a `WITH` binding during preparation raises `RUNTIME_ERROR`,
 retain the error as the value of that binding without raising it immediately.
 The binding still shadows any previous value.  Accessing it during preparation
@@ -525,7 +527,7 @@ preparation step.  A `RUNTIME_ERROR` is handled as failure of the array match;
 other errors propagate according to the normal error rules.
 
 Implementations may omit preference resolution wherever doing so cannot affect
-the captures or overall match bounds returned by the enclosing match, however
+the captures or overall match bounds returned by the enclosing match; however,
 the preparation step must still be performed to ensure that any macro expansion
 and group flags like `exact` get calculated correctly.
 When only a boolean result is required, the algorithm may stop after finding
@@ -562,7 +564,7 @@ from 5, "prefix" breaks the tie pushing "target" to the latter position.
       [GROUP, "suffix", [REP]],
     ]]
 
-The fourth rule has no bearing on the boundaries of captures in the current
+The fifth rule has no bearing on the boundaries of captures in the current
 array; it resolves ambiguities in selecting which array element should provide
 captures from deeper arrays or strings.  Consider this example:
 
@@ -605,14 +607,15 @@ get carried as annotations to the current match state.  If the overall match
 succeeds, the captures (which may be an empty set if no named sequences were
 used) are available as output.  Uniqueness of capture names is only enforced
 for the state selected by the final overall match, failing with `INVALID_GRAFT`
-if there are duplicates.  Note that the quantity of captures from each
-subexpression is a constant, but the *names* of captures from deeper matches
-may vary since they are calculated.  Implementations may choose to test
-subtrees as if they were unobservable in a first pass, and then resolve the
-deeper captures in a second pass after the positions of sequences in the
-current array are resolved.  If successor captures are generated eagerly,
-conflicts must be flagged internally and not abort the match attempt unless
-that state would be used in the final result.
+if there are duplicates.  Note that the quantity of captures from sequences in
+the current array match is a constant, but the quantity and names of captures
+from deeper matches may vary, since they are calculated.
+Implementations may choose to test subtrees as if they were unobservable in a
+first pass, and then resolve the deeper captures in a second pass after the
+positions of sequences in the current array are resolved.
+If successor captures from subtrees are generated eagerly, conflicts must be
+flagged internally and not abort the match attempt unless that state would be
+used in the final result.
 If the match was occurring as the test of a `MATCH` or `IF` action, the
 captures become the new state of the [capture namespace](#ex-cap) locally for
 its contained actions.  If the match was occurring within a `CAPTURE` function,
@@ -622,8 +625,8 @@ Examples:
 
 Named groups on a subject of [1,2,3,4,5] in 'HAS' context:
 
-    [[ [SHORT, 1, [REP,0,-1,[NUM,0,3]] ],   // 0 or more [0..3]
-       [SHORT, 2, [REP,0,-1,[NUM,0,5]] ]    // 0 or more [0..5]
+    [[ [GROUP, {name: 1, long: false}, [REP,0,-1,[NUM,0,3]] ], // 0 or more [0..3]
+       [GROUP, {name: 2, long: false}, [REP,0,-1,[NUM,0,5]] ]  // 0 or more [0..5]
     ]]
 
 The captures are zero elements for each, because the initial position is a
@@ -632,8 +635,8 @@ causes this position to be selected as the best match.
 
 For the same subject in 'IS' context, the expression is implicitly:
 
-    [[ [SHORT, 1, [REP,0,-1,[NUM,0,3]] ],   // 0 or more [0..3]
-       [SHORT, 2, [REP,0,-1,[NUM,0,5]] ],   // 0 or more [0..5]
+    [[ [GROUP, {name: 1, long: false}, [REP,0,-1,[NUM,0,3]] ], // 0 or more [0..3]
+       [GROUP, {name: 2, long: false}, [REP,0,-1,[NUM,0,5]] ], // 0 or more [0..5]
        [END]
     ]]
 
@@ -680,7 +683,7 @@ When matching against a virtual character array,
     a number.
   * If the current node is changed to something other than a virtual array
     of characters (via two-argument `HAS` / `IS`), the algorithm
-    switches back to Non-Regex Matching for the duration of that scope.
+    switches back to non-regex matching for the duration of that scope.
 
 In some cases, only a boolean result is required, and the match ends as soon
 as the expression is satisfied.  Other cases require finding the longest
@@ -967,7 +970,7 @@ The following conditions cause an `INVALID_GRAFT` error:
     literal objects) violate a constraint between them, like `pos <= lim`.
     If an array length is used to interpret a literal alias, it is not truly
     a literal and is exempt from this check.
-  * A sequence-test match expression is encounted in a context where only a
+  * A sequence-test match expression is encountered in a context where only a
     single node may be matched.
   * A regex-context macro (`REG`) gets expanded outside of regex context, or a
     structure-match macro (`PAT`) gets expanded inside regex context.
@@ -988,10 +991,13 @@ lazy-evaluation mode.  In lazy mode, validation of a directive operand occurs
 when evaluation requires that operand.  Operands skipped by flow control are
 not validated.  Errors from validation, including `INVALID_GRAFT`, are
 deferred.  A structurally invalid graft may apply cleanly so long as the
-structurally invalid portions do not need executed.  It also means that
+structurally invalid portions do not need to be executed.  It also means that
 implementations which compile the full JGraft before execution must include the
 ability to hold the deferred validation errors in the optree nodes, including
 within parsed macros.
+
+The mandatory [array-match preparation step](#matching-arrays) also applies in
+lazy mode, including preparation of otherwise unused pattern branches.
 
 More robust implementations are encouraged to provide various degrees of
 validation prior to execution, such as checking for all the `INVALID_GRAFT`
@@ -1043,7 +1049,7 @@ this through static evaluation, it may warn but must not reject the graft.
 ### Resource Limits
 
 One of the design goals for JGraft is to provide a language for editing data
-which can safely handle un-trusted input, however this language can describe
+which can safely handle untrusted input; however, this language can describe
 operations that require infinite memory and execution time.
 Every implementation must enforce limits for memory and execution, and should
 provide a means for applications to tune these limits.  At a minimum, there
@@ -1151,8 +1157,8 @@ The algorithm when beginning a `JGRAFT` action is roughly:
     ['RAISE', level, message, data]
 
 As JGraft applies a patch it may emit diagnostic information, such as when
-a match succeeded at an offset from the declared array.  You can emit your own
-custom diagnostics as well, using this action.  The motivation is that while
+a match succeeded at an offset from the requested position.  You can emit your
+own custom diagnostics as well, using this action.  The motivation is that while
 a tool like `patch` can make a fairly straightforward diagnostic about why
 applying a text diff failed, a JGraft mismatch can be much harder to explain.
 An author of a JGraft might have more domain-specific information about why
@@ -1234,7 +1240,7 @@ to repeatedly act on `[STASH,0]` during the subactions:
       },
       [MATCH,
         [[
-          [NEAR, 9, null,
+          [NEAR, 9,
             "Line ten",
             [GROUP, "edit",
               "Line eleven",
@@ -1273,7 +1279,7 @@ them in the inner scope.
 
 When using the `NEAR` expression to locate a pattern, the captures convey the
 discovered offset to the actions that edit them, analogous to how Unix `patch`
-applies a hunk at an adjusted offset.  Unlike Unix `patch`, Literal array
+applies a hunk at an adjusted offset.  Unlike Unix `patch`, literal array
 offsets in sub-actions are not adjusted automatically.  Captures do not need to
 be used directly; actions may be written using expressions that calculate
 offsets from the captured bounds.
@@ -1474,7 +1480,7 @@ are:
   - Arrays do not get resized or shifted on every single move pair
   - If an editor has re-ordered the elements of an array, and knows the source
     and destination index of each, it can easily export that edit as a `MOVE`
-    argument list from those pairs by subtracting ".5" to each destination.
+    argument list from those pairs by subtracting ".5" from each destination.
     Every deletion will be paired with an insertion and the `MOVE` action can
     run in `O(N)` time without actual splice() calls.
 
@@ -1547,10 +1553,10 @@ result of the splice had been inserted at the end of a fresh array.
 Evaluate `test_expr` and if true, execute `actions` and repeat.
 
 The `test_expr` (value context) is any expression that evaluates to a boolean.
-It is evaluated, and then only if it is true, each of the `actions` are
+It is evaluated, and then only if it is true, each of the `actions` is
 executed in sequence.  This process repeats until `test_expr` returns false.
 
-This expression often requires the use of loop variables in the `STASH`
+This action often requires the use of loop variables in the `STASH`
 namespace, since only actions can mutate data, and the `TEMP` namespace is
 local to each action, and other non-input namespaces are read-only.  Iteration
 might also be controlled by mutating the input data.  The loop variables can be
@@ -1734,7 +1740,7 @@ If `ALL` subexpressions contain sequences with position or length preferences,
 they participate in the selection of a match for the overall array, using
 argument order as the traversal order for the resolution algorithm.
 
-For a much-needed example, consider this expression:
+For example, consider this expression:
 
     [ALL,
       [GROUP, "pairs",
@@ -1764,7 +1770,7 @@ The first subexpression requires zero or more pairs of (string, number).  It
 can only match an even number of elements.  The second subexpression can match
 zero or two elements, followed by any number of elements.  The third
 subexpression can match any number of elements followed by zero or two elements.
-Each group is preferring a longer match.  The un-rouped `REP` expressions have
+Each group prefers a longer match.  The ungrouped `REP` expressions have
 no preference.
 
 When used in an array expression and matched to an input of
@@ -1777,9 +1783,9 @@ Subexpression | Successor Positions
 `REP` "last"  | +0, +1, +2, +3, +4, +5, +6, +7, +8
 
 The intersection of them is `(+0,+2,+4,+6)`.  Absent a preference above the
-`ALL` expression, the "pairs" sequence prefers the successor at +6, captuing
+`ALL` expression, the "pairs" sequence prefers the successor at +6, capturing
 all elements under the name "pairs".  The "first" sequence prefers the longer
-match ending at +2, captuing two elements under the name "first".  The last
+match ending at +2, capturing two elements under the name "first".  The last
 sequence must end at +6 and prefers the longer match beginning at +4, capturing
 the last two elements under the name "last".
 
@@ -1794,9 +1800,10 @@ The `match_spec` argument is declared using [match context](#match-context)
 and the `value_expr` is declared using [value context](#value-context).
 In the 1-argument form, the value being compared is the current node.
 
-The `HAS` expression is the default for match context; a `[HAS,...]`
-expression at the root of a match structure is redundant unless used in
-the 2-argument form to establish an alternate current node.
+The `HAS` expression is the default for match context; when "has" mode is
+already in effect, a `[HAS,...]` expression at the root of a match structure is
+redundant unless used in the 2-argument form to establish an alternate current
+node.
 
 In the 2-argument form, the current node does not change until matching begins
 in the subexpression; this means that if `match_spec` is a reference or
@@ -1839,8 +1846,9 @@ The `match_spec` argument is [match context](#match-context) and the
 form, the value being compared is the current node.
 
 As described in the [matching section](#matching), the entire contiguous tree
-of match structure and match expressions within the `IS` expression inherit
-"is" mode unless overridden with a `HAS` expression.
+of match structure and match expressions within the `IS` expression inherits
+"is" mode unless overridden with a `HAS` expression or a `GROUP` with an
+explicit `exact` setting.
 
 Examples:
 
@@ -1856,9 +1864,9 @@ Examples:
 
 #### <span id="ex-none">NONE</span>
 
-    [NONE, match_expr...]
+    [NONE, match_expr, ...]
 
-Match when the target does not match any of the [match-context](#match-context)
+Match when the target does not match one or more [match-context](#match-context)
 expressions.
 
 This is like the function [`NOT`](#ex-not), but with
@@ -1876,11 +1884,9 @@ For a negative sequence assertion, see [`CANT`](#ex-cant).
 Match when the target node is a reference to a property that exists,
 without regard to the value of the property.
 
-With no arguments, this tests the current node.  The primary use of testing the
-current node for existence is when structural matching is checking an
-expression for a property which may or may not exist in the target.
-The current node may also be nonexistent when sequence matching reaches the end
-of an array.
+With no arguments, this tests the current node.  The primary use case is for
+expressions in [object matching](#matching-objects) where a property might
+not exist, but you don't want a full "is" mode comparison.
 
 When one argument is provided (path context), the existence of the implied
 reference expression will be tested without attempting to read the property.
@@ -1952,7 +1958,7 @@ With one argument (specified in [regex context](#regex-context) ) it asserts
 that the node is a string and matches a regular expression.  The expression is
 not implicitly anchored (even within `IS` scope) and will locate the earliest
 ("leftmost") match within the characters of the string.  It also defaults to a
-["longest match"](#matching-string-characters), which can be overriden by
+["longest match"](#matching-string-characters), which can be overridden by
 wrapping variable-length portions of the expression with explicit length
 preferences.
 
@@ -2034,7 +2040,7 @@ The `config_args` (value context) are evaluated with the current node set to
 the array being matched, not the element being searched; this allows them to be
 evaluated before array matching begins, since expressions have no side effects.
 All configuration arguments are optional, and a value of `null` may be used if
-no arguments are required (but the `SEQ` expresison is an alias for that).
+no arguments are required (but the `SEQ` expression is an alias for that).
 If `config_args` is a boolean, it supplies the `long` property.
 If `config_args` is an integer or string, it supplies the `name` property.
 Otherwise, `config_args` must be an object with zero or more of the properties
@@ -2106,7 +2112,7 @@ length preference.
     [REP]                         // consume any number of elements
     [REP, min]                    // consume exactly min elements
     [REP, min, max]               // consume between min and max elements
-    [REP, min, max, match_expr]   // match between min and max elements
+    [REP, min, max, match_expr]   // match expression between min and max times
 
 Match repetitions of an expression against a series of array elements.
 
@@ -2167,7 +2173,7 @@ length of the array.  This expression is invalid outside a context which is
     [CAN, match_expr...]
 
 Zero-width assertion that the sequence of arguments (which may be empty) can
-match from this position.  This does not count as expression branch that
+match from this position.  This does not count as an expression branch that
 "consumes" elements.
 
 #### <span id="ex-cant">CANT</span>
@@ -2201,8 +2207,8 @@ inclusion to an empty set.  If the first element is false, it instead becomes
 exclusion from the complete set of Unicode.  Further boolean values affect
 the elements that follow but do not themselves modify the set.
 
-A string of more than one character is considered a list of characters to
-include.  The list may be empty.  A single character begins an inclusive range
+A string of zero or more than one character is considered a list of characters
+to include.  A single character begins an inclusive range
 of characters if the following element is also one character.  Ranges must be
 specified in ascending codepoint order.  `null` may be used as an alias for
 the maximum Unicode character.  An integer is treated as a Unicode codepoint
@@ -2319,8 +2325,8 @@ then evaluate `subexpr` and return that value.
 
 This is very similar to the [`WITH` expression](#ex-with), but as a function
 rather than a match expression.  Each `prop` argument must either be a literal
-string (or literal number which gets coerced to string) naming a TEMP namespace
-root property, or the special value `null` to request a lexical override of the
+string (or integer which gets coerced to string) naming a TEMP namespace
+root property, or a literal `null` to request a lexical override of the
 current node.  Changes made by each `prop` / `val` pair are visible to the
 evaluation of subsequent pairs.  After evaluating `subexpr`, the TEMP namespace
 and current node revert to their previous state.
@@ -2336,7 +2342,7 @@ write through any reference in the target tree or another namespace.
 
 #### <span id="ex-and">AND</span>
 
-    [AND, value_expr...]
+    [AND, value_expr, ...]
 
 Logical AND of one or more value expressions.
 
@@ -2348,7 +2354,7 @@ argument.
 
 #### <span id="ex-or">OR</span>
 
-    [OR, value_expr...]
+    [OR, value_expr, ...]
 
 Logical OR of one or more value expressions.
 
@@ -2357,7 +2363,7 @@ boolean.  Evaluation stops after the first true value or error raised.
 
 #### <span id="ex-not">NOT</span>
 
-    [NOT, value_expr...]
+    [NOT, value_expr, ...]
 
 Logical NOT ("NOR", really) of one or more value expressions.
 
@@ -2407,9 +2413,9 @@ Return a span of an array or string.
 
 All arguments are [value context](#value-context) expressions.
 If `source_val` is not specified, the value of the current node is used.
-The `config_args` may be an object, a single integer to supply `ofs`,
-an (escaped) array with non-negative second argument to supply `ofs` and `len`
-an (escaped) array with negative second argument to supply `ofs` and a
+The `config_args` may be a single integer to supply `ofs`,
+an (escaped) array with a non-negative second element to supply `ofs` and `len`,
+an (escaped) array with a negative second element to supply `ofs` and a
 calculated `lim`, or an object of arguments.
 
 The optional `path` argument must be an array value.  It modifies the source
@@ -2474,9 +2480,9 @@ Combine the elements of an array into a result value.
 
 `reduce_expr` is specified in value context, but is not evaluated immediately.
 (In order to use a value expression macro, `reduce_expr` should be an `EX`
-expresison, not the expression that resolves to the macro object.)
+expression, not the expression that resolves to the macro object.)
 `temp_prop` is a literal property name string of the TEMP namespace, but may
-also be a number that gets coerced to a string.
+also be an integer that gets coerced to a string.
 The `initial_value` and `array_expr` arguments are specified in value context.
 If `array_expr` is provided, it must evaluate to an array, otherwise the
 current node is used as input and must be an array.  `initial_value` may
@@ -2492,7 +2498,7 @@ The return value of `reduce_expr` is kept as the new accumulator value.
 After all array elements have been processed, the accumulator value is
 returned as the result of the `REDUCE` expression.
 
-`REDUCE` can actually be implemented using lisp-style recursive iteration, but
+`REDUCE` can actually be implemented using Lisp-style recursive iteration, but
 is provided for efficiency and to reduce the chance of exceeding
 `RESOURCE_LIMIT` from recursive behavior.
 Minimalist implementations should not fall back to an internal common
@@ -2507,7 +2513,7 @@ limits than a proper `REDUCE` implementation.
 Select matching elements from an array.
 
 `match_expr` is a match context expression which is not immediately evaluated.
-(in order to use a pattern expression macro, `match_expr` should be an `EX`
+(In order to use a pattern expression macro, `match_expr` should be an `EX`
 expression, not the expression that resolves to the macro object.)
 With one argument, the current node must be an array.  Otherwise, the
 `array_expr` specified in value context must evaluate to an array.
@@ -2526,7 +2532,7 @@ for the selected elements gets copied to the new array.
 Transform each element of an array to produce a new array.
 
 The `transform_expr` is specified in value context, but is not evaluated
-immediately.  (in order to use a pattern expression macro, `match_expr` should
+immediately.  (In order to use a value expression macro, `transform_expr` should
 be an `EX` expression, not the expression that resolves to the macro object.)
 In the one-argument form, the input comes from the current node,
 which must be an array.  Otherwise the `array_expr` (also value context) is
@@ -2577,7 +2583,7 @@ shared with `JOIN`.
 The split operation iterates through the characters of the string looking for
 [the leftmost match](#matching-string-characters) of the separator pattern
 with the longest-overall preference enabled, as described in
-[the matching section](#matching-arrays)
+[the matching section](#matching-arrays).
 If you specify an `element` regex, a test for a separator will only be
 attempted when the element characters (from the limit of the previous separator
 (or start of string) up to the current match position) also match the `element`
@@ -2603,14 +2609,15 @@ separator (or start of string) is returned as the final element, even if it is
 empty or does not match the `element` regex.  If the input is an empty string,
 no search is required, and the empty string is returned as the only element.
 
-A zero-length separator (including a successful zero-length regex match)
-is considered to match at every character-array index (including the
-character-array length) other than the limit of the previous separator, which
-prevents an infinite loop of empty elements.
+A zero-length separator is considered to match at every character-array index
+(including the character-array length) other than the limit of the previous
+separator, which prevents an infinite loop of empty elements.  Likewise, a
+zero-length regex match that doesn't advance the cursor is restricted from
+succeeding at the limit of the previous separator.
 This means the separator of `""` can be used to split the string
 into its individual characters.  It also means that a regular expression which
-can match the empty string will generate a single-character element any time
-none of the alternatives matched.
+can unconditionally match the empty string will generate a single-character
+element any time none of the alternatives matched.
 
 For example, consider the pattern `/a*/` applied to the following strings:
 
@@ -2629,7 +2636,7 @@ and you can (mutually exclusive with the others) specify `trim` to set them
 both to the same value.
 `ltrim` is implicitly anchored to the start of the element string, and `rtrim`
 is implicitly anchored to the end, allowing a common value for `trim`.
-Both trim expresisons are tested with the longest-overall preference enabled.
+Both trim expressions are tested with the longest-overall preference enabled.
 The match of `ltrim` gets removed first, followed by a match of `rtrim` from
 the remainder, to resolve cases where the trimming could overlap.
 If you want to permanently remove the trimmed characters, use `discard: true`.
@@ -2765,7 +2772,7 @@ If the property array contains a duplicate name, the earlier property value is
 overwritten with the latter (higher array index).
 
 If additional arguments are provided, they must be provided in pairs.
-Each pair, in argument order, are treated as if that additional entry had been
+Each pair, in argument order, is treated as if that additional entry had been
 appended to the array.
 
 In all cases, the name arguments/elements must evaluate to strings and cannot
@@ -2804,7 +2811,7 @@ matches succeed, the implied else value is the `FAIL` expression.
 Conditions are tested in argument order, and only the selected value-context
 expression gets evaluated.
 
-Because [match context](#argument-contexts) lets a plain value describe a `HAS`
+Because [match context](#match-context) lets a plain value describe a `HAS`
 match against the current node, this can be an efficient way to choose an
 expression based on its value.  If the value you want to compare is not the
 current node, you can temporarily set it up as the current node using
@@ -2830,7 +2837,7 @@ and "false" may be cast to booleans, and every other value fails.
 
 If you want something closer to the "everything is true unless it is false-ish"
 seen in many programming languages, consider adding your preferred list of
-false values to a `CANT` expression, optionally combined with an `EXISTS` test:
+false values to a `NONE` expression, optionally combined with an `EXISTS` test:
 
     // return true/false for current node, fail on undefined
     [CASE, [EXISTS], [NONE, false, 0, "", null]]
@@ -3156,26 +3163,26 @@ digits end with zero.  More precisely, the precision of the result is the
 lesser of the input's significant decimal position (adjusted by shift) and the
 rounding position `at`.  When the trailing digits of precision are zero,
 including when rounding produces a value of zero, the decimal precision must
-still be represented.  Scientific notation outputs should have exactly one
-digit before a decimal point.
+still be represented.  Scientific notation outputs with multiple digits should
+have exactly one digit before the decimal point.
 
 By example:
 
-   [ROUND, { as: "SIG" }, "9.9"]
+    [ROUND, { as: "SIG" }, "9.9"]
        -> "1.0e1"
-   [ROUND, { as: "SIG" }, "9.900"]
+    [ROUND, { as: "SIG" }, "9.900"]
        -> "1.0e1"
-   [ROUND, { at: 2, as: "SIG" }, "9.500"]
+    [ROUND, { at: 2, as: "SIG" }, "9.500"]
        -> "9.50"
-   [ROUND, { at: -2, as: "SIG" }, "1234"]
+    [ROUND, { at: -2, as: "SIG" }, "1234"]
        -> "1.2e3"
-   [ROUND, { at: -10, as: "SIG" }, "1.25e20"]
+    [ROUND, { at: -10, as: "SIG" }, "1.25e20"]
        -> "1.25e20"
-   [ROUND, { at: -9, as: "SIG" }, "1.25e10"]
+    [ROUND, { at: -9, as: "SIG" }, "1.25e10"]
        -> "1.3e10"
-   [ROUND, { at: 2, as: "SIG" }, "0.0000" ]
+    [ROUND, { at: 2, as: "SIG" }, "0.0000" ]
        -> "0.00"
-   [ROUND, { at: -1, as: "SIG" }, "0" ]
+    [ROUND, { at: -1, as: "SIG" }, "0" ]
        -> "0e1"
 
 Implementations must not be written in a way that triggers failure due to the
@@ -3188,8 +3195,8 @@ requirements.
 Note that the plain-integer form of the options argument is used as the `shift`
 parameter to enable easy tests against floating-point numbers:
 
-  // foo == 1.234, without relying on floating point equality
-  { foo: [IS, [ROUND,6], 1234000] }
+    // foo == 1.234, without relying on floating point equality
+    { foo: [IS, [ROUND,6], 1234000] }
 
 ## Implementation Hints
 
