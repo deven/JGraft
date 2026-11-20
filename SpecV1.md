@@ -504,14 +504,15 @@ Before each array match invocation, the algorithm must prepare by expanding all
 pattern macros (or regex macros, in regex context) which can participate in
 sequence matching, and evaluating the configuration of every participating
 configured sequence.  These computed values must remain constant for the entire
-match attempt; the choice of which macro to expand and how to resolve each
-capture group may never have a dependency on the match position being tested
+match attempt; the choice of which macro to expand or resolution parameters for
+a capture group may never have a dependency on the match position being tested
 *during* the array match.
 Preparation starts with the lexical environment in effect when the array-match
 invocation begins.  It follows expressions operating on that array’s sequence
 up to boundaries of node-match expressions, sub-structure matches, or function
-calls.  This traversal must occur even for "lazy" evaluation mode on pattern
-branches that are otherwise unused.
+calls.  This traversal must occur even for lazy evaluation mode on pattern
+branches that are otherwise unexplored during a match; this counts as "using"
+the directive and it must pass all local validations.
 The current node is set to the array being matched, rather than the node that
 would normally be implied by the position of the expressions.
 This may involve evaluating `WITH` expressions (local to this preparation step)
@@ -992,20 +993,29 @@ These rules are chosen to be easy to implement without deep semantic analysis,
 but still broad enough to usefully catch bugs in generators.
 All implementations must consistently generate `INVALID_GRAFT` rather than
 `RUNTIME_ERROR` when encountering these cases.  Implementations are permitted
-to attempt execution and resolve the cause of the error in an exception path.
-In some cases this may result in `RESOURCE_LIMIT` where an `INVALID_GRAFT` has
-also occurred, which is permitted.
+to attempt execution and resolve the correct error if interrupted by an
+exception.  In some cases this may result in `RESOURCE_LIMIT` where an
+`INVALID_GRAFT` has also occurred, which is permitted.
 
 Implementations are permitted to lazily evaluate directives.  In order to
 provide portability across implementations, all implementations must provide a
-lazy-evaluation mode.  In lazy mode, validation of a directive operand occurs
-when evaluation requires that operand.  Operands skipped by flow control are
-not validated.  Errors from validation, including `INVALID_GRAFT`, are
-deferred.  A structurally invalid graft may apply cleanly so long as the
-structurally invalid portions do not need to be executed.  It also means that
-implementations which compile the full JGraft before execution must include the
-ability to hold the deferred validation errors in the optree nodes, including
-within parsed macros.
+lazy-evaluation mode.  When lazy evaluation begins executing a directive, it
+must fail with `INVALID_GRAFT` for every case described above which can be
+determined from the arguments given to it (including the properties of a
+literal options object) without evaluating any expressions in the arguments.
+When checking argument domains, an argument which appears to be a directive but
+lacks a valid opcode counts as a failure at this directive.  Only the opcode of
+an argument is inspected at this point; validation failues according to that
+opcode are only discovered when its execution begins or when matching needs to
+inspect it.  This does not force implementations to test these aspects in any
+particular order; they must only defer failing with `RUNTIME_ERROR` until these
+checks on the current directive have completed.  A structurally invalid graft
+may apply cleanly so long as the structurally invalid portions do not need to
+be used.  An implementation may eagerly validate all the child directives even
+in lazy mode so long as errors, including `INVALID_GRAFT`, are deferred until
+execution uses that directive.  It also means that implementations which
+compile the full JGraft before execution must include the ability to hold the
+deferred validation errors in the optree nodes, including within parsed macros.
 
 The mandatory [array-match preparation step](#matching-arrays) also applies in
 lazy mode, including preparation of otherwise unused pattern branches.
