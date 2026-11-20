@@ -61,10 +61,16 @@ lazily evaluating operations and how much static analysis it performs.  All
 engines are required to have a "lazy" mode, so the `lazy` property will always
 be present.  The `output` is omitted when the graft cannot succeed.  The
 `emits` property is only included for tests that wish to test it; absence does
-not indicate anything.  Each of the error flags `no_match`, `runtime_error`,
-`invalid_graft` are booleans since the error is not deterministic. Lazy
-evaluation may encounter a RUNTIME_ERROR before testing an expression path that
-triggers INVALID_GRAFT, and may result in NO_MATCH if that error is caught.
+not indicate anything.  The boolean flags `no_match`, `runtime_error`, and
+`invalid_graft` identify the permitted error outcomes.  Lazy evaluation checks
+each directive it uses for locally detectable errors, including invalid
+operand opcodes, incompatible operand types, and invalid literal options.
+These checks take priority over runtime errors at that directive, even when
+an operand would be skipped.  Errors local to a child with a valid opcode
+are deferred until execution or match preparation uses the child.
+In an array match, the matcher may skip a node test after a mismatch or when
+another alternative succeeds. If that test contains a local validation error,
+the `lazy` expectation can allow both the match outcome and `invalid_graft`.
 The `unsupported_graft` is only seen when testing the rejection of an
 unsupported `JGRAFT` version.  Each implementation must be aware of its own
 nonformance, rather than being told by the conformance test.

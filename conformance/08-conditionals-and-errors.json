@@ -148,9 +148,15 @@
           "lazy": {"invalid_graft":true}
         },
         {
-          "name": "Malformed else action after a successful match",
+          "name": "IF rejects an unknown else action even when the first branch matches",
           "input": "a",
           "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY",1,["NODE"]],["unknown-action"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "IF skips the arity check inside an unused COPY",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY",1,["NODE"]],["COPY"]]],
           "lazy": {"output":1},
           "strict": {"invalid_graft":true}
         },
@@ -433,18 +439,16 @@
           "lazy": {"invalid_graft":true}
         },
         {
-          "name": "Skipped operand has a statically incompatible type",
+          "name": "Short-circuit operand must have a compatible result type",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",false,["LENGTH"]],["NODE"]]],
-          "lazy": {"output":false},
-          "strict": {"invalid_graft":true}
+          "lazy": {"invalid_graft":true}
         },
         {
-          "name": "Runtime error precedes an invalid literal",
+          "name": "Invalid literal takes priority over a missing reference",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["NODE","missing"],1],["NODE"]]],
-          "lazy": {"runtime_error":true},
-          "strict": {"invalid_graft":true}
+          "lazy": {"invalid_graft":true}
         },
         {
           "name": "Computed operand failure becomes a miss in a predicate",
@@ -549,18 +553,29 @@
           "lazy": {"invalid_graft":true}
         },
         {
-          "name": "Skipped operand has a statically incompatible type",
+          "name": "Short-circuit operand must have a compatible result type",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["LENGTH"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing opcode in a short-circuited operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,[]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Short circuit skips the arity check inside BOOL",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["BOOL",1]],["NODE"]]],
           "lazy": {"output":true},
           "strict": {"invalid_graft":true}
         },
         {
-          "name": "Runtime error precedes an invalid literal",
+          "name": "Invalid literal takes priority over a missing reference",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",["NODE","missing"],1],["NODE"]]],
-          "lazy": {"runtime_error":true},
-          "strict": {"invalid_graft":true}
+          "lazy": {"invalid_graft":true}
         },
         {
           "name": "Computed operand failure becomes a miss in a predicate",
@@ -665,18 +680,16 @@
           "lazy": {"invalid_graft":true}
         },
         {
-          "name": "Skipped operand has a statically incompatible type",
+          "name": "Short-circuit operand must have a compatible result type",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",true,["LENGTH"]],["NODE"]]],
-          "lazy": {"output":false},
-          "strict": {"invalid_graft":true}
+          "lazy": {"invalid_graft":true}
         },
         {
-          "name": "Runtime error precedes an invalid literal",
+          "name": "Invalid literal takes priority over a missing reference",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",["NODE","missing"],1],["NODE"]]],
-          "lazy": {"runtime_error":true},
-          "strict": {"invalid_graft":true}
+          "lazy": {"invalid_graft":true}
         },
         {
           "name": "Computed operand failure becomes a miss in a predicate",

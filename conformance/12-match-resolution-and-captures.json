@@ -188,6 +188,13 @@
           "lazy": {"output":{"tag":{"path":[],"ofs":1,"len":1,"lim":2}}}
         },
         {
+          "name": "Fixed group parameters with a position-dependent match",
+          "desc": "The array supplies the capture name. At each candidate position CURPROP matches an element equal to its index. Of the matches at 2 and 3, index 2 is nearest to 1.",
+          "input": ["hit",99,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],["GROUP",{"name":["NODE",0],"near":1},["CURPROP"]]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":2,"len":1,"lim":3}}}
+        },
+        {
           "name": "Computed configuration object",
           "input": [{"name":"hit","long":false},1,2],
           "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["EXISTS"],["GROUP",["NODE",0],["REP"]]]]],["NODE"]]],

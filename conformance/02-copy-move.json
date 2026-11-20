@@ -814,10 +814,17 @@
           "lazy": {"runtime_error":true}
         },
         {
-          "name": "Lazy value failure precedes malformed destination",
-          "desc": "The invalid destination operand is never required in lazy mode. Full local validation rejects it.",
+          "name": "COPY rejects a null destination even when the value fails",
+          "desc": "COPY checks the literal destination when the action begins.",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["FAIL"],null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Value failure leaves a destination reference unevaluated",
+          "desc": "NODE is a valid destination opcode. The null selector is an error local to NODE.",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FAIL"],["NODE",null]]],
           "lazy": {"runtime_error":true},
           "strict": {"invalid_graft":true}
         }

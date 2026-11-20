@@ -512,7 +512,11 @@ invocation begins.  It follows expressions operating on that array’s sequence
 up to boundaries of node-match expressions, sub-structure matches, or function
 calls.  This traversal must occur even for lazy evaluation mode on pattern
 branches that are otherwise unexplored during a match; this counts as "using"
-the directive and it must pass all local validations.
+the directive and it must pass all local validations.  Boundary nodes must also
+have a valid opcode (aside from escaped arrays) in order to determine which
+ones constitute a boundary.  A validation failure inside a node test is raised
+only if the implementation evaluates that test, and which tests are evaluated
+for a non-matching or ambiguous input is implementation-defined.
 The current node is set to the array being matched, rather than the node that
 would normally be implied by the position of the expressions.
 This may involve evaluating `WITH` expressions (local to this preparation step)
@@ -1005,7 +1009,7 @@ determined from the arguments given to it (including the properties of a
 literal options object) without evaluating any expressions in the arguments.
 When checking argument domains, an argument which appears to be a directive but
 lacks a valid opcode counts as a failure at this directive.  Only the opcode of
-an argument is inspected at this point; validation failues according to that
+an argument is inspected at this point; validation failures according to that
 opcode are only discovered when its execution begins or when matching needs to
 inspect it.  This does not force implementations to test these aspects in any
 particular order; they must only defer failing with `RUNTIME_ERROR` until these
@@ -1055,17 +1059,13 @@ prevents it from occurring for all inputs should never become a fatal error.
 Validators may warn about these cases, but should not use them as a reason to
 reject the graft prior to executing it.  For example:
 
-    [OR, true, [LENGTH]]                     // INVALID_GRAFT
     [OR, true, [LESS,"a",[CASE,[NUM],1,2]]]  // RUNTIME_ERROR
 
-The first expression is an `INVALID_GRAFT` because `LENGTH` always returns an
-integer, not a boolean.  In lazy evaluation mode it will not be detected, due
-to the short-circuiting of `OR`, but in a higher validation level, the graft
-should be rejected before starting execution.  The second expression includes a
-`LESS` subexpression which will always fail with `RUNTIME_ERROR` since the
-arguments are not of the same type.  A lazy evaluation mode will never detect
-this either, due to short circuiting.  If a more robust implementation detects
-this through static evaluation, it may warn but must not reject the graft.
+The expression includes a `LESS` subexpression which will always fail with
+`RUNTIME_ERROR` since the arguments are not of the same type.  A lazy
+evaluation mode will never detect this, due to short circuiting.  If a more
+robust implementation detects this problem through static evaluation, it may
+warn, but must not reject the graft or fail at this expression.
 
 ### Resource Limits
 

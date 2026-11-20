@@ -906,11 +906,10 @@
           "lazy": {"invalid_graft":true}
         },
         {
-          "name": "Malformed body skipped by a false condition",
+          "name": "WHILE checks the body opcode even when the condition is false",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["WHILE",false,["unknown-action"]]],
-          "lazy": {"output":{}},
-          "strict": {"invalid_graft":true}
+          "lazy": {"invalid_graft":true}
         }
       ]
     }

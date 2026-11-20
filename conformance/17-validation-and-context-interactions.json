@@ -46,15 +46,14 @@
         {
           "name": "Predicate cannot catch locally invalid function arguments",
           "input": 3,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",3,["CONCAT",["LOCAL",["LENGTH"],"k",["NODE"]],"!"]],3],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",3,["CONCAT",["LOCAL",["LENGTH"],"k",["NODE"]],"!"]],["NODE"]]],
           "lazy": {"invalid_graft":true}
         },
         {
-          "name": "Lazy boolean guard skips a locally invalid LOCAL operand",
+          "name": "OR checks the result type of LOCAL before short-circuiting",
           "input": 1,
           "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["LOCAL",["LENGTH"],"k",1]],["NODE"]]],
-          "lazy": {"output":true},
-          "strict": {"invalid_graft":true}
+          "lazy": {"invalid_graft":true}
         },
         {
           "name": "Unreachable runtime failure in a comparison",
@@ -86,6 +85,13 @@
           "input": [1],
           "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ANY",1,["GROUP",{"name":["NODE",0,"tag"]},1]]]]],["NODE"]]],
           "lazy": {"output":false}
+        },
+        {
+          "name": "Preparation rejects an invalid literal option in an unexplored alternative",
+          "desc": "The literal long option must be boolean. The failing name expression and the successful sibling cannot hide that local error.",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ANY",1,["GROUP",{"name":["FAIL"],"long":1},1]]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
         },
         {
           "name": "An enclosing alternative catches the failed array match",
@@ -140,6 +146,46 @@
           "input": [true],
           "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["OR",true,["IS",[[["GROUP",{"name":["NODE",0,"tag"]},1]]]]]]]],["NODE"]]],
           "lazy": {"output":true}
+        }
+      ]
+    },
+    {
+      "name": "Node tests at the preparation boundary",
+      "desc": "Preparation identifies each boundary by its opcode. A malformed argument inside BOOL raises an error when matching evaluates that node test.",
+      "tests": [
+        {
+          "name": "Unknown boundary opcode after a mismatching literal",
+          "input": ["other",true],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[["start",["UNKNOWN"]]]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Escaped empty array is a nested pattern",
+          "input": ["start",[]],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[["start",[[]]]]]],
+          "lazy": {"output":["start",[]]}
+        },
+        {
+          "name": "Node test after a mismatching literal",
+          "desc": "The first element is enough to reject the match. An implementation that also tests the second element encounters the malformed BOOL.",
+          "input": ["other",true],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[["start",["BOOL",1]]]]],
+          "lazy": {"no_match":true,"invalid_graft":true},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Same node test on a required match path",
+          "input": ["start",true],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[["start",["BOOL",1]]]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Matching literal alongside a malformed node test",
+          "desc": "The literal can establish a successful match. Evaluating the BOOL alternative discovers its invalid operand.",
+          "input": [true],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["ANY",true,["BOOL",1]]]]]],
+          "lazy": {"output":[true],"invalid_graft":true},
+          "strict": {"invalid_graft":true}
         }
       ]
     },
@@ -202,7 +248,7 @@
         {
           "name": "Called malformed macro body inside a predicate",
           "input": 2,
-          "jgraft": ["JGRAFT",{"v":1,"const":["p",["VAL",["LENGTH",1,2]]]},["COPY",["ANY",["IS",2,["EX","p"]],2],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1,"const":["p",["VAL",["LENGTH",1,2]]]},["COPY",["IS",2,["EX","p"]],["NODE"]]],
           "lazy": {"invalid_graft":true}
         },
         {
