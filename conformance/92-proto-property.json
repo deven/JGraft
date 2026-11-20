@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "name": "The __proto__ property",
+  "desc": "Ordinary object and namespace semantics for this property name. The decoder flag marks fixtures containing the literal object key. Apply the compatibility policy in the suite README.",
+  "tests": [
+    {
+      "name": "References and tree edits",
+      "desc": "Exercise the property at the root and below it, both when present and when absent.",
+      "tests": [
+        {
+          "name": "Read a literal property",
+          "input": {"__proto__":"value"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","__proto__"],["NODE"]]],
+          "lazy": {"output":"value"},
+          "needJsonProto": true
+        },
+        {
+          "name": "Read null and test its presence",
+          "input": {"__proto__":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["NODE","__proto__"],["EXISTS",["NODE","__proto__"]]]],["NODE"]]],
+          "lazy": {"output":[null,true]},
+          "needJsonProto": true
+        },
+        {
+          "name": "Missing property on an empty object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",["NODE","__proto__"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Read a missing property",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","__proto__"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Read a computed property name",
+          "input": {"row":{"__proto__":7}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","row",["CONCAT","__pro","to__"]],["NODE"]]],
+          "lazy": {"output":7},
+          "needJsonProto": true
+        },
+        {
+          "name": "Overwrite a nested property",
+          "input": {"row":{"__proto__":"old"},"label":"keep"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","new",["NODE","row","__proto__"]]],
+          "lazy": {"output":{"row":{"__proto__":"new"},"label":"keep"}},
+          "needJsonProto": true
+        },
+        {
+          "name": "Move out and remove the source",
+          "input": {"__proto__":"v"},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","__proto__","renamed"]],
+          "lazy": {"output":{"renamed":"v"}},
+          "needJsonProto": true
+        },
+        {
+          "name": "Move into a computed destination",
+          "input": {"old":"v"},
+          "jgraft": ["JGRAFT",{"v":1},["MOVE","old",["NODE",["CONCAT","__pro","to__"]]],["COPY",["PROPV"],["NODE"]]],
+          "lazy": {"output":[["__proto__","v"]]}
+        },
+        {
+          "name": "Create and read an ordinary nested member",
+          "input": {},
+          "jgraft": [
+            "JGRAFT", {"v":1},
+            ["COPY",3,["NODE",["CONCAT","__pro","to__"],"n"]],
+            ["COPY",[[["NODE",["CONCAT","__pro","to__"],"n"],["PROPS"],["EXISTS",["NODE","n"]]]],["NODE"]]
+          ],
+          "lazy": {"output":[3,["__proto__"],false]}
+        }
+      ]
+    },
+    {
+      "name": "Enumeration and construction",
+      "desc": "Use property lists to observe dynamically constructed objects in fixtures that require only ordinary string decoding.",
+      "tests": [
+        {
+          "name": "Sorted names",
+          "input": {"z":0,"__proto__":1,"A":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS"],["NODE"]]],
+          "lazy": {"output":["A","__proto__","z"]},
+          "needJsonProto": true
+        },
+        {
+          "name": "Enumerate nested values",
+          "input": {"__proto__":{"n":2},"a":3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV"],["NODE"]]],
+          "lazy": {"output":[["__proto__",{"n":2}],["a",3]]},
+          "needJsonProto": true
+        },
+        {
+          "name": "Construct from a pair list",
+          "input": [["__proto__",null],["z",1]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV",["MKOBJ",["NODE"]]],["NODE"]]],
+          "lazy": {"output":[["__proto__",null],["z",1]]}
+        },
+        {
+          "name": "Computed override wins over earlier entry",
+          "input": [["__proto__",1]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV",["MKOBJ",["NODE"],["CONCAT","__pro","to__"],2]],["NODE"]]],
+          "lazy": {"output":[["__proto__",2]]}
+        },
+        {
+          "name": "Literal output preserves the property",
+          "input": [["__proto__","v"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"output":{"__proto__":"v"}},
+          "needJsonProto": true
+        },
+        {
+          "name": "Round trip nested literal object",
+          "input": {"__proto__":{"child":{"__proto__":"v"}}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["PROPV"]],["NODE"]]],
+          "lazy": {"output":{"__proto__":{"child":{"__proto__":"v"}}}},
+          "needJsonProto": true
+        }
+      ]
+    },
+    {
+      "name": "Scope and matching",
+      "desc": "The same string can name a scoped binding, macro or capture. Structural matches distinguish present and missing properties.",
+      "tests": [
+        {
+          "name": "CONST binding by name",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1,"const":["__proto__","const"]},["COPY",["CONST","__proto__"],["NODE"]]],
+          "lazy": {"output":"const"}
+        },
+        {
+          "name": "STASH and TEMP with the same property",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","saved",["STASH","__proto__"],"local",["TEMP","__proto__"],[[["STASH","__proto__"],["TEMP","__proto__"]]],["NODE"]]],
+          "lazy": {"output":["saved","local"]}
+        },
+        {
+          "name": "LOCAL shadows an ordinary TEMP binding",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["LOCAL",["TEMP","__proto__"],"__proto__","inner"],["TEMP","__proto__"]]],"__proto__","outer"],["NODE"]]],
+          "lazy": {"output":["inner","outer"]}
+        },
+        {
+          "name": "Action macro and stash override share a name",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1,"const":["__proto__",["ACT",["COPY",["STASH","__proto__"],["NODE"]]]]},["CALL","__proto__","__proto__","from call"]],
+          "lazy": {"output":"from call"}
+        },
+        {
+          "name": "Matching the explicit property admits extras",
+          "input": {"__proto__":1,"extra":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["HAS",{"__proto__":1}],["NODE"]]],
+          "lazy": {"output":true},
+          "needJsonProto": true
+        },
+        {
+          "name": "Exact matching rejects an unspecified property",
+          "input": {"__proto__":1,"extra":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",{"__proto__":1}],["NODE"]]],
+          "lazy": {"output":false},
+          "needJsonProto": true
+        },
+        {
+          "name": "Missing property differs from present null",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["HAS",{"__proto__":null}],["NODE"]]],
+          "lazy": {"output":false},
+          "needJsonProto": true
+        },
+        {
+          "name": "Match a computed object",
+          "input": {"__proto__":5},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["MKOBJ",null,["CONCAT","__pro","to__"],5]],["NODE"]]],
+          "lazy": {"output":true},
+          "needJsonProto": true
+        },
+        {
+          "name": "Capture name can be used as a slice configuration",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["GROUP","__proto__","x"]]],["COPY",["SLICE",["CAP","__proto__"]],["NODE"]]]],
+          "lazy": {"output":["x"]}
+        }
+      ]
+    }
+  ]
+}

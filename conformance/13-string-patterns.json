@@ -1,0 +1,398 @@
+{
+  "version": 1,
+  "name": "String patterns",
+  "desc": "Inline regex syntax, codepoint sets, sequence assertions, character captures and validation.",
+  "tests": [
+    {
+      "name": "Character literals and anchors",
+      "desc": "Inline STR patterns search for a substring. START and END can constrain the search to either boundary.",
+      "tests": [
+        {
+          "name": "Empty subject and pattern",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",""],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Empty substring",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",""],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Interior multi-character literal",
+          "input": "x😀βy",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR","😀β"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Multi-character literal requires adjacency",
+          "input": "aXb",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR","ab"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Supplementary integer codepoint",
+          "input": "x😀y",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",128512],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Integer codepoint differs from digit character",
+          "input": "0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",0],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "NUL codepoint",
+          "input": "a\u0000b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",0],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Decomposed string differs from composed",
+          "input": "é",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR","é"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "START succeeds only at first position",
+          "input": "xabc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["START"],"abc"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "END anchors suffix",
+          "input": "xabc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ","abc",["END"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Anchored whole string",
+          "input": "ab😀",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["START"],"ab",128512,["END"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Zero-width search on empty input",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["START"],["END"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Non-string subject",
+          "input": [97],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR","a"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Exact object does not anchor its STR pattern",
+          "input": {"name":"infix"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",{"name":["STR","fix"]}],["NODE"]]],
+          "lazy": {"output":true}
+        }
+      ]
+    },
+    {
+      "name": "Character sets",
+      "desc": "CHARS operates on one-character strings and integer codepoints. Literal endpoints can form ranges. Computed strings contribute individual members.",
+      "tests": [
+        {
+          "name": "Empty include set",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Whole Unicode set",
+          "input": "😀",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS",false],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Standalone character",
+          "input": "q",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","q"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "List of characters",
+          "input": "z",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","az😀"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Range lower endpoint",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","a","c"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Range upper endpoint",
+          "input": "c",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","a","c"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Range excludes next character",
+          "input": "d",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","a","c"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Integer target in mixed range",
+          "input": 50,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","0",57],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Nonmember integer",
+          "input": 58,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS",48,57],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Supplementary range",
+          "input": 128513,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS",128512,"😂"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Open-ended range",
+          "input": "😀",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","z",null],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Empty string breaks a possible range",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","a","","c"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Subtract a range",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS",false,"a","c"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Include after exclusion",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS",false,"a","c",true,"b"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Exclude after inclusion",
+          "input": "y",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","xyz",false,"y"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Boolean toggle changes only subsequent additions",
+          "input": "x",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","xyz",false],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Multicharacter target",
+          "input": "ab",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","ab"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Empty string target",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS","ab"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Boolean target",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS",false],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Noninteger target",
+          "input": 1.5,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CHARS",false],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Computed single character cannot start a range",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1,"const":["start","a"]},["COPY",["CHARS",["CONST","start"],"z"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Class used as regex operand",
+          "input": "q8!",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["CHARS","0","9"],"!"]],["NODE"]]],
+          "lazy": {"output":true}
+        }
+      ]
+    },
+    {
+      "name": "Repetition and assertions",
+      "desc": "Each ordinary character consumes one codepoint. Lookahead and anchors preserve the current cursor.",
+      "tests": [
+        {
+          "name": "Repetition counts supplementary characters",
+          "input": "😀😀",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["START"],["REP",2,0,128512],["END"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Repetition of a string sequence",
+          "input": "ababx",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["REP",2,0,"ab"],"x"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Empty sequence repetitions",
+          "input": "z",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["REP",3,0,""],"z"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Lookahead across characters",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ","a",["CAN","bc"],"bc"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Negative lookahead blocks prefix",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ","a",["CANT","bc"],"b"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Alternative lengths leave suffix",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["ANY","a","ab"],"c"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Intersection shares endpoint",
+          "input": "ab",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["ALL","ab",["REP",2]],["END"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Codepoint NODE read as a number",
+          "input": "😀",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["START"],["IS",128512,["NODE"]],["END"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Alternate target switches to structural matching",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["START"],["IS",{"k":1},{"k":1}],["END"]]],["NODE"]]],
+          "lazy": {"output":true}
+        }
+      ]
+    },
+    {
+      "name": "Character captures",
+      "desc": "Capture offsets count codepoints within the subject string. The enclosing object path identifies that string.",
+      "tests": [
+        {
+          "name": "Leftmost equal match",
+          "input": "😀a😀a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["STR",["GROUP","word","😀a"]]],["NODE"]]],
+          "lazy": {"output":{"word":{"ofs":0,"len":2,"lim":2,"path":[]}}}
+        },
+        {
+          "name": "Explicit short preference beats implicit longest",
+          "input": "xxx",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["STR",["GROUP",{"name":"run","long":false},["REP",1,-1,"x"]]]],["NODE"]]],
+          "lazy": {"output":{"run":{"ofs":0,"len":1,"lim":1,"path":[]}}}
+        },
+        {
+          "name": "Default longest capture",
+          "input": "zaaab",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["STR",["GROUP","run",["REP",1,-1,"a"]]]],["NODE"]]],
+          "lazy": {"output":{"run":{"ofs":1,"len":3,"lim":4,"path":[]}}}
+        },
+        {
+          "name": "Zero-length capture at end",
+          "input": "😀q",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["STR",["SEQ",["END"],["GROUP","tail"]]]],["NODE"]]],
+          "lazy": {"output":{"tail":{"ofs":2,"len":0,"lim":2,"path":[]}}}
+        },
+        {
+          "name": "Nested string has a capture path",
+          "input": {"title":"😀x!"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",{"title":["STR",["GROUP","mark","x!"]]}],["NODE"]]],
+          "lazy": {"output":{"mark":{"ofs":1,"len":2,"lim":3,"path":["title"]}}}
+        },
+        {
+          "name": "Failed regex capture",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["STR",["GROUP","hit","xyz"]]],["NODE"]]],
+          "lazy": {"output":false}
+        }
+      ]
+    },
+    {
+      "name": "Validation",
+      "desc": "Malformed literal regex syntax and invalid literal set bounds are structural errors. An input-dependent bad computed set member fails the match.",
+      "tests": [
+        {
+          "name": "Descending character range",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["CHARS","z","a"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Negative class codepoint",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["CHARS",-1]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Beyond Unicode maximum",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["CHARS",1114112]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Fractional class codepoint",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["CHARS",1.5]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Object in regex",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",{}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Escaped array in regex",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",[["a"]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Sequence literal inside node-only negation",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["NONE","ab"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input-dependent set member has wrong type",
+          "input": {"set":1,"s":"x"},
+          "jgraft": ["JGRAFT",{"v":1,"const":["set",["NODE","set"]]},["COPY",["IS",["STR",["CHARS",["CONST","set"]]],["NODE","s"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Skipped invalid class",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,true,["STR",["CHARS",1.5]]],["NODE"]]],
+          "lazy": {"output":true},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    }
+  ]
+}

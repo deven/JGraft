@@ -1,0 +1,223 @@
+{
+  "version": 1,
+  "name": "Validation across scopes and match phases",
+  "desc": "Lazy and strict outcomes for preparation, scoped bindings, predicate error handling and capture selection.",
+  "tests": [
+    {
+      "name": "Operand types and guards",
+      "desc": "Local validation uses the root expression type. Runtime failures depend on the evaluated value and the enclosing predicate.",
+      "tests": [
+        {
+          "name": "LOCAL exposes an incompatible result type",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["LOCAL",["LENGTH"],"k",["NODE"]],"x"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CASE supplies a string at runtime",
+          "input": {"value":"x"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["CASE",["EXISTS",["NODE","value"]],["NODE","value"],""],"!"],["NODE"]]],
+          "lazy": {"output":"x!"}
+        },
+        {
+          "name": "CASE can supply an incompatible type",
+          "input": {"value":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["CASE",["EXISTS",["NODE","value"]],["NODE","value"],""],"!"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Reference through LOCAL fails only for this input",
+          "input": {"value":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["LOCAL",["NODE","value"],"k",["NODE"]],"!"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "FAIL stays a runtime error through LOCAL",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["LOCAL",["FAIL"],"k",["NODE"]],"!"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Innermost predicate catches a failing function",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",3,["CONCAT",["FAIL"],"!"]],3],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Predicate cannot catch locally invalid function arguments",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",3,["CONCAT",["LOCAL",["LENGTH"],"k",["NODE"]],"!"]],3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Lazy boolean guard skips a locally invalid LOCAL operand",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["LOCAL",["LENGTH"],"k",1]],["NODE"]]],
+          "lazy": {"output":true},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Unreachable runtime failure in a comparison",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["LESS","a",["CASE",["NUM"],1,2]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Mutually exclusive structural and computed tests",
+          "input": {"offset":"2"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ALL",{"offset":"2"},["IS","c",["SLICE",["NODE","offset"],"abcdef"]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Earlier action fixes the otherwise unknown operand type",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",4,["STASH","s"]],["COPY",["CONCAT","x",["STASH","s"]],["NODE"]]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "Preparation reaches participating sequences",
+      "desc": "Array configuration and macro selection run before exploring successor positions, including alternatives whose captures are suppressed.",
+      "tests": [
+        {
+          "name": "Unselected alternative has a missing configuration",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ANY",1,["GROUP",{"name":["NODE",0,"tag"]},1]]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "An enclosing alternative catches the failed array match",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["IS",[[["ANY",1,["GROUP",{"name":["NODE",0,"tag"]},1]]]]],["IS",[[1]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Wrong macro context in an unselected alternative",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1,"const":["r",["REG","1"]]},["COPY",["IS",[[["ANY",1,["EX","r"]]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Macro selection uses array scope in an unselected alternative",
+          "input": ["good"],
+          "jgraft": ["JGRAFT",{"v":1,"const":["good",["PAT","other"]]},["COPY",["IS",[[["ANY","good",["EX",["CONST",["NODE",0]]]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Missing macro selection fails the entire array match",
+          "input": ["absent"],
+          "jgraft": ["JGRAFT",{"v":1,"const":["good",["PAT","other"]]},["COPY",["IS",[[["ANY","absent",["EX",["CONST",["NODE",0]]]]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Expanded group uses a preparation-time WITH binding",
+          "input": ["slot",["element"]],
+          "jgraft": ["JGRAFT",{"v":1,"const":["p",["PAT",["GROUP",["TEMP","key"],["ARRAY"]]]]},["COPY",["CAPTURE",[["slot",["WITH",["EX","p"],"key",["NODE",0]]]]],["NODE"]]],
+          "lazy": {"output":{"slot":{"path":[],"ofs":1,"len":1,"lim":2}}}
+        },
+        {
+          "name": "Array match under an unreached nested structure is independent",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ANY",1,{"rows":[[["GROUP",{"name":["NODE",0,"tag"]},1]]]}]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Explicit node match starts its own array preparation",
+          "input": [[1]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["IS",[[["ANY",1,["GROUP",{"name":["NODE",0,"tag"]},1]]]]]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Nested match failure leaves a sibling node alternative available",
+          "input": [[1]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ANY",["IS",[[["ANY",1,["GROUP",{"name":["NODE",0,"tag"]},1]]]]],["IS",[[1]]]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "An unselected function operand does not prepare its nested pattern",
+          "input": [true],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["OR",true,["IS",[[["GROUP",{"name":["NODE",0,"tag"]},1]]]]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        }
+      ]
+    },
+    {
+      "name": "Deferred bindings and captures",
+      "desc": "Preparation can encounter a binding that only exists at element scope. Reading that binding during preparation exposes its retained error.",
+      "tests": [
+        {
+          "name": "Unused preparation error resolves at the element",
+          "input": [{"tag":"v"}],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["WITH",["GROUP","hit",{"tag":["TEMP","k"]}],"k",["NODE","tag"]]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "Configuration reads the retained error",
+          "input": [{"tag":"v"}],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["WITH",["GROUP",["TEMP","k"],{"tag":"v"}],"k",["NODE","tag"]]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Erroneous binding shadows a usable outer binding",
+          "input": [{"tag":"v"}],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["CAPTURE",[[["WITH",["GROUP",["TEMP","k"],{"tag":"v"}],"k",["NODE","tag"]]]]],"k","outer"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Inner binding replaces the retained outer error before use",
+          "input": [{"tag":"v"}],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["WITH",["WITH",["GROUP",["TEMP","k"],{"tag":"v"}],"k","inner"],"k",["NODE","tag"]]]]],["NODE"]]],
+          "lazy": {"output":{"inner":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "A failed nested candidate contributes no capture",
+          "input": [[1]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP","chosen",["ANY",["IS",[[["GROUP",{"name":["NODE",0,"tag"]},1]]]],["IS",[[1]]]]]]]],["NODE"]]],
+          "lazy": {"output":{"chosen":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "Failed preparation in IF retains the enclosing capture",
+          "input": [1],
+          "jgraft": [
+            "JGRAFT", {"v":1},
+            ["MATCH",[[["GROUP","outer",1]]],["IF",["IS",[[["ANY",1,["GROUP",{"name":["NODE",0,"tag"]},1]]]]],["COPY","wrong",["NODE"]],["COPY",["CAP"],["NODE"]]]]
+          ],
+          "lazy": {"output":{"outer":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        }
+      ]
+    },
+    {
+      "name": "Fatal errors and skipped bodies",
+      "desc": "Nested scopes preserve fatal errors reached after a successful match. Only the selected branch contributes captures.",
+      "tests": [
+        {
+          "name": "Guarded malformed macro body",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1,"const":["p",["VAL",["LENGTH",1,2]]]},["COPY",["CASE",["NUM"],"number",["EX","p"]],["NODE"]]],
+          "lazy": {"output":"number"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Called malformed macro body inside a predicate",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1,"const":["p",["VAL",["LENGTH",1,2]]]},["COPY",["ANY",["IS",2,["EX","p"]],2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Successful match enters a macro with an unsupported version",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1,"const":["run",["ACT",["JGRAFT",{"v":0}]]]},["MATCH",[[["GROUP","hit",1]]],["CALL","run"]]],
+          "lazy": {"unsupported_graft":true}
+        },
+        {
+          "name": "Failed nested predicate takes the guarded edit branch",
+          "input": {"value":"x"},
+          "jgraft": ["JGRAFT",{"v":1},["IF",["IS",1,["ADD",["NODE","value"],1]],["COPY","number","kind"],["COPY","other","kind"]]],
+          "lazy": {"output":{"value":"x","kind":"other"}}
+        }
+      ]
+    }
+  ]
+}

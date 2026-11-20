@@ -5,7 +5,7 @@
   "tests": [
     {
       "name": "JGRAFT construction",
-      "desc": "Empty actions preserve every JSON type. Metadata identifies scope and protocol version; application-defined metadata is opaque. Numeric action IDs are exercised only inside a named JGRAFT root.",
+      "desc": "Empty actions preserve every JSON type. Metadata identifies scope and protocol version; application-defined metadata is opaque.",
       "tests": [
         {"name":"Empty JGRAFT preserves null","input":null,"jgraft":["JGRAFT",{"v":1}],"lazy":{"output":null}},
         {"name":"Empty JGRAFT preserves false","input":false,"jgraft":["JGRAFT",{"v":1}],"lazy":{"output":false}},
@@ -65,9 +65,9 @@
           "lazy": {"output":{"x":2,"y":1}}
         },
         {
-          "name": "Numeric nested JGRAFT action",
+          "name": "Nested JGRAFT scopes its constants",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},[-1,{"const":["x",7]},["COPY",["CONST","x"],"inner"]],["COPY",["CONST"],"outer"]],
+          "jgraft": ["JGRAFT",{"v":1},["JGRAFT",{"const":["x",7]},["COPY",["CONST","x"],"inner"]],["COPY",["CONST"],"outer"]],
           "lazy": {"output":{"inner":7,"outer":{}}}
         },
         {
@@ -139,7 +139,7 @@
           "desc": "Upfront version checking may reject before parent actions in strict mode; logging is deliberately unchecked there.",
           "input": null,
           "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["JGRAFT",{"v":999999999999999}]],
-          "lazy": {"unsupported_graft":true,"emits":[{"level":0,"message":"before"}]},
+          "lazy": {"unsupported_graft":true,"emits":[{"level":"info","message":"before"}]},
           "strict": {"unsupported_graft":true}
         },
         {
@@ -1283,9 +1283,9 @@
           "lazy": {"output":{"a":[1,{"b":2}]}}
         },
         {
-          "name": "Numeric NODE identifier",
+          "name": "Read the scalar root",
           "input": 7,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",[0],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE"],["NODE"]]],
           "lazy": {"output":7}
         },
         {
@@ -1372,9 +1372,9 @@
           "lazy": {"output":true}
         },
         {
-          "name": "Numeric CAP identifier reads empty root",
+          "name": "Read the empty CAP object",
           "input": null,
-          "jgraft": ["JGRAFT",{"v":1},["COPY",[-5],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAP"],["NODE"]]],
           "lazy": {"output":{}}
         },
         {
@@ -7906,7 +7906,7 @@
       ]
     },
     {
-      "name": "Namespace-root names and numeric identifiers",
+      "name": "Namespace-root names",
       "desc": "Only internal namespaces coerce a leading integer into a property name. The rule applies after empty and array-valued path expansion. Deeper selectors retain ordinary object/array rules; NODE never coerces integer object keys.",
       "tests": [
         {
@@ -8006,9 +8006,9 @@
           "lazy": {"output":false}
         },
         {
-          "name": "CONST numeric expression identifier",
+          "name": "Read a named CONST property",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1,"const":["x",7]},["COPY",[-2,"x"],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1,"const":["x",7]},["COPY",["CONST","x"],["NODE"]]],
           "lazy": {"output":7}
         },
         {
@@ -8108,9 +8108,9 @@
           "lazy": {"output":false}
         },
         {
-          "name": "STASH numeric expression identifier",
+          "name": "Read a named STASH property",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["STASH","x"]],["COPY",[-3,"x"],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["STASH","x"]],["COPY",["STASH","x"],["NODE"]]],
           "lazy": {"output":7}
         },
         {
@@ -8210,9 +8210,9 @@
           "lazy": {"output":false}
         },
         {
-          "name": "TEMP numeric expression identifier",
+          "name": "Read a named TEMP property",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["TEMP","x"],[-4,"x"],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["TEMP","x"],["TEMP","x"],["NODE"]]],
           "lazy": {"output":7}
         },
         {
@@ -8888,18 +8888,6 @@
           "lazy": {"invalid_graft":true}
         },
         {
-          "name": "-4 bare root read is forbidden",
-          "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["COPY",[-4],["NODE"]]],
-          "lazy": {"invalid_graft":true}
-        },
-        {
-          "name": "-4 bare root existence probe is forbidden",
-          "input": {},
-          "jgraft": ["JGRAFT",{"v":1},["COPY",["EXISTS",[-4]],["NODE"]]],
-          "lazy": {"invalid_graft":true}
-        },
-        {
           "name": "TEMP computed empty path cannot expose root",
           "input": {"path":[]},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["TEMP",["NODE","path"]],["NODE"]]],
@@ -9098,7 +9086,7 @@
           "desc": "In mandatory lazy mode the earlier RAISE executes before the invalid selector is encountered. Strict rejection may happen before any actions.",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["COPY",["NODE",null],["NODE"]]],
-          "lazy": {"invalid_graft":true,"emits":[{"level":0,"message":"before"}]},
+          "lazy": {"invalid_graft":true,"emits":[{"level":"info","message":"before"}]},
           "strict": {"invalid_graft":true}
         },
         {
@@ -9129,7 +9117,7 @@
           "desc": "In mandatory lazy mode the earlier RAISE executes before the invalid selector is encountered. Strict rejection may happen before any actions.",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["COPY",["CONST",null],["NODE"]]],
-          "lazy": {"invalid_graft":true,"emits":[{"level":0,"message":"before"}]},
+          "lazy": {"invalid_graft":true,"emits":[{"level":"info","message":"before"}]},
           "strict": {"invalid_graft":true}
         },
         {
@@ -9160,7 +9148,7 @@
           "desc": "In mandatory lazy mode the earlier RAISE executes before the invalid selector is encountered. Strict rejection may happen before any actions.",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["COPY",["STASH",null],["NODE"]]],
-          "lazy": {"invalid_graft":true,"emits":[{"level":0,"message":"before"}]},
+          "lazy": {"invalid_graft":true,"emits":[{"level":"info","message":"before"}]},
           "strict": {"invalid_graft":true}
         },
         {
@@ -9191,7 +9179,7 @@
           "desc": "In mandatory lazy mode the earlier RAISE executes before the invalid selector is encountered. Strict rejection may happen before any actions.",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["COPY",["TEMP",null],["NODE"]]],
-          "lazy": {"invalid_graft":true,"emits":[{"level":0,"message":"before"}]},
+          "lazy": {"invalid_graft":true,"emits":[{"level":"info","message":"before"}]},
           "strict": {"invalid_graft":true}
         },
         {

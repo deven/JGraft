@@ -1,0 +1,416 @@
+{
+  "version": 1,
+  "name": "Match resolution and captures",
+  "desc": "Position and length preferences, group configuration, capture suppression, path origins and capture namespace scoping.",
+  "tests": [
+    {
+      "name": "Capture records",
+      "desc": "Successful groups expose the containing path and half-open span, including for zero-length matches.",
+      "tests": [
+        {
+          "name": "Successful predicate without captures",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["NUM"]],["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "Unsuccessful match",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["BOOL"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Capture name \"word\"",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[1,["GROUP","word",2,3]]]],["NODE"]]],
+          "lazy": {"output":{"word":{"path":[],"ofs":1,"len":2,"lim":3}}}
+        },
+        {
+          "name": "Capture name \"0\"",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[1,["GROUP",0,2,3]]]],["NODE"]]],
+          "lazy": {"output":{"0":{"path":[],"ofs":1,"len":2,"lim":3}}}
+        },
+        {
+          "name": "Capture name \"\"",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[1,["GROUP","",2,3]]]],["NODE"]]],
+          "lazy": {"output":{"":{"path":[],"ofs":1,"len":2,"lim":3}}}
+        },
+        {
+          "name": "Zero-width group at end",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[1,["GROUP","e"]]]],["NODE"]]],
+          "lazy": {"output":{"e":{"path":[],"ofs":1,"len":0,"lim":1}}}
+        },
+        {
+          "name": "Failure after a capture discards the whole match",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP","hit",1],3]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Nested array path",
+          "input": {"rows":[{"labels":["a","b"]}]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",{"rows":[[{"labels":[["a",["GROUP","label","b"]]]}]]}],["NODE"]]],
+          "lazy": {"output":{"label":{"path":["rows",0,"labels"],"ofs":1,"len":1,"lim":2}}}
+        },
+        {
+          "name": "Explicit target resets path origin",
+          "input": {"items":[{"tags":["a"]}]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["IS",[[{"tags":[[["GROUP","tag","a"]]]}]],["NODE","items"]]],["NODE"]]],
+          "lazy": {"output":{"tag":{"path":[0,"tags"],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "Nested prefixes compose and apply only to descendants",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",{"name":"outer","prefix":"p."},["GROUP",{"name":"mid","prefix":"q."},["GROUP",3,1]]]]]],["NODE"]]],
+          "lazy": {"output":{"outer":{"path":[],"ofs":0,"len":1,"lim":1},"p.mid":{"path":[],"ofs":0,"len":1,"lim":1},"p.q.3":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        }
+      ]
+    },
+    {
+      "name": "Length and placement",
+      "desc": "Competing successful paths expose depth-first length priorities and leftmost tie breaking.",
+      "tests": [
+        {
+          "name": "Named group defaults to longest",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP","a",["REP"]],["GROUP","b",["REP"]]]]],["NODE"]]],
+          "lazy": {"output":{"a":{"path":[],"ofs":0,"len":3,"lim":3},"b":{"path":[],"ofs":3,"len":0,"lim":3}}}
+        },
+        {
+          "name": "Two short groups in partial mode",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",{"name":"a","long":false},["REP"]],["GROUP",{"name":"b","long":false},["REP"]]]]],["NODE"]]],
+          "lazy": {"output":{"a":{"path":[],"ofs":0,"len":0,"lim":0},"b":{"path":[],"ofs":0,"len":0,"lim":0}}}
+        },
+        {
+          "name": "End anchor constrains short groups",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",{"name":"a","long":false},["REP"]],["GROUP",{"name":"b","long":false},["REP"]],["END"]]]],["NODE"]]],
+          "lazy": {"output":{"a":{"path":[],"ofs":0,"len":0,"lim":0},"b":{"path":[],"ofs":0,"len":3,"lim":3}}}
+        },
+        {
+          "name": "LONG wins before later named group",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["LONG",["REP"]],["GROUP","rest",["REP"]],["END"]]]],["NODE"]]],
+          "lazy": {"output":{"rest":{"path":[],"ofs":3,"len":0,"lim":3}}}
+        },
+        {
+          "name": "SHORT yields to following group",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["SHORT",["REP"]],["GROUP","rest",["REP"]],["END"]]]],["NODE"]]],
+          "lazy": {"output":{"rest":{"path":[],"ofs":0,"len":3,"lim":3}}}
+        },
+        {
+          "name": "Boolean configuration supplies length preference",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",true,["REP"]],["GROUP","rest",["REP"]]]]],["NODE"]]],
+          "lazy": {"output":{"rest":{"path":[],"ofs":3,"len":0,"lim":3}}}
+        },
+        {
+          "name": "Unnamed default has no competing preference",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",null,["REP"]],["GROUP","rest",["REP"]]]]],["NODE"]]],
+          "lazy": {"output":{"rest":{"path":[],"ofs":0,"len":3,"lim":3}}}
+        },
+        {
+          "name": "Leftmost tied fixed-width group",
+          "input": [1,1,1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],["GROUP","hit",1]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "Exact preferred index",
+          "input": ["x","a","x","a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["NEAR",3,["GROUP","hit","a"]]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":3,"len":1,"lim":4}}}
+        },
+        {
+          "name": "Equidistant prefers earlier start",
+          "input": ["x","a","x","a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["NEAR",2,["GROUP","hit","a"]]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":1,"len":1,"lim":2}}}
+        },
+        {
+          "name": "Match before preferred location",
+          "input": ["x","a","x","a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["NEAR",6,["GROUP","hit","a"]]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":3,"len":1,"lim":4}}}
+        },
+        {
+          "name": "Match after preferred location",
+          "input": ["x","a","x","a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["NEAR",0,["GROUP","hit","a"]]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":1,"len":1,"lim":2}}}
+        },
+        {
+          "name": "Negative index counts from end",
+          "input": ["x","a","x","a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["NEAR",-1,["GROUP","hit","a"]]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":3,"len":1,"lim":4}}}
+        },
+        {
+          "name": "Position outranks greed of preceding group",
+          "input": ["a","a","a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP","prefix",["REP"]],["NEAR",1,["GROUP","hit","a"]]]]],["NODE"]]],
+          "lazy": {"output":{"prefix":{"path":[],"ofs":0,"len":1,"lim":1},"hit":{"path":[],"ofs":1,"len":1,"lim":2}}}
+        },
+        {
+          "name": "Equal distance is resolved by earlier length preference",
+          "input": ["x","a","x","a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP","prefix",["REP"]],["NEAR",2,["GROUP","hit","a"]]]]],["NODE"]]],
+          "lazy": {"output":{"prefix":{"path":[],"ofs":0,"len":3,"lim":3},"hit":{"path":[],"ofs":3,"len":1,"lim":4}}}
+        },
+        {
+          "name": "Fixed NEAR chains can skip a gap",
+          "input": ["a","gap","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["NEAR",0,"a"],["NEAR",2,"b"]]]],["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "Earlier NEAR cannot consume a later required occurrence",
+          "input": ["a","b","a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["NEAR",2,["GROUP","a","a"]],["NEAR",1,"b"]]]],["NODE"]]],
+          "lazy": {"output":{"a":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        }
+      ]
+    },
+    {
+      "name": "Preparation and capture resolution",
+      "desc": "Configuration sees the array being matched. Only the selected final capture state must have unique names.",
+      "tests": [
+        {
+          "name": "Name reads the containing array",
+          "input": ["tag","value"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[["tag",["GROUP",{"name":["NODE",0]},"value"]]]],["NODE"]]],
+          "lazy": {"output":{"tag":{"path":[],"ofs":1,"len":1,"lim":2}}}
+        },
+        {
+          "name": "Computed configuration object",
+          "input": [{"name":"hit","long":false},1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["EXISTS"],["GROUP",["NODE",0],["REP"]]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":1,"len":0,"lim":1}}}
+        },
+        {
+          "name": "Preparation may use a WITH binding",
+          "input": ["name",["element"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["EXISTS"],["WITH",["GROUP",["TEMP","key"],["ARRAY"]],"key",["NODE",0]]]]],["NODE"]]],
+          "lazy": {"output":{"name":{"path":[],"ofs":1,"len":1,"lim":2}}}
+        },
+        {
+          "name": "Exact override applies to the group elements",
+          "input": [{"k":1,"extra":2}],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",{"exact":true},{"k":1}]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Partial override within exact array",
+          "input": [{"k":1,"extra":2}],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["IS",[[["GROUP",{"exact":false},{"k":1}]]]]],["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "ANY suppresses descendant groups",
+          "input": [1,1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["ANY",["GROUP","inner",1]]]]],["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "REP suppresses group on every repetition",
+          "input": [1,1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP",2,0,["GROUP","inner",1]]]]],["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "CAN suppresses successful captures",
+          "input": [1,1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["CAN",["GROUP","peek",1]],["GROUP","keep",1]]]],["NODE"]]],
+          "lazy": {"output":{"keep":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "CANT discards captures preceding failed lookahead",
+          "input": [1,1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["CANT",["GROUP","peek",1],2],["GROUP","keep",1]]]],["NODE"]]],
+          "lazy": {"output":{"keep":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "ALL merges captures from both constraints",
+          "input": [1,1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["ALL",["GROUP","a",1],["GROUP","b",1]]]]],["NODE"]]],
+          "lazy": {"output":{"a":{"path":[],"ofs":0,"len":1,"lim":1},"b":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "Outer group captures a repeated suppressed group",
+          "input": [1,1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP","all",["REP",2,0,["GROUP","inner",1]]]]]],["NODE"]]],
+          "lazy": {"output":{"all":{"path":[],"ofs":0,"len":2,"lim":2}}}
+        },
+        {
+          "name": "NONE suppresses nested structure captures",
+          "input": [[1]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["NONE",[[["GROUP","inner",1],2]]]]]],["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "Conflicting discarded subtree does not invalidate earliest subtree",
+          "input": [{"a":["ok"]},{"a":["dup"]},{"b":[1]}],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],{"a":[[["GROUP",{"name":["NODE",0]},["EXISTS"]]]]},["REP"],{"b":[[["GROUP","dup",1]]]},["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"ok":{"path":[0,"a"],"ofs":0,"len":1,"lim":1},"dup":{"path":[2,"b"],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "Duplicate in earliest selected subtree is fatal",
+          "input": [{"a":["dup"]},{"a":["ok"]},{"b":[1]}],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],{"a":[[["GROUP",{"name":["NODE",0]},["EXISTS"]]]]},["REP"],{"b":[[["GROUP","dup",1]]]},["REP"]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Duplicate across ALL branches",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["ALL",["GROUP","a",1],["GROUP","a",1]]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "Capture namespace scope",
+      "desc": "Successful MATCH and IF actions expose their own captures. CAPTURE returns independent records and leaves the action namespace intact.",
+      "tests": [
+        {
+          "name": "Nested MATCH restores outer captures",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["GROUP","a",1]]],["MATCH",[[["GROUP","b",1]]],["COPY",["CAP"],["STASH","inner"]]],["COPY",[[["STASH","inner"],["CAP"]]],["NODE"]]]],
+          "lazy": {"output":[{"b":{"path":[],"ofs":0,"len":1,"lim":1}},{"a":{"path":[],"ofs":0,"len":1,"lim":1}}]}
+        },
+        {
+          "name": "IF selected branch receives its own captures",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["GROUP","a",1]]],["IF",[[["GROUP","b",1]]],["COPY",["CAP"],["NODE"]]]]],
+          "lazy": {"output":{"b":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "IF else retains enclosing captures",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["GROUP","a",1]]],["IF",[[9]],["COPY",0,["NODE"]],["COPY",["CAP"],["NODE"]]]]],
+          "lazy": {"output":{"a":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "CAPTURE returns its own object without rebinding CAP",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["GROUP","a",1]]],["COPY",[[["CAPTURE",[[["GROUP","b",1]]]],["CAP"]]],["NODE"]]]],
+          "lazy": {"output":[{"b":{"path":[],"ofs":0,"len":1,"lim":1}},{"a":{"path":[],"ofs":0,"len":1,"lim":1}}]}
+        },
+        {
+          "name": "CAPTURE outside MATCH leaves CAP empty",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["CAPTURE",[[["GROUP","b",1]]]],["CAP"]]],["NODE"]]],
+          "lazy": {"output":[{"b":{"path":[],"ofs":0,"len":1,"lim":1}},{}]}
+        }
+      ]
+    },
+    {
+      "name": "Configuration and context errors",
+      "desc": "Reject malformed configuration, illegal nesting, and invalid call signatures. Runtime configuration failures become failed array matches.",
+      "tests": [
+        {
+          "name": "Unknown property",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",{"bogus":1},1]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Nonboolean long",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",{"long":1},1]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Nonboolean exact",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",{"exact":"yes"},1]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Fractional near",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",{"near":0.5},1]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Nonstring prefix",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",{"prefix":1},1]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid name",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",{"name":false},1]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing computed configuration is a miss",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP",["NODE","nope"],1]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Nested NEAR in the same array match",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["NEAR",0,["NEAR",0,1]]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Nested array starts its own NEAR scope",
+          "input": [[1]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["NEAR",0,[[["NEAR",0,["GROUP","x",1]]]]]]]],["NODE"]]],
+          "lazy": {"output":{"x":{"path":[0],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "CAPTURE needs a pattern",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CAPTURE with extra operand",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",1,1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "GROUP needs configuration",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["GROUP"]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "NEAR needs index",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["NEAR"]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "LONG outside element context",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["LONG",1]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SHORT outside element context",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["SHORT",1]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed configuration behind skipped action",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,true,["CAPTURE",[[["GROUP",{"long":0}]]]]],["NODE"]]],
+          "lazy": {"output":true},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    }
+  ]
+}

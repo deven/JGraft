@@ -1,0 +1,596 @@
+{
+  "version": 1,
+  "name": "Array sequences",
+  "desc": "Capture-free sequence matching, repetitions, assertions and successor positions.",
+  "tests": [
+    {
+      "name": "Sequence composition and anchors",
+      "desc": "HAS accepts a prefix. IS requires a successor at the end of the array. Assertions leave the cursor in place.",
+      "tests": [
+        {
+          "name": "Empty sequence on empty array",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Empty sequence cannot cover one element",
+          "input": [0],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ"]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Nested sequence preserves order",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",1,["SEQ",2],3]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Mismatched nested sequence",
+          "input": [1,3,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["SEQ",1,["SEQ",2],3]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Start and end coincide",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["START"],["END"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Start and end differ",
+          "input": [null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["START"],["END"]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "START after a consumed element",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[1,["START"]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Anchored sequence consumes every element",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["START"],1,2,["END"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Repeated END remains at end",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[1,["END"],["END"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Node required after END",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["END"],["EXISTS"]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Partial sequence can leave a suffix",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["HAS",[[["SEQ",0,1]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Partial sequence still starts at zero",
+          "input": [0,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["HAS",[[["SEQ",1,2]]]],["NODE"]]],
+          "lazy": {"output":false}
+        }
+      ]
+    },
+    {
+      "name": "Repetition bounds",
+      "desc": "Each count denotes repetitions of the operand. Multiple surviving counts can lead to different endpoints.",
+      "tests": [
+        {
+          "name": "Unbounded default on 0 elements",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Unbounded default on 1 elements",
+          "input": [null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Unbounded default on 2 elements",
+          "input": [null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Unbounded default on 3 elements",
+          "input": [null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Unbounded default on 4 elements",
+          "input": [null,null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Exact count on 0 elements",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Exact count on 1 elements",
+          "input": [null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Exact count on 2 elements",
+          "input": [null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Exact count on 3 elements",
+          "input": [null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Exact count on 4 elements",
+          "input": [null,null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Zero max aliases min on 0 elements",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Zero max aliases min on 1 elements",
+          "input": [null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Zero max aliases min on 2 elements",
+          "input": [null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Zero max aliases min on 3 elements",
+          "input": [null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Zero max aliases min on 4 elements",
+          "input": [null,null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Inclusive bounds on 0 elements",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",1,3]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Inclusive bounds on 1 elements",
+          "input": [null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",1,3]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Inclusive bounds on 2 elements",
+          "input": [null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",1,3]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Inclusive bounds on 3 elements",
+          "input": [null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",1,3]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Inclusive bounds on 4 elements",
+          "input": [null,null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",1,3]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Unbounded max on 0 elements",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,-1]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Unbounded max on 1 elements",
+          "input": [null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,-1]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Unbounded max on 2 elements",
+          "input": [null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,-1]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Unbounded max on 3 elements",
+          "input": [null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,-1]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Unbounded max on 4 elements",
+          "input": [null,null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,-1]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Zero exact on 0 elements",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",0]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Zero exact on 1 elements",
+          "input": [null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",0]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Zero exact on 2 elements",
+          "input": [null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",0]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Zero exact on 3 elements",
+          "input": [null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",0]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Zero exact on 4 elements",
+          "input": [null,null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",0]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Explicit wildcard on 0 elements",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,3,["EXISTS"]]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Explicit wildcard on 1 elements",
+          "input": [null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,3,["EXISTS"]]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Explicit wildcard on 2 elements",
+          "input": [null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,3,["EXISTS"]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Explicit wildcard on 3 elements",
+          "input": [null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,3,["EXISTS"]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Explicit wildcard on 4 elements",
+          "input": [null,null,null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,3,["EXISTS"]]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Each repetition may consume two elements",
+          "input": ["a","b","a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0,["SEQ","a","b"]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Wrong element in second occurrence",
+          "input": ["a","b","a","c"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0,["SEQ","a","b"]]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Shorter repetition leaves room for a required suffix",
+          "input": [1,1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",0,2,1],1]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Look for a literal amid two wildcard spans",
+          "input": [2,7,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP"],7,["REP"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Missing literal amid two wildcard spans",
+          "input": [2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP"],7,["REP"]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Repeated empty operand costs no elements",
+          "input": [7],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",3,0,["SEQ"]],7]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Unbounded empty operand terminates",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",0,-1,["SEQ"]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Empty and consuming alternatives both survive",
+          "input": [1,1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",1,-1,["ANY",["SEQ"],1]],2]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Computed bounds resolve a constant",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1,"const":["count",2]},["COPY",["IS",[[["REP",["CONST","count"],0,["EXISTS"]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        }
+      ]
+    },
+    {
+      "name": "Successor union and intersection",
+      "desc": "ANY retains viable alternative ends. ALL requires a common end, including when the following pattern rules out an otherwise viable end.",
+      "tests": [
+        {
+          "name": "Short successor needed",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ANY",["SEQ",1,2],1],2]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Long successor needed",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ANY",1,["SEQ",1,2]],3]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Empty alternative at end",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[1,["ANY",2,["SEQ"]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Alternatives both fail",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ANY",["SEQ",2],3]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Only shared successor satisfies suffix",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ALL",["REP",1,2],["REP",2,3]],3]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Disjoint nonempty successor sets",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ALL",["REP",1],["REP",2]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Shared successor cannot satisfy suffix",
+          "input": [1,2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ALL",["REP",1,2],["REP",2,3]],2]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Shared zero-width successor",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ALL",["SEQ"],["REP",0,1]],1]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Nested union inside intersection",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ALL",["ANY",1,["SEQ",1,2]],["REP",2]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Alternatives test the same element",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["ALL",["NUM"],["EXISTS"]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "NONE consumes one node",
+          "input": [2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["NONE",1],3]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "NONE cannot consume at end",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["NONE",1]]]],["NODE"]]],
+          "lazy": {"output":false}
+        }
+      ]
+    },
+    {
+      "name": "Lookahead",
+      "desc": "CAN and CANT test a sequence at the current position without advancing. A failed probe counts as a failed match.",
+      "tests": [
+        {
+          "name": "Empty CAN at end",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["CAN"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Empty CANT at end",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["CANT"]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Positive multi-element lookahead",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["CAN","a","b"],"a","b"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "CAN requires its entire sequence",
+          "input": ["a","x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["CAN","a","b"],"a","x"]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Negative lookahead succeeds",
+          "input": ["a","x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["CANT","a","b"],"a","x"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Negative lookahead blocks",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["CANT","a","b"],"a","b"]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Lookahead at end",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[1,["CAN",["END"]],["CANT",["EXISTS"]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Nested negative assertions",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["CANT",["CANT",1]],1]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Failed value read under CANT",
+          "input": [0],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["CANT",["NODE","missing"]],0]]],["NODE"]]],
+          "lazy": {"output":true}
+        }
+      ]
+    },
+    {
+      "name": "Local validation",
+      "desc": "Sequence-only directives need an array-element context, and repetition bounds have integer domains.",
+      "tests": [
+        {
+          "name": "START outside element context",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["START"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "END outside element context",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["END"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SEQ outside element context",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["SEQ"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "REP outside element context",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["REP"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CAN outside element context",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["CAN"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CANT outside element context",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["CANT"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Negative minimum",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",-1]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid negative maximum",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",1,-2]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Maximum below minimum",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",3,2]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Fractional minimum",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",0.5]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Too many REP operands",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",1,2,1,2]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "START with operand",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["START",1]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "END with operand",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["END",1]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Sequence inside node negation",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["NONE",["SEQ",1]]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Dynamic invalid bound is a miss",
+          "input": {"count":-2,"items":[1]},
+          "jgraft": ["JGRAFT",{"v":1,"const":["count",["NODE","count"]]},["COPY",["IS",[[["REP",["CONST","count"]]]],["NODE","items"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Unselected malformed sequence in a skipped value",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,7,["IS",[[["REP",-2]]]]],["NODE"]]],
+          "lazy": {"output":7},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    }
+  ]
+}

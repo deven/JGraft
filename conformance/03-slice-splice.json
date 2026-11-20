@@ -218,9 +218,9 @@
           "lazy": {"output":[{"first":7,"list":[8,7]}]}
         },
         {
-          "name": "Numeric SPLICE and NODE identifiers",
+          "name": "Replace one indexed element",
           "input": [0,1],
-          "jgraft": ["JGRAFT",{"v":1},[7,[0,1],1,7]],
+          "jgraft": ["JGRAFT",{"v":1},["SPLICE",["NODE",1],1,7]],
           "lazy": {"output":[0,7]}
         }
       ]
@@ -3008,7 +3008,7 @@
           "desc": "The earlier action executes in lazy mode. Strict validation may reject before execution, so its log sequence is not asserted.",
           "input": [],
           "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["SPLICE",["NODE"],{"len":null}]],
-          "lazy": {"invalid_graft":true,"emits":[{"level":0,"message":"before"}]},
+          "lazy": {"invalid_graft":true,"emits":[{"level":"info","message":"before"}]},
           "strict": {"invalid_graft":true}
         },
         {
@@ -3016,7 +3016,7 @@
           "desc": "No output is specified on failure. The complete log prefix establishes that following actions did not run.",
           "input": [],
           "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["SPLICE",0,1],["RAISE","info","after"]],
-          "lazy": {"runtime_error":true,"emits":[{"level":0,"message":"before"}]}
+          "lazy": {"runtime_error":true,"emits":[{"level":"info","message":"before"}]}
         }
       ]
     },
@@ -3095,9 +3095,9 @@
           "lazy": {"invalid_graft":true}
         },
         {
-          "name": "Bare numeric NODE is equally forbidden",
+          "name": "Bare NODE cannot insert into the AT parent",
           "input": [[0,1],[2,3]],
-          "jgraft": ["JGRAFT",{"v":1},["AT",0,["SPLICE",[0],0,"x"]]],
+          "jgraft": ["JGRAFT",{"v":1},["AT",0,["SPLICE",["NODE"],0,"x"]]],
           "lazy": {"invalid_graft":true}
         },
         {
@@ -3252,9 +3252,9 @@
           "lazy": {"output":[1,2]}
         },
         {
-          "name": "Numeric SLICE identifier",
+          "name": "Slice from index one to the end",
           "input": [0,1,2],
-          "jgraft": ["JGRAFT",{"v":1},["COPY",[55,1],["NODE"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SLICE",1],["NODE"]]],
           "lazy": {"output":[1,2]}
         },
         {

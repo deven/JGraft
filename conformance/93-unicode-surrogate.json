@@ -1,0 +1,212 @@
+{
+  "version": 1,
+  "name": "Exposed lone surrogates",
+  "desc": "Use the whole-file skip policy in the suite README when the decoder or implementation cannot preserve lone surrogates.",
+  "tests": [
+    {
+      "name": "References and ordinary strings",
+      "desc": "For implementations that expose lone surrogates, each isolated surrogate in these inputs is one code point.",
+      "tests": [
+        {
+          "name": "Read a string with an isolated high surrogate",
+          "input": {"s":"\ud800"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE","s"],["NODE"]]],
+          "lazy": {"output":"\ud800"}
+        },
+        {
+          "name": "Read an isolated low surrogate by computed property name",
+          "input": {"k\ud800":"first","k\udfff":"last"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE",["CONCAT","k","\udfff"]],["NODE"]]],
+          "lazy": {"output":"last"}
+        },
+        {
+          "name": "Property sorting compares the exposed code points",
+          "input": {"k\ud800":"first","k\udfff":"last"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS"],["NODE"]]],
+          "lazy": {"output":["k\ud800","k\udfff"]}
+        },
+        {
+          "name": "Count two isolated surrogates, a separator and a supplementary character",
+          "input": "\ud800-\udfff😀",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH"],["NODE"]]],
+          "lazy": {"output":4}
+        },
+        {
+          "name": "Slice around a supplementary character",
+          "input": "😀\ud800x\udfff",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SLICE",{"ofs":1,"len":2}],["NODE"]]],
+          "lazy": {"output":"\ud800x"}
+        },
+        {
+          "name": "Negative slice selects a final isolated low surrogate",
+          "input": "\ud800x\udfff",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SLICE",{"ofs":-1,"len":1}],["NODE"]]],
+          "lazy": {"output":"\udfff"}
+        },
+        {
+          "name": "Concatenate without pairing the isolated surrogates",
+          "input": {"a":"\ud800","b":"\udfff"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["NODE","a"],"-",["NODE","b"]],["NODE"]]],
+          "lazy": {"output":"\ud800-\udfff"}
+        },
+        {
+          "name": "High and low surrogate ordering",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS","\ud800","\udfff"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "A replacement character is a distinct string",
+          "input": "\ud800",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS","�"],["NODE"]]],
+          "lazy": {"output":false}
+        }
+      ]
+    },
+    {
+      "name": "Character matching and captures",
+      "desc": "Literal characters, numeric code points, classes and capture bounds use the same exposed character sequence.",
+      "tests": [
+        {
+          "name": "Match an isolated high surrogate literally",
+          "input": "a\ud800b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR","\ud800"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Match an isolated low surrogate numerically",
+          "input": "\udfff",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",57343],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "High surrogate differs from a low surrogate",
+          "input": "\udfff",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR","\ud800"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Range includes its low endpoint",
+          "input": "\ud800",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["CHARS",55296,57343]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Range includes its high endpoint",
+          "input": "\udfff",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["CHARS",55296,57343]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "A supplementary character is outside the surrogate class",
+          "input": "😀",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["CHARS",55296,57343]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Reversed surrogate order remains two exposed characters",
+          "input": "\udfff\ud800",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["SEQ",["START"],57343,55296,["END"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Capture uses codepoint offsets across a supplementary character",
+          "input": "😀\ud800!",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",["STR",["GROUP","mark",["CHARS",55296,57343]]]],["NODE"]]],
+          "lazy": {"output":{"mark":{"path":[],"ofs":1,"len":1,"lim":2}}}
+        },
+        {
+          "name": "Extract a capture containing an isolated low surrogate",
+          "input": "😀\udfff!",
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["STR",["GROUP","mark",["CHARS",55296,57343]]],["COPY",["SLICE",["CAP","mark"]],["NODE"]]]],
+          "lazy": {"output":"\udfff"}
+        }
+      ]
+    },
+    {
+      "name": "Splitting and reconstruction",
+      "desc": "Ordinary string edits can preserve isolated characters in visible fields or in a stored variable separator.",
+      "tests": [
+        {
+          "name": "Split into code points",
+          "input": "\ud800x\udfff",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",""],["NODE"]]],
+          "lazy": {"output":["\ud800","x","\udfff"]}
+        },
+        {
+          "name": "Use an isolated character as the separator",
+          "input": "\ud800a\ud800",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT","\ud800"],["NODE"]]],
+          "lazy": {"output":["","a",""]}
+        },
+        {
+          "name": "Join with a literal low surrogate",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN","\udfff"],["NODE"]]],
+          "lazy": {"output":"a\udfffb"}
+        },
+        {
+          "name": "Reconstruct using two different captured surrogate separators",
+          "input": "a\ud800b\udfffc",
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["REG",["CHARS",55296,57343]],"default":"/"},["COPY","B",1]]],
+          "lazy": {"output":"a\ud800B\udfffc"}
+        },
+        {
+          "name": "Preserve isolated characters in edited fields",
+          "input": "\ud800|\udfff",
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"|",["COPY",["MAP",["CONCAT","[",["NODE"],"]"]],["NODE"]]]],
+          "lazy": {"output":"[\ud800]|[\udfff]"}
+        }
+      ]
+    },
+    {
+      "name": "RAISE message and data",
+      "desc": "Surrogates in message text violate the message character rules. Optional diagnostic data preserves ordinary JSON strings.",
+      "tests": [
+        {
+          "name": "Literal high surrogate message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","before\ud800after"]],
+          "lazy": {"invalid_graft":true,"emits":[]}
+        },
+        {
+          "name": "Computed high surrogate message",
+          "input": {"s":"\ud800"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["CONCAT","value ",["NODE","s"]]]],
+          "lazy": {"runtime_error":true,"emits":[]}
+        },
+        {
+          "name": "Literal low surrogate message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","before\udfffafter"]],
+          "lazy": {"invalid_graft":true,"emits":[]}
+        },
+        {
+          "name": "Computed low surrogate message",
+          "input": {"s":"\udfff"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["CONCAT","value ",["NODE","s"]]]],
+          "lazy": {"runtime_error":true,"emits":[]}
+        },
+        {
+          "name": "A skipped invalid literal message",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["IF",true,["RAISE","fail","\ud800"]]],
+          "lazy": {"output":false,"emits":[]},
+          "strict": {"invalid_graft":true,"emits":[]}
+        },
+        {
+          "name": "Preserve surrogate data in a diagnostic snapshot",
+          "input": {"s":"\ud800x\udfff"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","saved",["NODE"]],["COPY","new","s"]],
+          "lazy": {"output":{"s":"new"},"emits":[{"level":"info","message":"saved","data":{"s":"\ud800x\udfff"}}]}
+        },
+        {
+          "name": "Failure record can carry an isolated low surrogate",
+          "input": "\udfff",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail","rejected",["NODE"]]],
+          "lazy": {"no_match":true,"emits":[{"level":"fail","message":"rejected","data":"\udfff"}]}
+        }
+      ]
+    }
+  ]
+}

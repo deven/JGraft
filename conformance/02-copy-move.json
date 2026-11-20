@@ -410,9 +410,9 @@
           "lazy": {"output":{"n":7,"copy":{"list":[7,{"n":7}]}}}
         },
         {
-          "name": "Numeric action and reference IDs",
+          "name": "Copy an integer into a new property",
           "input": {},
-          "jgraft": ["JGRAFT",{"v":1},[5,7,[0,"x"]]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["NODE","x"]]],
           "lazy": {"output":{"x":7}}
         }
       ]
@@ -1218,9 +1218,9 @@
           "lazy": {"output":{"a":7}}
         },
         {
-          "name": "Numeric MOVE and NODE identifiers",
+          "name": "Rename a property in the current object",
           "input": {"a":7},
-          "jgraft": ["JGRAFT",{"v":1},[6,[0,"a"],[0,"b"]]],
+          "jgraft": ["JGRAFT",{"v":1},["MOVE",["NODE","a"],["NODE","b"]]],
           "lazy": {"output":{"b":7}}
         },
         {
@@ -2190,7 +2190,7 @@
           "desc": "The earlier action executes in lazy mode. Strict validation may reject before execution, so its log sequence is not asserted.",
           "input": [],
           "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["COPY",7,["NODE",null]]],
-          "lazy": {"invalid_graft":true,"emits":[{"level":0,"message":"before"}]},
+          "lazy": {"invalid_graft":true,"emits":[{"level":"info","message":"before"}]},
           "strict": {"invalid_graft":true}
         },
         {
@@ -2206,7 +2206,7 @@
           "desc": "The earlier action executes in lazy mode. Strict validation may reject before execution, so its log sequence is not asserted.",
           "input": [],
           "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["MOVE",null,["NODE",true]]],
-          "lazy": {"invalid_graft":true,"emits":[{"level":0,"message":"before"}]},
+          "lazy": {"invalid_graft":true,"emits":[{"level":"info","message":"before"}]},
           "strict": {"invalid_graft":true}
         },
         {
@@ -2214,14 +2214,14 @@
           "desc": "No output is specified on failure. The complete log prefix establishes that following actions did not run.",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["COPY",["NODE","missing"],"x"],["RAISE","info","after"]],
-          "lazy": {"runtime_error":true,"emits":[{"level":0,"message":"before"}]}
+          "lazy": {"runtime_error":true,"emits":[{"level":"info","message":"before"}]}
         },
         {
           "name": "MOVE runtime failure aborts later actions",
           "desc": "No output is specified on failure. The complete log prefix establishes that following actions did not run.",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["MOVE","missing","x"],["RAISE","info","after"]],
-          "lazy": {"runtime_error":true,"emits":[{"level":0,"message":"before"}]}
+          "lazy": {"runtime_error":true,"emits":[{"level":"info","message":"before"}]}
         }
       ]
     },

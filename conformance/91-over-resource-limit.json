@@ -27,6 +27,20 @@
           "input": null,
           "jgraft": ["JGRAFT",{"v":1,"const":["again",["VAL",["EX","again"]]]},["COPY",["EX","again"],["NODE"]]],
           "lazy": {"resource_limit":true}
+        },
+        {
+          "name": "Recursive pattern in a sequence alternative",
+          "desc": "Preparing all participating alternatives expands the recursive PAT even though the literal alternative would match.",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1,"const":["again",["PAT",["EX","again"]]]},["MATCH",[[["ANY","x",["EX","again"]]]]]],
+          "lazy": {"resource_limit":true}
+        },
+        {
+          "name": "Mutually recursive regex macros",
+          "desc": "Preparing the separator calls back into the first regex macro before SPLIT can consume a character.",
+          "input": "x",
+          "jgraft": ["JGRAFT",{"v":1,"const":["a",["REG",["EX","b"]],"b",["REG",["EX","a"]]]},["COPY",["SPLIT",["CONST","a"]],["NODE"]]],
+          "lazy": {"resource_limit":true}
         }
       ]
     },

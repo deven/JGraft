@@ -1,0 +1,930 @@
+{
+  "version": 1,
+  "name": "Scalar casts and comparison",
+  "desc": "Boolean, numeric and string conversions, Unicode string order, recursive array order, operand domains and validation.",
+  "tests": [
+    {
+      "name": "CASTBOOL",
+      "desc": "Only the two booleans, the integers zero and one, and the exact lowercase boolean strings can produce boolean results.",
+      "tests": [
+        {
+          "name": "False passes through",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "True passes through",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Integer zero",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Integer one",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Lowercase false",
+          "input": "false",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Lowercase true",
+          "input": "true",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Explicit literal overrides the current node",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL","true"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Referenced false string",
+          "input": {"flag":"false"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL",["NODE","flag"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Integer outside the domain",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Negative integer",
+          "input": -1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Fraction",
+          "input": 0.5,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Empty string",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Digit zero as text",
+          "input": "0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Digit one as text",
+          "input": "1",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Capitalized token",
+          "input": "True",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Whitespace around token",
+          "input": " false ",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Null",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Array",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal integer outside the domain",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL",2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal string outside the domain",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL","FALSE"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Too many operands",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL",0,1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing referenced operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTBOOL",["NODE","absent"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Malformed call in skipped branch",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["CASTBOOL",0,1],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "CASTNUM",
+      "desc": "Numbers pass through. Strings accept a whole JSON number token, plus the leading plus and trailing decimal point forms.",
+      "tests": [
+        {
+          "name": "Integer passes through",
+          "input": -42,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":-42}
+        },
+        {
+          "name": "Fraction passes through",
+          "input": 1.25,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":1.25}
+        },
+        {
+          "name": "Zero string",
+          "input": "0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Negative zero string",
+          "input": "-0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Fifteen decimal digits",
+          "input": "123456789012345",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":123456789012345}
+        },
+        {
+          "name": "Negative fraction",
+          "input": "-0.125",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":-0.125}
+        },
+        {
+          "name": "Lowercase exponent",
+          "input": "2e3",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":2000}
+        },
+        {
+          "name": "Signed uppercase exponent",
+          "input": "125E-2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":1.25}
+        },
+        {
+          "name": "Exponent with leading zeros",
+          "input": "1.5e+002",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":150}
+        },
+        {
+          "name": "Leading plus",
+          "input": "+42",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":42}
+        },
+        {
+          "name": "Trailing decimal point",
+          "input": "-42.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":-42}
+        },
+        {
+          "name": "Both extensions",
+          "input": "+0.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Explicit decimal literal",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","+12.50"],["NODE"]]],
+          "lazy": {"output":12.5}
+        },
+        {
+          "name": "Parse a constructed string",
+          "input": {"digits":"125"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["CONCAT",["NODE","digits"],"e-2"]],["NODE"]]],
+          "lazy": {"output":1.25}
+        },
+        {
+          "name": "Empty token",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Leading whitespace",
+          "input": " 2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Trailing newline",
+          "input": "2\n",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Internal whitespace",
+          "input": "1 2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Missing integer part",
+          "input": ".5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Leading zero",
+          "input": "01",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Missing exponent digits",
+          "input": "2e+",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Repeated sign",
+          "input": "--2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Trailing text",
+          "input": "12kg",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Null",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Boolean",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Array",
+          "input": [3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Malformed literal exponent",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","2e"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal boolean",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",false],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Too many operands",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM","1","2"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing referenced operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTNUM",["NODE","absent"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Malformed call in skipped branch",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["CASTNUM","1","2"],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "CASTSTR",
+      "desc": "Strings pass through unchanged. Booleans and integers have specified spellings. Fractional output is observed through a numeric interval.",
+      "tests": [
+        {
+          "name": "Empty string",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR"],["NODE"]]],
+          "lazy": {"output":""}
+        },
+        {
+          "name": "Numeric-looking text",
+          "input": "001.00",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR"],["NODE"]]],
+          "lazy": {"output":"001.00"}
+        },
+        {
+          "name": "Unicode and NUL",
+          "input": "😀\u0000é",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR"],["NODE"]]],
+          "lazy": {"output":"😀\u0000é"}
+        },
+        {
+          "name": "True",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR"],["NODE"]]],
+          "lazy": {"output":"true"}
+        },
+        {
+          "name": "False",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR"],["NODE"]]],
+          "lazy": {"output":"false"}
+        },
+        {
+          "name": "Zero",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR"],["NODE"]]],
+          "lazy": {"output":"0"}
+        },
+        {
+          "name": "Negative integer",
+          "input": -42,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR"],["NODE"]]],
+          "lazy": {"output":"-42"}
+        },
+        {
+          "name": "Fifteen-digit integer",
+          "input": 123456789012345,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR"],["NODE"]]],
+          "lazy": {"output":"123456789012345"}
+        },
+        {
+          "name": "Explicit boolean operand",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",false],["NODE"]]],
+          "lazy": {"output":"false"}
+        },
+        {
+          "name": "Integral result from exponent notation",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTNUM","1.25e2"]],["NODE"]]],
+          "lazy": {"output":"125"}
+        },
+        {
+          "name": "Fraction text parses near the original value",
+          "input": 1.25,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["LESS",1.24999999999,["CASTNUM",["CONCAT","",["CASTSTR"]]]],["LESS",["CASTNUM",["CONCAT","",["CASTSTR"]]],1.25000000001]]],["NODE"]]],
+          "lazy": {"output":[true,true]}
+        },
+        {
+          "name": "Null",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Array",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal object",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",{}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Too many operands",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",1,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing referenced operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["NODE","absent"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Malformed call in skipped branch",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["CASTSTR",1,2],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "LESS",
+      "desc": "Compare the current node to a right operand, or evaluate two explicit operands. Arrays compare corresponding elements recursively until the order is determined.",
+      "tests": [
+        {
+          "name": "False precedes true",
+          "input": {"left":false,"right":true},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "True follows false",
+          "input": {"left":true,"right":false},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Equal booleans",
+          "input": {"left":false,"right":false},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Integers compare numerically",
+          "input": {"left":2,"right":10},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Negative fractions",
+          "input": {"left":-0.5,"right":-1.25},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Equal numbers",
+          "input": {"left":1.25,"right":1.25},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Empty string prefix",
+          "input": {"left":"","right":"x"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Strings compare by digits",
+          "input": {"left":"2","right":"10"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Equal strings",
+          "input": {"left":"😀","right":"😀"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "BMP before supplementary",
+          "input": {"left":"","right":"😀"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Shared supplementary prefix",
+          "input": {"left":"😀z","right":"😀a"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Distinct normalization forms",
+          "input": {"left":"é","right":"é"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Equal empty arrays",
+          "input": {"left":[],"right":[]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Nonempty after empty",
+          "input": {"left":[1],"right":[]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Equal nested elements",
+          "input": {"left":[1,[false,"a"]],"right":[1,[false,"a"]]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Prefix ends before incomparable element",
+          "input": {"left":[1],"right":[1,{}]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Deciding nested difference skips incomparable tail",
+          "input": {"left":[[1,2],{}],"right":[[1,3],null]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Earlier greater element skips incomparable tail",
+          "input": {"left":[3,{}],"right":[2,null]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Nested proper prefix",
+          "input": {"left":[[1],[9]],"right":[[1,0],[0]]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Current node is the left operand",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",2],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Two literals override the current node",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",2,3],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Computed operands share a numeric type",
+          "input": {"a":[0,1,2],"n":"2"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["CASTNUM",["NODE","n"]],["LENGTH",["NODE","a"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Number and string",
+          "input": {"left":2,"right":"2"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Boolean and number",
+          "input": {"left":false,"right":0},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Two nulls",
+          "input": {"left":null,"right":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Two objects",
+          "input": {"left":{},"right":{}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Nested type mismatch",
+          "input": {"left":[1,[2]],"right":[1,["2"]]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Corresponding object elements",
+          "input": {"left":[0,{}],"right":[0,{}]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Corresponding null elements",
+          "input": {"left":[null],"right":[null]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Current node differs in type from right operand",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS","0"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal operands of disjoint types",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS","2",2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Unsupported literal type",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",{}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Expression return types are disjoint",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["CASTSTR"],["CASTNUM"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Right operand required",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Too many operands",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",1,2,3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing referenced operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",1,["NODE","absent"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Malformed call in skipped branch",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["LESS",1,2,3],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "LESSEQ",
+      "desc": "Compare the current node to a right operand, or evaluate two explicit operands. Arrays compare corresponding elements recursively until the order is determined.",
+      "tests": [
+        {
+          "name": "False precedes true",
+          "input": {"left":false,"right":true},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "True follows false",
+          "input": {"left":true,"right":false},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Equal booleans",
+          "input": {"left":false,"right":false},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Integers compare numerically",
+          "input": {"left":2,"right":10},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Negative fractions",
+          "input": {"left":-0.5,"right":-1.25},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Equal numbers",
+          "input": {"left":1.25,"right":1.25},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Empty string prefix",
+          "input": {"left":"","right":"x"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Strings compare by digits",
+          "input": {"left":"2","right":"10"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Equal strings",
+          "input": {"left":"😀","right":"😀"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "BMP before supplementary",
+          "input": {"left":"","right":"😀"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Shared supplementary prefix",
+          "input": {"left":"😀z","right":"😀a"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Distinct normalization forms",
+          "input": {"left":"é","right":"é"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Equal empty arrays",
+          "input": {"left":[],"right":[]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Nonempty after empty",
+          "input": {"left":[1],"right":[]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Equal nested elements",
+          "input": {"left":[1,[false,"a"]],"right":[1,[false,"a"]]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Prefix ends before incomparable element",
+          "input": {"left":[1],"right":[1,{}]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Deciding nested difference skips incomparable tail",
+          "input": {"left":[[1,2],{}],"right":[[1,3],null]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Earlier greater element skips incomparable tail",
+          "input": {"left":[3,{}],"right":[2,null]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Nested proper prefix",
+          "input": {"left":[[1],[9]],"right":[[1,0],[0]]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Current node is the left operand",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",2],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Two literals override the current node",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",2,3],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Computed operands share a numeric type",
+          "input": {"a":[0,1,2],"n":"2"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["CASTNUM",["NODE","n"]],["LENGTH",["NODE","a"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Number and string",
+          "input": {"left":2,"right":"2"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Boolean and number",
+          "input": {"left":false,"right":0},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Two nulls",
+          "input": {"left":null,"right":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Two objects",
+          "input": {"left":{},"right":{}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Nested type mismatch",
+          "input": {"left":[1,[2]],"right":[1,["2"]]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Corresponding object elements",
+          "input": {"left":[0,{}],"right":[0,{}]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Corresponding null elements",
+          "input": {"left":[null],"right":[null]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["NODE","left"],["NODE","right"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Current node differs in type from right operand",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ","0"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal operands of disjoint types",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ","2",2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Unsupported literal type",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",{}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Expression return types are disjoint",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["CASTSTR"],["CASTNUM"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Right operand required",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Too many operands",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",1,2,3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing referenced operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",1,["NODE","absent"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Malformed call in skipped branch",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["LESSEQ",1,2,3],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    }
+  ]
+}

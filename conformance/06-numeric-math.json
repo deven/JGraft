@@ -1,0 +1,1332 @@
+{
+  "version": 1,
+  "name": "Numeric math",
+  "desc": "Arithmetic and its domains, decimal rounding, significant digits, and the portable precision and exponent range.",
+  "tests": [
+    {
+      "name": "ADD",
+      "desc": "A single operand supplies an array. Separate operands supply numbers and nulls in argument order.",
+      "tests": [
+        {
+          "name": "Empty array identity",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "All-null array",
+          "input": [null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Null operands",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",null,null],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Singleton array preserves its only number",
+          "input": [-3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
+          "lazy": {"output":-3}
+        },
+        {
+          "name": "Ignore null entries between signed numbers",
+          "input": [-2,null,3,-0.5],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
+          "lazy": {"output":0.5}
+        },
+        {
+          "name": "Separate operands include a reference",
+          "input": {"x":-3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",2,null,["NODE","x"],4],["NODE"]]],
+          "lazy": {"output":3}
+        },
+        {
+          "name": "Constructed array evaluates its elements",
+          "input": 4,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",[[2,["NODE"],null]]],["NODE"]]],
+          "lazy": {"output":6}
+        },
+        {
+          "name": "Zero among the operands",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",2,0,3],["NODE"]]],
+          "lazy": {"output":5}
+        },
+        {
+          "name": "Fifteen-digit integer result",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",123456789012344,1],["NODE"]]],
+          "lazy": {"output":123456789012345}
+        },
+        {
+          "name": "Decimal fractions observed at twelve places",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":12},["ADD",0.1,0.2]],["NODE"]]],
+          "lazy": {"output":"0.300000000000"}
+        },
+        {
+          "name": "Single scalar literal",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Single computed scalar",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Single null is not an array",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Nested array is an invalid list element",
+          "input": [1,[2]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Numeric-looking string in array",
+          "input": [0,"2"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Boolean among separate operands",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",0,false],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Later computed operand must be numeric or null",
+          "input": {"x":"bad"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ADD",0,["NODE","x"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid call in a skipped action",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["ADD",2],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "MUL",
+      "desc": "A single operand supplies an array. Separate operands supply numbers and nulls in argument order.",
+      "tests": [
+        {
+          "name": "Empty array identity",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "All-null array",
+          "input": [null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "Null operands",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",null,null],["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "Singleton array preserves its only number",
+          "input": [-3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
+          "lazy": {"output":-3}
+        },
+        {
+          "name": "Ignore null entries between signed numbers",
+          "input": [-2,null,3,-0.5],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
+          "lazy": {"output":3}
+        },
+        {
+          "name": "Separate operands include a reference",
+          "input": {"x":-3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",2,null,["NODE","x"],4],["NODE"]]],
+          "lazy": {"output":-24}
+        },
+        {
+          "name": "Constructed array evaluates its elements",
+          "input": 4,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",[[2,["NODE"],null]]],["NODE"]]],
+          "lazy": {"output":8}
+        },
+        {
+          "name": "Zero among the operands",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",2,0,3],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Fifteen-digit integer result",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",123456789012345,3],["NODE"]]],
+          "lazy": {"output":370370367037035}
+        },
+        {
+          "name": "Decimal fractions observed at twelve places",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":12},["MUL",0.1,0.2]],["NODE"]]],
+          "lazy": {"output":"0.020000000000"}
+        },
+        {
+          "name": "Single scalar literal",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Single computed scalar",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Single null is not an array",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Nested array is an invalid list element",
+          "input": [1,[2]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Numeric-looking string in array",
+          "input": [0,"2"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Boolean among separate operands",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",0,false],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Later computed operand must be numeric or null",
+          "input": {"x":"bad"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MUL",0,["NODE","x"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid call in a skipped action",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["MUL",2],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "SUB",
+      "desc": "Subtract the second operand from the first.",
+      "tests": [
+        {
+          "name": "Positive difference",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SUB",8,3],["NODE"]]],
+          "lazy": {"output":5}
+        },
+        {
+          "name": "Reversing operands changes the sign",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SUB",["NODE"],8],["NODE"]]],
+          "lazy": {"output":-5}
+        },
+        {
+          "name": "Subtract a negative fraction",
+          "input": {"a":-1.25,"b":-2.5},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SUB",["NODE","a"],["NODE","b"]],["NODE"]]],
+          "lazy": {"output":1.25}
+        },
+        {
+          "name": "Cancellation gives zero",
+          "input": 6,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SUB",["NODE"],["NODE"]],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Subtract near the portable integer limit",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SUB",999999999999999,999999999999998],["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "Decimal difference at twelve places",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":12},["SUB",0.3,0.2]],["NODE"]]],
+          "lazy": {"output":"0.100000000000"}
+        },
+        {
+          "name": "Missing both operands",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SUB"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing second operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SUB",1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Extra operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SUB",1,2,3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Null literal in first position",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SUB",null,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "String returned for second operand",
+          "input": {"v":"2"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SUB",1,["NODE","v"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid call in a skipped action",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["SUB",1],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "DIV",
+      "desc": "Division preserves fractional results. A zero divisor fails for every numerator.",
+      "tests": [
+        {
+          "name": "Integer operands produce a fraction",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DIV",3,8],["NODE"]]],
+          "lazy": {"output":0.375}
+        },
+        {
+          "name": "Negative divisor",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DIV",["NODE"],-2],["NODE"]]],
+          "lazy": {"output":-3.5}
+        },
+        {
+          "name": "Two negative operands",
+          "input": {"a":-7,"b":-2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DIV",["NODE","a"],["NODE","b"]],["NODE"]]],
+          "lazy": {"output":3.5}
+        },
+        {
+          "name": "Zero numerator",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DIV",0,4],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Recurring decimal at twelve places",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":12},["DIV",2,3]],["NODE"]]],
+          "lazy": {"output":"0.666666666667"}
+        },
+        {
+          "name": "Zero divisor from input",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DIV",1,["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Zero divided by zero",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DIV",["NODE"],["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Missing both operands",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DIV"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing second operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DIV",1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Extra operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DIV",1,2,3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Null literal in first position",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DIV",null,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "String returned for second operand",
+          "input": {"v":"2"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DIV",1,["NODE","v"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid call in a skipped action",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["DIV",1],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "MOD",
+      "desc": "The nonzero modulus has the sign of the divisor, including for fractional operands.",
+      "tests": [
+        {
+          "name": "Two positives",
+          "input": {"a":7,"b":3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",["NODE","a"],["NODE","b"]],["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "Negative dividend",
+          "input": {"a":-7,"b":3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",["NODE","a"],["NODE","b"]],["NODE"]]],
+          "lazy": {"output":2}
+        },
+        {
+          "name": "Negative divisor",
+          "input": {"a":7,"b":-3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",["NODE","a"],["NODE","b"]],["NODE"]]],
+          "lazy": {"output":-2}
+        },
+        {
+          "name": "Both negative",
+          "input": {"a":-7,"b":-3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",["NODE","a"],["NODE","b"]],["NODE"]]],
+          "lazy": {"output":-1}
+        },
+        {
+          "name": "Multiple of divisor",
+          "input": {"a":-6,"b":3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",["NODE","a"],["NODE","b"]],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Zero dividend",
+          "input": {"a":0,"b":-3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",["NODE","a"],["NODE","b"]],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Fractional divisor",
+          "input": {"a":-5.5,"b":2.25},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",["NODE","a"],["NODE","b"]],["NODE"]]],
+          "lazy": {"output":1.25}
+        },
+        {
+          "name": "Negative fractional divisor",
+          "input": {"a":5.5,"b":-2.25},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",["NODE","a"],["NODE","b"]],["NODE"]]],
+          "lazy": {"output":-1.25}
+        },
+        {
+          "name": "Zero divisor from input",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",3,["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Missing both operands",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing second operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Extra operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",1,2,3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Null literal in first position",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",null,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "String returned for second operand",
+          "input": {"v":"2"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MOD",1,["NODE","v"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid call in a skipped action",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["MOD",1],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "POW",
+      "desc": "The unary form reads the exponent from the current node. A nonnegative base and the exponent determine the domain.",
+      "tests": [
+        {
+          "name": "Implicit exponent",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2],["NODE"]]],
+          "lazy": {"output":8}
+        },
+        {
+          "name": "Both operands from the input",
+          "input": {"b":5,"e":3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",["NODE","b"],["NODE","e"]],["NODE"]]],
+          "lazy": {"output":125}
+        },
+        {
+          "name": "Zero to zero",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",0,0],["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "Zero to a positive fraction",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",0,0.5],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Nonzero base to zero",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",4.5,0],["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "Negative integer exponent",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,-3],["NODE"]]],
+          "lazy": {"output":0.125}
+        },
+        {
+          "name": "Exact integer power within fifteen digits",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",3,30],["NODE"]]],
+          "lazy": {"output":205891132094649}
+        },
+        {
+          "name": "Irrational root at twelve places",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":12},["POW",2,0.5]],["NODE"]]],
+          "lazy": {"output":"1.414213562373"}
+        },
+        {
+          "name": "Fractional base and negative fractional exponent",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":10},["POW",0.25,-0.5]],["NODE"]]],
+          "lazy": {"output":"2.0000000000"}
+        },
+        {
+          "name": "Negative literal base even with an integer exponent",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",-2,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Negative computed base",
+          "input": -2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",["NODE"],2],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal zero with negative literal exponent",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",0,-1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Negative current exponent with zero base",
+          "input": -1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",0],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid current exponent",
+          "input": "3",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Base required",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Extra operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,2,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Numeric string used as literal base",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW","2",3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Boolean used as computed second operand",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["POW",2,["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid call in a skipped action",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["POW"],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "LOG",
+      "desc": "The unary form reads the logarithm argument from the current node. Positive bases on either side of one are valid.",
+      "tests": [
+        {
+          "name": "Implicit value",
+          "input": 8,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":8},["LOG",2]],["NODE"]]],
+          "lazy": {"output":"3.00000000"}
+        },
+        {
+          "name": "One has logarithm zero",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",0.25,1],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Equal positive operands have logarithm one",
+          "input": 0.25,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",["NODE"],["NODE"]],["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "Base below one gives a negative logarithm",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":8},["LOG",0.5,8]],["NODE"]]],
+          "lazy": {"output":"-3.00000000"}
+        },
+        {
+          "name": "Value below one gives a negative logarithm",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":8},["LOG",2,0.125]],["NODE"]]],
+          "lazy": {"output":"-3.00000000"}
+        },
+        {
+          "name": "Logarithm with fractional result",
+          "input": {"b":10,"x":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":12},["LOG",["NODE","b"],["NODE","x"]]],["NODE"]]],
+          "lazy": {"output":"0.301029995664"}
+        },
+        {
+          "name": "Base of one is invalid even when value is one",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",1,1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal zero base",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",0,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal negative value",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2,-3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Computed negative base",
+          "input": -3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",["NODE"],1],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed base of one",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",["NODE"],4],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Implicit zero value",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Implicit negative value",
+          "input": -1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Base required",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Extra operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2,2,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Numeric string used as literal base",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG","2",3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Boolean used as computed second operand",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOG",2,["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Invalid call in a skipped action",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["LOG"],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "ROUND operands and formats",
+      "desc": "The current node supplies the default value. An integer options operand gives the decimal shift.",
+      "tests": [
+        {
+          "name": "Default numeric result",
+          "input": 7.25,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "lazy": {"output":7}
+        },
+        {
+          "name": "Default string result at a half",
+          "input": "-2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "lazy": {"output":"-3"}
+        },
+        {
+          "name": "Integer option shifts the current value",
+          "input": "1.23",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",2],["NODE"]]],
+          "lazy": {"output":"123"}
+        },
+        {
+          "name": "Computed shift and explicit value",
+          "input": {"s":-1,"v":"125"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","s"],["NODE","v"]],["NODE"]]],
+          "lazy": {"output":"13"}
+        },
+        {
+          "name": "Options object from input",
+          "input": {"opts":{"at":2,"mode":"DOWN"},"v":"1.239"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","opts"],["NODE","v"]],["NODE"]]],
+          "lazy": {"output":"1.23"}
+        },
+        {
+          "name": "Computed fields in options object",
+          "input": {"p":-1,"s":2,"v":"1.23"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","at":["NODE","p"],"shift":["NODE","s"]},["NODE","v"]],["NODE"]]],
+          "lazy": {"output":120}
+        },
+        {
+          "name": "NUM returns a fractional number",
+          "input": "-1.249",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"NUM","at":2}],["NODE"]]],
+          "lazy": {"output":-1.25}
+        },
+        {
+          "name": "INT accepts a final integral value after shifting",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","at":2,"shift":2}],["NODE"]]],
+          "lazy": {"output":125}
+        },
+        {
+          "name": "INT rejects a final fraction",
+          "input": "1.25",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"INT","at":2}],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "STR pads to the requested decimal position",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":3}],["NODE"]]],
+          "lazy": {"output":"3.000"}
+        },
+        {
+          "name": "STR writes full decimal digits",
+          "input": "1.25e6",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR"}],["NODE"]]],
+          "lazy": {"output":"1250000"}
+        },
+        {
+          "name": "Carry across the decimal point",
+          "input": "99.995",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "lazy": {"output":"100.00"}
+        },
+        {
+          "name": "Negative at rounds within the integer part",
+          "input": "-1250",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":-2}],["NODE"]]],
+          "lazy": {"output":"-1300"}
+        },
+        {
+          "name": "Leading plus and trailing decimal point",
+          "input": "+45.",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":1}],["NODE"]]],
+          "lazy": {"output":"45.0"}
+        },
+        {
+          "name": "String-supplied negative zero retains sign and scale",
+          "input": "-0.000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":2}],["NODE"]]],
+          "lazy": {"output":"-0.00"}
+        },
+        {
+          "name": "Round negative input to signed zero",
+          "input": "-0.125",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":0,"mode":"DOWN"}],["NODE"]]],
+          "lazy": {"output":"-0"}
+        }
+      ]
+    },
+    {
+      "name": "ROUND modes",
+      "desc": "String inputs place each tie exactly. Results expose direction and parity for both signs.",
+      "tests": [
+        {
+          "name": "DOWN on 2.5",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+          "lazy": {"output":"2"}
+        },
+        {
+          "name": "DOWN on 3.5",
+          "input": "3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+          "lazy": {"output":"3"}
+        },
+        {
+          "name": "DOWN on -2.5",
+          "input": "-2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+          "lazy": {"output":"-2"}
+        },
+        {
+          "name": "DOWN on -3.5",
+          "input": "-3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+          "lazy": {"output":"-3"}
+        },
+        {
+          "name": "DOWN on 2.49",
+          "input": "2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+          "lazy": {"output":"2"}
+        },
+        {
+          "name": "DOWN on -2.49",
+          "input": "-2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"DOWN"}],["NODE"]]],
+          "lazy": {"output":"-2"}
+        },
+        {
+          "name": "UP on 2.5",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+          "lazy": {"output":"3"}
+        },
+        {
+          "name": "UP on 3.5",
+          "input": "3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+          "lazy": {"output":"4"}
+        },
+        {
+          "name": "UP on -2.5",
+          "input": "-2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+          "lazy": {"output":"-3"}
+        },
+        {
+          "name": "UP on -3.5",
+          "input": "-3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+          "lazy": {"output":"-4"}
+        },
+        {
+          "name": "UP on 2.49",
+          "input": "2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+          "lazy": {"output":"3"}
+        },
+        {
+          "name": "UP on -2.49",
+          "input": "-2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+          "lazy": {"output":"-3"}
+        },
+        {
+          "name": "CEILING on 2.5",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+          "lazy": {"output":"3"}
+        },
+        {
+          "name": "CEILING on 3.5",
+          "input": "3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+          "lazy": {"output":"4"}
+        },
+        {
+          "name": "CEILING on -2.5",
+          "input": "-2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+          "lazy": {"output":"-2"}
+        },
+        {
+          "name": "CEILING on -3.5",
+          "input": "-3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+          "lazy": {"output":"-3"}
+        },
+        {
+          "name": "CEILING on 2.49",
+          "input": "2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+          "lazy": {"output":"3"}
+        },
+        {
+          "name": "CEILING on -2.49",
+          "input": "-2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+          "lazy": {"output":"-2"}
+        },
+        {
+          "name": "FLOOR on 2.5",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+          "lazy": {"output":"2"}
+        },
+        {
+          "name": "FLOOR on 3.5",
+          "input": "3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+          "lazy": {"output":"3"}
+        },
+        {
+          "name": "FLOOR on -2.5",
+          "input": "-2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+          "lazy": {"output":"-3"}
+        },
+        {
+          "name": "FLOOR on -3.5",
+          "input": "-3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+          "lazy": {"output":"-4"}
+        },
+        {
+          "name": "FLOOR on 2.49",
+          "input": "2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+          "lazy": {"output":"2"}
+        },
+        {
+          "name": "FLOOR on -2.49",
+          "input": "-2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+          "lazy": {"output":"-3"}
+        },
+        {
+          "name": "HALF_UP on 2.5",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+          "lazy": {"output":"3"}
+        },
+        {
+          "name": "HALF_UP on 3.5",
+          "input": "3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+          "lazy": {"output":"4"}
+        },
+        {
+          "name": "HALF_UP on -2.5",
+          "input": "-2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+          "lazy": {"output":"-3"}
+        },
+        {
+          "name": "HALF_UP on -3.5",
+          "input": "-3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+          "lazy": {"output":"-4"}
+        },
+        {
+          "name": "HALF_UP on 2.49",
+          "input": "2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+          "lazy": {"output":"2"}
+        },
+        {
+          "name": "HALF_UP on -2.49",
+          "input": "-2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_UP"}],["NODE"]]],
+          "lazy": {"output":"-2"}
+        },
+        {
+          "name": "HALF_EVEN on 2.5",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+          "lazy": {"output":"2"}
+        },
+        {
+          "name": "HALF_EVEN on 3.5",
+          "input": "3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+          "lazy": {"output":"4"}
+        },
+        {
+          "name": "HALF_EVEN on -2.5",
+          "input": "-2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+          "lazy": {"output":"-2"}
+        },
+        {
+          "name": "HALF_EVEN on -3.5",
+          "input": "-3.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+          "lazy": {"output":"-4"}
+        },
+        {
+          "name": "HALF_EVEN on 2.49",
+          "input": "2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+          "lazy": {"output":"2"}
+        },
+        {
+          "name": "HALF_EVEN on -2.49",
+          "input": "-2.49",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+          "lazy": {"output":"-2"}
+        },
+        {
+          "name": "Above a half rounds up in nearest-even mode",
+          "input": "2.50001",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"HALF_EVEN"}],["NODE"]]],
+          "lazy": {"output":"3"}
+        },
+        {
+          "name": "An exact integer remains fixed in away-from-zero mode",
+          "input": "-3.000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"UP"}],["NODE"]]],
+          "lazy": {"output":"-3"}
+        }
+      ]
+    },
+    {
+      "name": "ROUND significant digits and symbolic exponents",
+      "desc": "SIG preserves the coarser of input precision after shifting and the rounding position. STR can produce short results even for scientific-notation input.",
+      "tests": [
+        {
+          "name": "Carry preserves units precision",
+          "input": "9.9",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG"}],["NODE"]]],
+          "lazy": {"output":"1.0e1"}
+        },
+        {
+          "name": "Keep hundredths",
+          "input": "9.500",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2}],["NODE"]]],
+          "lazy": {"output":"9.50"}
+        },
+        {
+          "name": "Keep coarse precision",
+          "input": "1.25e20",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":-10}],["NODE"]]],
+          "lazy": {"output":"1.25e20"}
+        },
+        {
+          "name": "Round at exponent scale",
+          "input": "1.25e10",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":-9}],["NODE"]]],
+          "lazy": {"output":"1.3e10"}
+        },
+        {
+          "name": "Carry at exponent scale",
+          "input": "9.95e6",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":-5}],["NODE"]]],
+          "lazy": {"output":"1.00e7"}
+        },
+        {
+          "name": "Round to hundreds",
+          "input": "1234",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":-2}],["NODE"]]],
+          "lazy": {"output":"1.2e3"}
+        },
+        {
+          "name": "No padding beyond input precision",
+          "input": "1.2",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":4}],["NODE"]]],
+          "lazy": {"output":"1.2"}
+        },
+        {
+          "name": "Fractional zero scale",
+          "input": "0.0000",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":2}],["NODE"]]],
+          "lazy": {"output":"0.00"}
+        },
+        {
+          "name": "Coarse zero scale",
+          "input": "0",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":-1}],["NODE"]]],
+          "lazy": {"output":"0e1"}
+        },
+        {
+          "name": "Shift moves the last significant digit",
+          "input": "1.200",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"SIG","at":4,"shift":1}],["NODE"]]],
+          "lazy": {"output":"12.00"}
+        },
+        {
+          "name": "Cancel a positive exponent",
+          "input": "1e6",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":-6}],["NODE"]]],
+          "lazy": {"output":"1"}
+        },
+        {
+          "name": "Cancel a negative exponent",
+          "input": "1e-6",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":6}],["NODE"]]],
+          "lazy": {"output":"1"}
+        },
+        {
+          "name": "Tiny positive rounds to zero",
+          "input": "1e-6",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{}],["NODE"]]],
+          "lazy": {"output":"0"}
+        },
+        {
+          "name": "Ceiling of tiny positive",
+          "input": "1e-6",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"CEILING"}],["NODE"]]],
+          "lazy": {"output":"1"}
+        },
+        {
+          "name": "Floor of tiny negative",
+          "input": "-1e-6",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"FLOOR"}],["NODE"]]],
+          "lazy": {"output":"-1"}
+        }
+      ]
+    },
+    {
+      "name": "ROUND validation",
+      "desc": "Literal options are checked locally. References can supply option values and decimal text at execution time.",
+      "tests": [
+        {
+          "name": "Unknown option",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"digits":2}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Unknown rounding mode",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"mode":"NEAREST"}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Unknown output format",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"FLOAT"}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Fractional at",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"at":1.5}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "String shift",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"shift":"1"}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Fractional shorthand",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",0.5],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Null options",
+          "input": "2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",null],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Computed unknown option",
+          "input": {"opts":{"digits":2},"v":"2.5"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","opts"],["NODE","v"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed invalid mode",
+          "input": {"opts":{"mode":"NEAREST"},"v":"2.5"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","opts"],["NODE","v"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed invalid format",
+          "input": {"opts":{"as":"FLOAT"},"v":"2.5"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","opts"],["NODE","v"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed fractional at",
+          "input": {"opts":{"at":1.5},"v":"2.5"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","opts"],["NODE","v"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed boolean shift",
+          "input": {"opts":{"shift":false},"v":"2.5"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","opts"],["NODE","v"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed invalid shorthand",
+          "input": {"opts":"2","v":"2.5"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",["NODE","opts"],["NODE","v"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Null literal value",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},null],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed literal decimal",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},"2e+"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed decimal in current node",
+          "input": "1.2.3",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Whitespace in current decimal",
+          "input": " 2.5",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Array as current value",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Extra operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{},1,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid call in a skipped action",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["ROUND",{"mode":"NEAREST"},0],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "Numeric range and precision",
+      "desc": "Portable-range cases rescale the result before observing decimal digits. Wider ranges and lossless integer storage depend on implementation capacity.",
+      "tests": [
+        {
+          "name": "Positive exponent at the portable boundary",
+          "input": {"scale":"1e7","x":"1e300"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":10},["DIV",["MUL",["CASTNUM",["NODE","x"]],["CASTNUM",["NODE","scale"]]],["CASTNUM","1e307"]]],["NODE"]]],
+          "lazy": {"output":"1.0000000000"}
+        },
+        {
+          "name": "Negative exponent at the portable boundary",
+          "input": {"scale":"1e-7","x":"1e-300"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":10},["DIV",["MUL",["CASTNUM",["NODE","x"]],["CASTNUM",["NODE","scale"]]],["CASTNUM","1e-307"]]],["NODE"]]],
+          "lazy": {"output":"1.0000000000"}
+        },
+        {
+          "name": "Nonzero product below the portable exponent range",
+          "desc": "A wider range can retain the positive product. An implementation that underflows to zero must report a runtime error.",
+          "input": "1e-300",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",0,["MUL",["CASTNUM"],["CASTNUM"]]],["NODE"]]],
+          "lazy": {"output":true,"runtime_error":true}
+        },
+        {
+          "name": "Product above the portable exponent range",
+          "desc": "A wider range can represent the product before division restores the original scale.",
+          "input": "1e300",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ROUND",{"as":"STR","at":8},["DIV",["DIV",["MUL",["CASTNUM"],["CASTNUM"]],["CASTNUM"]],["CASTNUM"]]],["NODE"]]],
+          "lazy": {"output":"1.00000000","runtime_error":true}
+        },
+        {
+          "name": "Lossless integer beyond portable precision",
+          "desc": "INT may fail if no integer storage is exact. CASTSTR exposes every digit on success.",
+          "input": "123456789012345678901",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["ROUND",{"as":"INT"}]],["NODE"]]],
+          "lazy": {"output":"123456789012345678901","runtime_error":true}
+        }
+      ]
+    }
+  ]
+}

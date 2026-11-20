@@ -1,0 +1,699 @@
+{
+  "version": 1,
+  "name": "Values and collections",
+  "desc": "Literal data, array and string lengths and concatenation, sorted object names and pairs, and construction from pairs and overrides.",
+  "tests": [
+    {
+      "name": "DATA",
+      "tests": [
+        {
+          "name": "Null literal",
+          "input": 42,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATA",null],["NODE"]]],
+          "lazy": {"output":null}
+        },
+        {
+          "name": "Quote the empty array",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATA",[]],["NODE"]]],
+          "lazy": {"output":[]}
+        },
+        {
+          "name": "Escape wrapper is literal",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATA",[[1,2]]],["NODE"]]],
+          "lazy": {"output":[[1,2]]}
+        },
+        {
+          "name": "Nested directive arrays are opaque",
+          "input": {"x":7},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATA",{"empty":{},"list":[[["UNKNOWN"],[],["COPY"]]],"ref":["NODE","x"]}],["NODE"]]],
+          "lazy": {"output":{"empty":{},"list":[[["UNKNOWN"],[],["COPY"]]],"ref":["NODE","x"]}}
+        },
+        {
+          "name": "Unquoted object and escaped array evaluate their children",
+          "input": {"x":7},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"list":[[["NODE","x"]]],"ref":["NODE","x"]},["NODE"]]],
+          "lazy": {"output":{"list":[7],"ref":7}}
+        },
+        {
+          "name": "Quoted object preserves the same reference expressions",
+          "input": {"x":7},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATA",{"list":[[["NODE","x"]]],"ref":["NODE","x"]}],["NODE"]]],
+          "lazy": {"output":{"list":[[["NODE","x"]]],"ref":["NODE","x"]}}
+        },
+        {
+          "name": "Missing literal",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATA"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Extra literal",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATA",1,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed call in skipped branch",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["DATA"],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "LENGTH",
+      "tests": [
+        {
+          "name": "Empty array",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH"],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Empty string",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH",""],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Count top-level elements",
+          "input": [[],null,[1,2]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH"],["NODE"]]],
+          "lazy": {"output":3}
+        },
+        {
+          "name": "Count codepoints including a combining mark and NUL",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH","A😀é\u0000"],["NODE"]]],
+          "lazy": {"output":5}
+        },
+        {
+          "name": "Count codepoints in a referenced string",
+          "input": {"text":"😀"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH",["NODE","text"]],["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "Literal object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH",{"length":2}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type object",
+          "input": {"length":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal null",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH",null],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type null",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal number",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH",1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type number",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal boolean",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH",false],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type boolean",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Extra operand",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LENGTH","",""],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed call in skipped branch",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["LENGTH","",""],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "CONCAT",
+      "tests": [
+        {
+          "name": "Repeated string operands",
+          "input": "ab",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["NODE"],["NODE"],["NODE"]],["NODE"]]],
+          "lazy": {"output":"ababab"}
+        },
+        {
+          "name": "Single empty array",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["NODE"]],["NODE"]]],
+          "lazy": {"output":[]}
+        },
+        {
+          "name": "Single string",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT","one"],["NODE"]]],
+          "lazy": {"output":"one"}
+        },
+        {
+          "name": "Empty strings",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT","",""],["NODE"]]],
+          "lazy": {"output":""}
+        },
+        {
+          "name": "Preserve codepoints across operand boundaries",
+          "input": {"tail":"́"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT","","😀","e",["NODE","tail"],""],["NODE"]]],
+          "lazy": {"output":"😀é"}
+        },
+        {
+          "name": "An empty span contributes no elements",
+          "input": {"left":[0,null],"right":[[],["NODE"],{"a":1}]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["NODE","left"],[[]],["NODE","right"]],["NODE"]]],
+          "lazy": {"output":[0,null,[],["NODE"],{"a":1}]}
+        },
+        {
+          "name": "Evaluate array elements before concatenating spans",
+          "input": {"item":7,"tail":[[2,3]]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",[[["NODE","item"]]],["NODE","tail"]],["NODE"]]],
+          "lazy": {"output":[7,[2,3]]}
+        },
+        {
+          "name": "Repeated operands contribute repeated elements",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["NODE"],["NODE"],["NODE"]],["NODE"]]],
+          "lazy": {"output":[1,2,1,2,1,2]}
+        },
+        {
+          "name": "At least one operand",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal string and array",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT","",[[]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "String and known array result separated by a reference",
+          "input": "x",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT","",["NODE"],["PROPS",{}]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Computed operands of different types",
+          "input": {"a":[],"b":""},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["NODE","a"],["NODE","b"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Malformed call in skipped branch",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["CONCAT","",[[]]],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",{"length":2}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type object",
+          "input": {"length":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal null",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",null],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type null",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal number",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type number",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal boolean",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",false],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type boolean",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        }
+      ]
+    },
+    {
+      "name": "PROPS",
+      "tests": [
+        {
+          "name": "Empty object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS"],["NODE"]]],
+          "lazy": {"output":[]}
+        },
+        {
+          "name": "Codepoint order with prefixes, numeric names and supplementary characters",
+          "input": {"😀":"astral","":"BMP","é":{"n":[1,2]},"toString":2,"é":["FAIL"],"constructor":1,"aa":{},"a.b":[],"a":false,"2":2,"10":10,"\u0000":"control","":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS"],["NODE"]]],
+          "lazy": {"output":["","\u0000","10","2","a","a.b","aa","constructor","é","toString","é","","😀"]}
+        },
+        {
+          "name": "Enumerate an explicit nested object",
+          "input": {"source":{"a":null,"z":["NODE"]}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",["NODE","source"]],["NODE"]]],
+          "lazy": {"output":["a","z"]}
+        },
+        {
+          "name": "Constructed object evaluates property values",
+          "input": {"value":7},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",{"k":["NODE","value"]}],["NODE"]]],
+          "lazy": {"output":["k"]}
+        },
+        {
+          "name": "Missing reference inside constructed object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",{"k":["NODE","missing"]}],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Extra operand after object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",{},1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed call in skipped branch",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["PROPS",{},1],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal array",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",[[]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type array",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal string",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS","x"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type string",
+          "input": "x",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal null",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",null],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type null",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal number",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type number",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal boolean",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS",false],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type boolean",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPS"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        }
+      ]
+    },
+    {
+      "name": "PROPV",
+      "tests": [
+        {
+          "name": "Empty object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV"],["NODE"]]],
+          "lazy": {"output":[]}
+        },
+        {
+          "name": "Codepoint order with prefixes, numeric names and supplementary characters",
+          "input": {"😀":"astral","":"BMP","é":{"n":[1,2]},"toString":2,"é":["FAIL"],"constructor":1,"aa":{},"a.b":[],"a":false,"2":2,"10":10,"\u0000":"control","":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV"],["NODE"]]],
+          "lazy": {"output":[["",null],["\u0000","control"],["10",10],["2",2],["a",false],["a.b",[]],["aa",{}],["constructor",1],["é",["FAIL"]],["toString",2],["é",{"n":[1,2]}],["","BMP"],["😀","astral"]]}
+        },
+        {
+          "name": "Enumerate an explicit nested object",
+          "input": {"source":{"a":null,"z":["NODE"]}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV",["NODE","source"]],["NODE"]]],
+          "lazy": {"output":[["a",null],["z",["NODE"]]]}
+        },
+        {
+          "name": "Constructed object evaluates property values",
+          "input": {"value":7},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV",{"k":["NODE","value"]}],["NODE"]]],
+          "lazy": {"output":[["k",7]]}
+        },
+        {
+          "name": "Missing reference inside constructed object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV",{"k":["NODE","missing"]}],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Extra operand after object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV",{},1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed call in skipped branch",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["PROPV",{},1],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal array",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV",[[]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type array",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal string",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV","x"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type string",
+          "input": "x",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal null",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV",null],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type null",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal number",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV",1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type number",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal boolean",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV",false],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type boolean",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["PROPV"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        }
+      ]
+    },
+    {
+      "name": "MKOBJ",
+      "tests": [
+        {
+          "name": "Null list",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",null],["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "Empty list",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "All null entries",
+          "input": [null,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "Null entries and duplicate names",
+          "input": [null,["x",0],["y",null],["x",["FAIL"]],null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"output":{"x":["FAIL"],"y":null}}
+        },
+        {
+          "name": "Evaluate override names and values",
+          "input": {"key":"constructor","v":[1]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",null,["NODE","key"],["NODE","v"],"",null],["NODE"]]],
+          "lazy": {"output":{"":null,"constructor":[1]}}
+        },
+        {
+          "name": "Overrides follow list entries in argument order",
+          "input": [["x",1],["x",2],["0",3]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"],"x",4,"y",5,"x",null],["NODE"]]],
+          "lazy": {"output":{"0":3,"x":null,"y":5}}
+        },
+        {
+          "name": "Reconstruct enumerated pairs",
+          "input": {"😀":"astral","":"BMP","é":{"n":[1,2]},"toString":2,"é":["FAIL"],"constructor":1,"aa":{},"a.b":[],"a":false,"2":2,"10":10,"\u0000":"control","":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["PROPV"]],["NODE"]]],
+          "lazy": {"output":{"":null,"\u0000":"control","10":10,"2":2,"a":false,"a.b":[],"aa":{},"constructor":1,"é":["FAIL"],"toString":2,"é":{"n":[1,2]},"":"BMP","😀":"astral"}}
+        },
+        {
+          "name": "Evaluate both fields inside an escaped pair",
+          "input": {"key":"label","value":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",[[[[["NODE","key"],["NODE","value"]]]]]],["NODE"]]],
+          "lazy": {"output":{"label":2}}
+        },
+        {
+          "name": "Short pair read from CONST",
+          "desc": "A strict validator may follow the reference and detect the malformed pair before execution.",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1,"const":["pairs",[[[["key"]]]]]},["COPY",["MKOBJ",["CONST","pairs"]],["NODE"]]],
+          "lazy": {"runtime_error":true},
+          "strict": {"runtime_error":true,"invalid_graft":true}
+        },
+        {
+          "name": "Missing initial list",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Override missing a value",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"],"key"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing value in overwritten expression",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",null,"k",["NODE","missing"],"k",2],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Null name",
+          "input": [[null,1]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Numeric name",
+          "input": [[3,1]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Scalar entry",
+          "input": [3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Object entry",
+          "input": [{}],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Empty pair",
+          "input": [[]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Short pair",
+          "input": [["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Long pair",
+          "input": [["x",1,2]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal numeric override name",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",null,1,"v"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Computed null override name",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",null,["NODE"],"v"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Malformed call in skipped branch",
+          "input": "skip",
+          "jgraft": ["JGRAFT",{"v":1},["IF","take",["COPY",["MKOBJ",null,"key"],["NODE"]]]],
+          "lazy": {"output":"skip"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",{}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal string",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ","x"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type string",
+          "input": "x",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal number",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type number",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal boolean",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",true],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Input of type boolean",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MKOBJ",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        }
+      ]
+    }
+  ]
+}

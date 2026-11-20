@@ -1,0 +1,1143 @@
+{
+  "version": 1,
+  "name": "Conditionals and errors",
+  "desc": "Conditional actions and values, boolean short-circuiting, failure in value and match contexts, and ordered diagnostic records.",
+  "tests": [
+    {
+      "name": "IF",
+      "desc": "Each condition is a pattern. Only the first matching action runs.",
+      "tests": [
+        {
+          "name": "First of two overlapping patterns wins",
+          "input": {"active":true,"id":7},
+          "jgraft": ["JGRAFT",{"v":1},["IF",{"id":7},["COPY","first",["NODE"]],{"active":true},["COPY","second",["NODE"]],["COPY","fallback",["NODE"]]]],
+          "lazy": {"output":"first"}
+        },
+        {
+          "name": "Only the second condition matches",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY","first",["NODE"]],"b",["COPY","second",["NODE"]],["COPY","fallback",["NODE"]]]],
+          "lazy": {"output":"second"}
+        },
+        {
+          "name": "Final fallback after two misses",
+          "input": "c",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY","first",["NODE"]],"b",["COPY","second",["NODE"]],["COPY","fallback",["NODE"]]]],
+          "lazy": {"output":"fallback"}
+        },
+        {
+          "name": "Single matching pair without fallback",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY","selected",["NODE"]]]],
+          "lazy": {"output":"selected"}
+        },
+        {
+          "name": "Unmatched pair without fallback",
+          "input": "other",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY","selected",["NODE"]]]],
+          "lazy": {"output":"other"}
+        },
+        {
+          "name": "False is a literal pattern",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["IF",false,["COPY","matched",["NODE"]],["COPY","missed",["NODE"]]]],
+          "lazy": {"output":"matched"}
+        },
+        {
+          "name": "True pattern differs from numeric one",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["IF",true,["COPY","matched",["NODE"]],["COPY","missed",["NODE"]]]],
+          "lazy": {"output":"missed"}
+        },
+        {
+          "name": "Function condition compares its boolean result with the node",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["IF",["LESS",["NODE"],3],["COPY","matched",["NODE"]],["COPY","missed",["NODE"]]]],
+          "lazy": {"output":"missed"}
+        },
+        {
+          "name": "Explicit predicate uses the boolean result to choose a branch",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["IF",["IS",true,["LESS",["NODE"],3]],["COPY","matched",["NODE"]],["COPY","missed",["NODE"]]]],
+          "lazy": {"output":"matched"}
+        },
+        {
+          "name": "A condition probe can fail and a later condition still match",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["IF",["NODE","absent"],["COPY","first",["NODE"]],{},["COPY","second",["NODE"]],["COPY","fallback",["NODE"]]]],
+          "lazy": {"output":"second"}
+        },
+        {
+          "name": "Explicit FAIL in a condition is a miss",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["IF",["FAIL"],["COPY","first",["NODE"]],["COPY","fallback",["NODE"]]]],
+          "lazy": {"output":"fallback"}
+        },
+        {
+          "name": "Selected branch reads the enclosing node",
+          "input": {"target":2,"v":"caller"},
+          "jgraft": ["JGRAFT",{"v":1},["IF",["IS",2,["NODE","target"]],["COPY",["NODE","v"],["NODE"]],["COPY","fallback",["NODE"]]]],
+          "lazy": {"output":"caller"}
+        },
+        {
+          "name": "Selected failure stops evaluation",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY",["FAIL"],["NODE"]],"a",["COPY","second",["NODE"]],["COPY","fallback",["NODE"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Failing fallback is reached",
+          "input": "other",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY","first",["NODE"]],["COPY",["FAIL"],["NODE"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Skipped result can fail at runtime",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY",["FAIL"],["NODE"]],"b",["COPY","selected",["NODE"]],["COPY",["FAIL"],["NODE"]]]],
+          "lazy": {"output":"selected"}
+        },
+        {
+          "name": "Selected outer branch evaluates a nested choice",
+          "input": {"a":1,"b":2},
+          "jgraft": ["JGRAFT",{"v":1},["IF",{"a":1},["COPY",["CASE",{"b":2},"both","only a"],["NODE"]],["COPY","neither",["NODE"]]]],
+          "lazy": {"output":"both"}
+        },
+        {
+          "name": "Malformed first condition propagates",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["IF",["BOOL",1],["COPY","first",["NODE"]],["COPY","fallback",["NODE"]]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed later condition follows a match",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY","first",["NODE"]],["BOOL",1],["COPY","second",["NODE"]]]],
+          "lazy": {"output":"first"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed branch expression is skipped",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY",["FAIL",0],["NODE"]],["COPY","fallback",["NODE"]]]],
+          "lazy": {"output":"fallback"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "A selected action's NO_MATCH bypasses the else action",
+          "input": {"ready":true},
+          "jgraft": ["JGRAFT",{"v":1},["IF",{"ready":true},["MATCH",{"ok":true}],["COPY","fallback",["NODE"]]]],
+          "lazy": {"no_match":true}
+        },
+        {
+          "name": "No branches",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1},["IF"]],
+          "lazy": {"output":7}
+        },
+        {
+          "name": "Only an else action",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1},["IF",["COPY","default",["NODE"]]]],
+          "lazy": {"output":"default"}
+        },
+        {
+          "name": "Selected branch requires an action",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["LENGTH","x"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed else action after a successful match",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["IF","a",["COPY",1,["NODE"]],["unknown-action"]]],
+          "lazy": {"output":1},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Later IF sees an edit made by an earlier IF",
+          "input": {"n":0},
+          "jgraft": ["JGRAFT",{"v":1},["IF",{"n":0},["COPY",1,"n"]],["IF",{"n":1},["COPY","done","state"]]],
+          "lazy": {"output":{"n":1,"state":"done"}}
+        }
+      ]
+    },
+    {
+      "name": "CASE",
+      "desc": "The first matching condition selects a value expression. Without a match or an explicit fallback, CASE raises a runtime error.",
+      "tests": [
+        {
+          "name": "First of two overlapping patterns wins",
+          "input": {"active":true,"id":7},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",{"id":7},"first",{"active":true},"second","fallback"],["NODE"]]],
+          "lazy": {"output":"first"}
+        },
+        {
+          "name": "Only the second condition matches",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE","a","first","b","second","fallback"],["NODE"]]],
+          "lazy": {"output":"second"}
+        },
+        {
+          "name": "Final fallback after two misses",
+          "input": "c",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE","a","first","b","second","fallback"],["NODE"]]],
+          "lazy": {"output":"fallback"}
+        },
+        {
+          "name": "Single matching pair without fallback",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE","a","selected"],["NODE"]]],
+          "lazy": {"output":"selected"}
+        },
+        {
+          "name": "Unmatched pair without fallback",
+          "input": "other",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE","a","selected"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "False is a literal pattern",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",false,"matched","missed"],["NODE"]]],
+          "lazy": {"output":"matched"}
+        },
+        {
+          "name": "True pattern differs from numeric one",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",true,"matched","missed"],["NODE"]]],
+          "lazy": {"output":"missed"}
+        },
+        {
+          "name": "Function condition compares its boolean result with the node",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",["LESS",["NODE"],3],"matched","missed"],["NODE"]]],
+          "lazy": {"output":"missed"}
+        },
+        {
+          "name": "Explicit predicate uses the boolean result to choose a branch",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",["IS",true,["LESS",["NODE"],3]],"matched","missed"],["NODE"]]],
+          "lazy": {"output":"matched"}
+        },
+        {
+          "name": "A condition probe can fail and a later condition still match",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",["NODE","absent"],"first",{},"second","fallback"],["NODE"]]],
+          "lazy": {"output":"second"}
+        },
+        {
+          "name": "Explicit FAIL in a condition is a miss",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",["FAIL"],"first","fallback"],["NODE"]]],
+          "lazy": {"output":"fallback"}
+        },
+        {
+          "name": "Selected branch reads the enclosing node",
+          "input": {"target":2,"v":"caller"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",["IS",2,["NODE","target"]],["NODE","v"],"fallback"],["NODE"]]],
+          "lazy": {"output":"caller"}
+        },
+        {
+          "name": "Selected failure stops evaluation",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE","a",["FAIL"],"a","second","fallback"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Failing fallback is reached",
+          "input": "other",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE","a","first",["FAIL"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Skipped result can fail at runtime",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE","a",["FAIL"],"b","selected",["FAIL"]],["NODE"]]],
+          "lazy": {"output":"selected"}
+        },
+        {
+          "name": "Selected outer branch evaluates a nested choice",
+          "input": {"a":1,"b":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",{"a":1},["CASE",{"b":2},"both","only a"],"neither"],["NODE"]]],
+          "lazy": {"output":"both"}
+        },
+        {
+          "name": "Malformed first condition propagates",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",["BOOL",1],"first","fallback"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed later condition follows a match",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE","a","first",["BOOL",1],"second"],["NODE"]]],
+          "lazy": {"output":"first"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed branch expression is skipped",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE","a",["FAIL",0],"fallback"],["NODE"]]],
+          "lazy": {"output":"fallback"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "No condition/result pairs",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "A fallback alone is too few operands",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE","fallback"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Null is a selected result",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,null,"fallback"],["NODE"]]],
+          "lazy": {"output":null}
+        },
+        {
+          "name": "Boolean false is a selected result",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,false,"fallback"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Zero is a selected result",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,0,"fallback"],["NODE"]]],
+          "lazy": {"output":0}
+        },
+        {
+          "name": "Empty string is a selected result",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,"","fallback"],["NODE"]]],
+          "lazy": {"output":""}
+        },
+        {
+          "name": "Empty array is a selected result",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,[[]],"fallback"],["NODE"]]],
+          "lazy": {"output":[]}
+        },
+        {
+          "name": "Empty object is a selected result",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,{},"fallback"],["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "Construct a result from current properties",
+          "input": {"id":4},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",{"id":["NUM"]},{"found":["NODE","id"],"items":[[["NODE","id"]]]},null],["NODE"]]],
+          "lazy": {"output":{"found":4,"items":[4]}}
+        },
+        {
+          "name": "Implied failure is trapped by an enclosing predicate",
+          "input": "unmatched",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",0,["CASE","expected",0]],["NODE"]]],
+          "lazy": {"output":false}
+        }
+      ]
+    },
+    {
+      "name": "AND",
+      "desc": "Operands evaluate from left to right through the first false value.",
+      "tests": [
+        {
+          "name": "Single false",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",false],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Single true",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",true],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "False then false",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",false,false],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "False then true",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",false,true],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "True then false",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",true,false],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "True then true",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",true,true],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Third operand determines result",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",true,true,false],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Reference and predicate as boolean operands",
+          "input": {"flag":true},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["NODE","flag"],["EXISTS","flag"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Decisive operand skips FAIL",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",false,["FAIL"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Decisive operand skips a missing reference",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",false,["NODE","missing"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "FAIL reached before a later decisive value",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",true,["FAIL"],false],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Wrong type from input",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",true,["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal number is an invalid boolean operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",true,1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "No operands",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Skipped operand has a statically incompatible type",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",false,["LENGTH"]],["NODE"]]],
+          "lazy": {"output":false},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Runtime error precedes an invalid literal",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["AND",["NODE","missing"],1],["NODE"]]],
+          "lazy": {"runtime_error":true},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Computed operand failure becomes a miss in a predicate",
+          "input": {"v":"true"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",true,["AND",["NODE","v"]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Invalid boolean operand escapes a predicate",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["AND","true"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "OR",
+      "desc": "Operands evaluate from left to right through the first true value.",
+      "tests": [
+        {
+          "name": "Single false",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",false],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Single true",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "False then false",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",false,false],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "False then true",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",false,true],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "True then false",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,false],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "True then true",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,true],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Third operand determines result",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",false,false,true],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Reference and predicate as boolean operands",
+          "input": {"flag":false},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",["NODE","flag"],["EXISTS","flag"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Decisive operand skips FAIL",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["FAIL"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Decisive operand skips a missing reference",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["NODE","missing"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "FAIL reached before a later decisive value",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",false,["FAIL"],true],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Wrong type from input",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",false,["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal number is an invalid boolean operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",false,1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "No operands",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Skipped operand has a statically incompatible type",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["LENGTH"]],["NODE"]]],
+          "lazy": {"output":true},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Runtime error precedes an invalid literal",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",["NODE","missing"],1],["NODE"]]],
+          "lazy": {"runtime_error":true},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Computed operand failure becomes a miss in a predicate",
+          "input": {"v":"true"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",true,["OR",["NODE","v"]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Invalid boolean operand escapes a predicate",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["OR","true"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "NOT",
+      "desc": "NOT is NOR over its boolean operands. The first true operand determines a false result.",
+      "tests": [
+        {
+          "name": "Single false",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",false],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Single true",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",true],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "False then false",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",false,false],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "False then true",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",false,true],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "True then false",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",true,false],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "True then true",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",true,true],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Third operand determines result",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",false,false,true],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Reference and predicate as boolean operands",
+          "input": {"flag":false},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",["NODE","flag"],["EXISTS","flag"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Decisive operand skips FAIL",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",true,["FAIL"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Decisive operand skips a missing reference",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",true,["NODE","missing"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "FAIL reached before a later decisive value",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",false,["FAIL"],true],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Wrong type from input",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",false,["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Literal number is an invalid boolean operand",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",false,1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "No operands",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Skipped operand has a statically incompatible type",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",true,["LENGTH"]],["NODE"]]],
+          "lazy": {"output":false},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Runtime error precedes an invalid literal",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NOT",["NODE","missing"],1],["NODE"]]],
+          "lazy": {"runtime_error":true},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Computed operand failure becomes a miss in a predicate",
+          "input": {"v":"true"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",true,["NOT",["NODE","v"]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Invalid boolean operand escapes a predicate",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["NOT","true"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "FAIL",
+      "desc": "FAIL has no operands. A reached failure aborts a value calculation and becomes a miss inside the nearest matching predicate.",
+      "tests": [
+        {
+          "name": "Fail at the root of a value",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FAIL"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Fail inside a constructed object",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"field":["FAIL"]},["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Fail where a numeric value is required",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SUB",1,["FAIL"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Fail while reading a computed selector",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NODE",["FAIL"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Failed pattern rejects a MATCH",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",["FAIL"]]],
+          "lazy": {"no_match":true}
+        },
+        {
+          "name": "ANY continues after failure",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ANY",["FAIL"],0],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "NONE inverts the failed probe",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["FAIL"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "ALL with a failed probe is false",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ALL",["EXISTS"],["FAIL"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Failure while evaluating the target is trapped",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",null,["FAIL"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "An extra operand is invalid",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FAIL",null],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Negative probe cannot absorb malformed FAIL",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["NONE",["FAIL",1]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "RAISE records and control flow",
+      "desc": "Every leaf checks the entire ordered log, including the data visible at each emission and the last record on failure.",
+      "tests": [
+        {
+          "name": "Execution after info",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","notice"],["COPY","after",["NODE"]]],
+          "lazy": {"emits":[{"level":"info","message":"notice"}],"output":"after"}
+        },
+        {
+          "name": "Execution after warn",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","notice"],["COPY","after",["NODE"]]],
+          "lazy": {"emits":[{"level":"warn","message":"notice"}],"output":"after"}
+        },
+        {
+          "name": "Execution after fail",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail","notice"],["COPY","after",["NODE"]]],
+          "lazy": {"emits":[{"level":"fail","message":"notice"}],"no_match":true}
+        },
+        {
+          "name": "Omitted data and explicit null are distinct",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","notice"],["RAISE","info","notice",null]],
+          "lazy": {"emits":[{"level":"info","message":"notice"},{"data":null,"level":"info","message":"notice"}],"output":null}
+        },
+        {
+          "name": "Empty message and false data",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","",["NODE"]]],
+          "lazy": {"emits":[{"data":false,"level":"warn","message":""}],"output":false}
+        },
+        {
+          "name": "Message and data use current values",
+          "input": {"row":["FAIL"],"tag":"ok"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["CONCAT","status ",["NODE","tag"]],{"saved":["NODE","row"]}]],
+          "lazy": {"emits":[{"data":{"saved":["FAIL"]},"level":"info","message":"status ok"}],"output":{"row":["FAIL"],"tag":"ok"}}
+        },
+        {
+          "name": "Only reached branches emit",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["IF",1,["RAISE","fail","first"],2,["RAISE","info","second"],["RAISE","warn","else"]],["RAISE","warn","after"]],
+          "lazy": {"emits":[{"level":"info","message":"second"},{"level":"warn","message":"after"}],"output":2}
+        },
+        {
+          "name": "No records on an unmatched branch",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["IF",1,["RAISE","warn","unused"]]],
+          "lazy": {"emits":[],"output":0}
+        },
+        {
+          "name": "Snapshot nested objects and arrays across edits",
+          "input": {"rows":[{"v":1},"tail"]},
+          "jgraft": [
+            "JGRAFT",{"v":1},
+            ["RAISE","info","before",["NODE","rows"]],
+            ["COPY",2,["NODE","rows",0,"v"]],
+            ["RAISE","warn","updated",["NODE","rows"]],
+            ["SPLICE",["NODE","rows"],{"ofs":1,"len":1},"new"],
+            ["RAISE","info","after",["NODE","rows"]]
+          ],
+          "lazy": {
+            "output": {"rows":[{"v":2},"new"]},
+            "emits": [
+              {"level":"info","message":"before","data":[{"v":1},"tail"]},
+              {"level":"warn","message":"updated","data":[{"v":2},"tail"]},
+              {"level":"info","message":"after","data":[{"v":2},"new"]}
+            ]
+          }
+        },
+        {
+          "name": "Fatal record follows prior records and ends the branch",
+          "input": {"state":"start"},
+          "jgraft": [
+            "JGRAFT",{"v":1},
+            ["RAISE","info","entered",["NODE"]],
+            ["COPY","stop","state"],
+            ["IF",{"state":"stop"},["RAISE","fail","rejected",["NODE"]],["RAISE","warn","fallback"]],
+            ["RAISE","info","unreachable"]
+          ],
+          "lazy": {
+            "no_match": true,
+            "emits": [
+              {"level":"info","message":"entered","data":{"state":"start"}},
+              {"level":"fail","message":"rejected","data":{"state":"stop"}}
+            ]
+          }
+        },
+        {
+          "name": "Earlier record survives a later value failure",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","before"],["COPY",["FAIL"],["NODE"]],["RAISE","info","after"]],
+          "lazy": {"emits":[{"level":"warn","message":"before"}],"runtime_error":true}
+        },
+        {
+          "name": "Earlier record survives an unmatched guard",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["MATCH",1],["RAISE","warn","after"]],
+          "lazy": {"emits":[{"level":"info","message":"before"}],"no_match":true}
+        },
+        {
+          "name": "Fatal level with failed data evaluation",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","before"],["RAISE","fail","rejected",["NODE","absent"]],["RAISE","warn","after"]],
+          "lazy": {"emits":[{"level":"info","message":"before"}],"runtime_error":true}
+        },
+        {
+          "name": "Missing message fails before emission",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","fail",["NODE","absent"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Controls and noncharacters may appear in data",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","payload","x\n\uffff"]],
+          "lazy": {"emits":[{"data":"x\n\uffff","level":"info","message":"payload"}],"output":null}
+        }
+      ]
+    },
+    {
+      "name": "RAISE message characters",
+      "desc": "A message is a printable string. The forbidden control and noncharacter ranges apply at every position in the message.",
+      "tests": [
+        {
+          "name": "NUL in a computed message",
+          "input": "a\u0000b",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "NUL in a literal message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","a\u0000b"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Last C0 control in a computed message",
+          "input": "a\u001fb",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Last C0 control in a literal message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","a\u001fb"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "DEL in a computed message",
+          "input": "a\u007fb",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "DEL in a literal message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","a\u007fb"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "First C1 control in a computed message",
+          "input": "a\u0080b",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "First C1 control in a literal message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","a\u0080b"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Last C1 control in a computed message",
+          "input": "a\u009fb",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Last C1 control in a literal message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","a\u009fb"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "First reserved BMP noncharacter in a computed message",
+          "input": "a\ufdd0b",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "First reserved BMP noncharacter in a literal message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","a\ufdd0b"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Last in BMP noncharacter block in a computed message",
+          "input": "a\ufdefb",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Last in BMP noncharacter block in a literal message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","a\ufdefb"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Penultimate codepoint of plane zero in a computed message",
+          "input": "a\ufffeb",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Penultimate codepoint of plane zero in a literal message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","a\ufffeb"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Last codepoint of plane zero in a computed message",
+          "input": "a\uffffb",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Last codepoint of plane zero in a literal message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","a\uffffb"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Penultimate codepoint of plane one in a computed message",
+          "input": "a\ud83f\udffeb",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Penultimate codepoint of plane one in a literal message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","a\ud83f\udffeb"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Last codepoint of plane sixteen in a computed message",
+          "input": "a\udbff\udfffb",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Last codepoint of plane sixteen in a literal message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn","a\udbff\udfffb"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Printable Unicode including a supplementary character",
+          "input": "Résumé 😀 �",
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",["NODE"]]],
+          "lazy": {"emits":[{"level":"info","message":"Résumé 😀 �"}],"output":"Résumé 😀 �"}
+        }
+      ]
+    },
+    {
+      "name": "RAISE validation",
+      "desc": "The level is a literal name. The message and optional data are value expressions evaluated before the action emits.",
+      "tests": [
+        {
+          "name": "Missing level and message",
+          "input": {"level":"info"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Missing message",
+          "input": {"level":"info"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Extra operand",
+          "input": {"level":"info"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info","x",null,"extra"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Unknown level",
+          "input": {"level":"info"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","debug","x"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Level is case-sensitive",
+          "input": {"level":"info"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","INFO","x"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Reference cannot supply the level",
+          "input": {"level":"info"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",["NODE","level"],"x"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Null level",
+          "input": {"level":"info"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE",null,"x"]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Boolean literal message",
+          "input": {"level":"info"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",false]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Numeric literal message",
+          "input": {"level":"info"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",1]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Object literal message",
+          "input": {"level":"info"},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","info",{}]],
+          "lazy": {"emits":[],"invalid_graft":true}
+        },
+        {
+          "name": "Null as a computed message",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "False as a computed message",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Number as a computed message",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Array as a computed message",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Object as a computed message",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["RAISE","warn",["NODE"]]],
+          "lazy": {"emits":[],"runtime_error":true}
+        },
+        {
+          "name": "Skipped message with a runtime type error",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["IF",2,["RAISE","fail",["NODE"]]]],
+          "lazy": {"emits":[],"output":1}
+        },
+        {
+          "name": "Skipped malformed literal message",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["IF",2,["RAISE","fail","a\nb"]]],
+          "lazy": {"emits":[],"output":1},
+          "strict": {"emits":[],"invalid_graft":true}
+        }
+      ]
+    }
+  ]
+}

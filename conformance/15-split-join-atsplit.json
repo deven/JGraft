@@ -1,0 +1,410 @@
+{
+  "version": 1,
+  "name": "Split, join and scoped field edits",
+  "desc": "Visible split fields, separator and trim options, reconstruction, ATSPLIT scope and validation.",
+  "tests": [
+    {
+      "name": "Literal separators and retention",
+      "desc": "Each observation includes the visible fields and a reconstruction of the same split array.",
+      "tests": [
+        {
+          "name": "Empty subject",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT","/"],["TEMP","parts"],[[["TEMP","parts"],["JOIN","/",["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[[""],""]}
+        },
+        {
+          "name": "No separator",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT","/"],["TEMP","parts"],[[["TEMP","parts"],["JOIN","/",["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["abc"],"abc"]}
+        },
+        {
+          "name": "Leading separator",
+          "input": "/a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT","/"],["TEMP","parts"],[[["TEMP","parts"],["JOIN","/",["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["","a"],"/a"]}
+        },
+        {
+          "name": "Adjacent separators",
+          "input": "a//b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT","/"],["TEMP","parts"],[[["TEMP","parts"],["JOIN","/",["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a","","b"],"a//b"]}
+        },
+        {
+          "name": "Trailing separator",
+          "input": "a/",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT","/"],["TEMP","parts"],[[["TEMP","parts"],["JOIN","/",["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a",""],"a/"]}
+        },
+        {
+          "name": "Only separators",
+          "input": "//",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT","/"],["TEMP","parts"],[[["TEMP","parts"],["JOIN","/",["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["","",""],"//"]}
+        },
+        {
+          "name": "Multi-character separator",
+          "input": "a::b::::c",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT","::"],["TEMP","parts"],[[["TEMP","parts"],["JOIN","::",["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a","b","","c"],"a::b::::c"]}
+        },
+        {
+          "name": "Supplementary separator",
+          "input": "a😀b😀",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT","😀"],["TEMP","parts"],[[["TEMP","parts"],["JOIN","😀",["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a","b",""],"a😀b😀"]}
+        },
+        {
+          "name": "Empty separator uses codepoints",
+          "input": "😀é",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",""],["TEMP","parts"],[[["TEMP","parts"],["JOIN","",["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["😀","e","́"],"😀é"]}
+        },
+        {
+          "name": "Empty separator and subject",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",""],["TEMP","parts"],[[["TEMP","parts"],["JOIN","",["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[[""],""]}
+        },
+        {
+          "name": "Keep < with leading, adjacent and trailing separators",
+          "input": ",a,,b,",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","keep":"<"}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":",","keep":"<"},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[[",","a,",",","b,",""],",a,,b,"]}
+        },
+        {
+          "name": "Keep > with leading, adjacent and trailing separators",
+          "input": ",a,,b,",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","keep":">"}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":",","keep":">"},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["",",a",",",",b",","],",a,,b,"]}
+        },
+        {
+          "name": "Keep @ with leading, adjacent and trailing separators",
+          "input": ",a,,b,",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","keep":"@"}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":",","keep":"@"},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["",",","a",",","",",","b",",",""],",a,,b,"]}
+        }
+      ]
+    },
+    {
+      "name": "Regex separators and trimming",
+      "desc": "Separators use leftmost matching with a longest-overall preference. Trim patterns match the corresponding end of each field.",
+      "tests": [
+        {
+          "name": "Verbatim regex macro separator",
+          "input": "a;b,c",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",["REG",["ANY",";",","]]],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":["REG",["ANY",";",","]],"default":"|"},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a","b","c"],"a;b,c"]}
+        },
+        {
+          "name": "Longest separator at the first matching position",
+          "input": "a::b:c",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["REG",["ANY",":","::"]],"default":"|"}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":["REG",["ANY",":","::"]],"default":"|"},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a","b","c"],"a::b:c"]}
+        },
+        {
+          "name": "Element must cover the complete field before a separator",
+          "input": "a,3,x",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","element":["REG",["REP",1,-1,["CHARS","a","z"]]]}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":",","element":["REG",["REP",1,-1,["CHARS","a","z"]]]},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a","3,x"],"a,3,x"]}
+        },
+        {
+          "name": "Zero-width lookahead before a character",
+          "input": "abxc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["REG",["CAN","x"]],"default":"|"}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":["REG",["CAN","x"]],"default":"|"},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["ab","xc"],"abxc"]}
+        },
+        {
+          "name": "Nullable regex with trailing consuming match",
+          "input": "baabca",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["REG",["REP",0,-1,"a"]],"default":"|"}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":["REG",["REP",0,-1,"a"]],"default":"|"},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["b","b","c",""],"baabca"]}
+        },
+        {
+          "name": "Expose empty separator with keep @",
+          "input": "baabca",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["REG",["REP",0,-1,"a"]],"keep":"@"}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":["REG",["REP",0,-1,"a"]],"keep":"@"},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["b","aa","b","","c","a",""],"baabca"]}
+        },
+        {
+          "name": "Trim both ends once",
+          "input": "  a , b  ",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","trim":" "}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":",","trim":" "},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[[" a","b "],"  a , b  "]}
+        },
+        {
+          "name": "Trim different ends",
+          "input": "[a];[b]",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":";","ltrim":"[","rtrim":"]"}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":";","ltrim":"[","rtrim":"]"},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a","b"],"[a];[b]"]}
+        },
+        {
+          "name": "Trim expressions overlap on a short field",
+          "input": "aaa",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","ltrim":"aa","rtrim":"aa"}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":",","ltrim":"aa","rtrim":"aa"},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a"],"aaa"]}
+        },
+        {
+          "name": "Greedy regex trims",
+          "input": "   a  , b ",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","trim":["REG",["REP",1,-1," "]]}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":",","trim":["REG",["REP",1,-1," "]]},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a","b"],"   a  , b "]}
+        },
+        {
+          "name": "Discard trims permanently",
+          "input": " a , b ",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","trim":" ","discard":true}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":",","trim":" ","discard":true},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a","b"],"a,b"]}
+        },
+        {
+          "name": "JOIN can discard trimming later",
+          "input": " a , b ",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","trim":" "}],["TEMP","parts"],[[["TEMP","parts"],["JOIN",{"sep":",","discard":true},["TEMP","parts"]]]],["NODE"]]],
+          "lazy": {"output":[["a","b"],"a,b"]}
+        }
+      ]
+    },
+    {
+      "name": "JOIN on ordinary arrays",
+      "desc": "Only gaps between elements receive separators. A regex uses its fallback when no stored separators are available.",
+      "tests": [
+        {
+          "name": "Empty array",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",","],["NODE"]]],
+          "lazy": {"output":""}
+        },
+        {
+          "name": "Singleton",
+          "input": ["a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",","],["NODE"]]],
+          "lazy": {"output":"a"}
+        },
+        {
+          "name": "Final empty element",
+          "input": ["a",""],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN","/"],["NODE"]]],
+          "lazy": {"output":"a/"}
+        },
+        {
+          "name": "Interior empty element",
+          "input": ["a","","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN","/"],["NODE"]]],
+          "lazy": {"output":"a//b"}
+        },
+        {
+          "name": "Regex default",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",{"sep":["REG","[","x"],"default":"|"}],["NODE"]]],
+          "lazy": {"output":"a|b"}
+        },
+        {
+          "name": "Kept separators already belong to the fields",
+          "input": ["a",",","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",{"sep":",","keep":"@"}],["NODE"]]],
+          "lazy": {"output":"a,b"}
+        },
+        {
+          "name": "Explicit source and computed separator",
+          "input": {"sep":";","parts":["a","b"]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",["NODE","sep"],["NODE","parts"]],["NODE"]]],
+          "lazy": {"output":"a;b"}
+        },
+        {
+          "name": "Explicit split source",
+          "input": {"sep":";","text":"a;b"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",["NODE","sep"],["NODE","text"]],["NODE"]]],
+          "lazy": {"output":["a","b"]}
+        }
+      ]
+    },
+    {
+      "name": "ATSPLIT edits",
+      "desc": "The path and options use the enclosing node. The temporary field array becomes current during edits, and the joined string is written back to the selected location.",
+      "tests": [
+        {
+          "name": "Edit a middle field with hidden separators",
+          "input": "a;b,c",
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],{"sep":["REG",["ANY",";",","]],"default":"|"},["COPY","X",1]]],
+          "lazy": {"output":"a;X,c"}
+        },
+        {
+          "name": "Replace entire current array",
+          "input": "a/b",
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],"/",["COPY",[["p","q",""]],["NODE"]]]],
+          "lazy": {"output":"p/q/"}
+        },
+        {
+          "name": "Reconstruct after editing and restore the caller",
+          "input": {"text":" a , b ","sep":","},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT","text",{"sep":["NODE","sep"],"trim":" "},["COPY","X",0]],["COPY",["NODE","text"],"seen"]],
+          "lazy": {"output":{"text":" X , b ","sep":",","seen":" X , b "}}
+        },
+        {
+          "name": "Options evaluated once despite changing stash",
+          "input": "a|b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY","|",["STASH","sep"]],["ATSPLIT",["NODE"],["STASH","sep"],["COPY",";",["STASH","sep"]],["COPY",[["x","y"]],["NODE"]]]],
+          "lazy": {"output":"x|y"}
+        },
+        {
+          "name": "Final array contains a nonstring",
+          "input": "a,b",
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["COPY",1,0]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Subaction failure stops reconstruction",
+          "input": "a,b",
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"],",",["MATCH",[["z"]]]]],
+          "lazy": {"no_match":true}
+        }
+      ]
+    },
+    {
+      "name": "Local validation",
+      "desc": "Literal option errors are invalid grafts. Wrong source types and malformed options obtained at runtime fail when reached.",
+      "tests": [
+        {
+          "name": "SPLIT / Unknown option",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","bogus":1}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SPLIT / Invalid keep",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","keep":"left"}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SPLIT / Mutually exclusive trims",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","trim":" ","ltrim":" "}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SPLIT / Invalid discard",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","discard":"yes"}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SPLIT missing specification",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SPLIT extra source",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",",",["NODE"],["NODE"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SPLIT wrong current source",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",","],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "SPLIT bad computed options",
+          "input": {"spec":{"sep":",","keep":"bad"},"v":"a"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",["NODE","spec"],["NODE","v"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "JOIN / Unknown option",
+          "input": ["a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",{"sep":",","bogus":1}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "JOIN / Invalid keep",
+          "input": ["a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",{"sep":",","keep":"left"}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "JOIN / Mutually exclusive trims",
+          "input": ["a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",{"sep":",","trim":" ","ltrim":" "}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "JOIN / Invalid discard",
+          "input": ["a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",{"sep":",","discard":"yes"}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "JOIN missing specification",
+          "input": ["a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "JOIN extra source",
+          "input": ["a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",",",["NODE"],["NODE"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "JOIN wrong current source",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",","],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "JOIN bad computed options",
+          "input": {"spec":{"sep":",","keep":"bad"},"v":["a"]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",["NODE","spec"],["NODE","v"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Regex separator requires a default on an ordinary array",
+          "input": {"useDefault":false,"fields":["a","b"]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",["CASE",{"useDefault":true},{"sep":["REG",","],"default":"|"},{"sep":["REG",","]}],["NODE","fields"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "A retained regex separator needs no default",
+          "input": ["a",",","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",{"sep":["REG",","],"keep":"@"}],["NODE"]]],
+          "lazy": {"output":"a,b"}
+        },
+        {
+          "name": "JOIN requires string elements",
+          "input": ["a",null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",","],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Missing target path",
+          "input": {"text":"a"},
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT","missing",","]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "ATSPLIT cannot target stash",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["STASH","x"],","]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "ATSPLIT missing specification",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["ATSPLIT",["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Skipped malformed split",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,0,["SPLIT",{"sep":",","bad":true}]],["NODE"]]],
+          "lazy": {"output":0},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    }
+  ]
+}

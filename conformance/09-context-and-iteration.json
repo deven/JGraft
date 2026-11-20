@@ -1,0 +1,918 @@
+{
+  "version": 1,
+  "name": "Context and iteration",
+  "desc": "Current-node navigation, scoped bindings, array transformations and folds, and finite action loops.",
+  "tests": [
+    {
+      "name": "AT",
+      "desc": "Subactions share the selected input location. Changes through that location persist after the enclosing node becomes current again.",
+      "tests": [
+        {
+          "name": "Bare NODE selects the root",
+          "input": {"n":1},
+          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE"],["COPY",2,["NODE"]]]],
+          "lazy": {"output":2}
+        },
+        {
+          "name": "Existing null property can be replaced",
+          "input": {"v":null},
+          "jgraft": ["JGRAFT",{"v":1},["AT","v",["COPY","set",["NODE"]]]],
+          "lazy": {"output":{"v":"set"}}
+        },
+        {
+          "name": "Existing element with no actions",
+          "input": [0],
+          "jgraft": ["JGRAFT",{"v":1},["AT",0]],
+          "lazy": {"output":[0]}
+        },
+        {
+          "name": "Absent element with no actions",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["AT",0]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed path selects the requested row",
+          "input": {"pick":1,"rows":[{},{}]},
+          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE","rows",["NODE","pick"]],["COPY","selected","tag"]]],
+          "lazy": {"output":{"pick":1,"rows":[{},{"tag":"selected"}]}}
+        },
+        {
+          "name": "Relative names inside nested actions",
+          "input": {"child":{"v":7},"v":0},
+          "jgraft": ["JGRAFT",{"v":1},["AT","child",["COPY",["NODE","v"],"seen"]]],
+          "lazy": {"output":{"child":{"seen":7,"v":7},"v":0}}
+        },
+        {
+          "name": "Ancestors cannot be read from a child",
+          "input": {"child":{},"secret":1},
+          "jgraft": ["JGRAFT",{"v":1},["AT","child",["COPY",["NODE","secret"],["NODE"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Inner edits persist and both levels restore their node",
+          "input": {"rows":[{"n":1},{"n":2}]},
+          "jgraft": ["JGRAFT",{"v":1},["AT","rows",["AT",-1,["COPY",3,"n"]],["COPY",["NODE",-1,"n"],0]],["COPY",["NODE","rows",1,"n"],"seen"]],
+          "lazy": {"output":{"rows":[3,{"n":3}],"seen":3}}
+        },
+        {
+          "name": "Next subaction sees replacement of the selected subtree",
+          "input": {"child":{"old":1}},
+          "jgraft": ["JGRAFT",{"v":1},["AT","child",["COPY",{"v":2},["NODE"]],["COPY",["NODE","v"],"again"]]],
+          "lazy": {"output":{"child":{"again":2,"v":2}}}
+        },
+        {
+          "name": "Missing intermediate property",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE","a","b"],["COPY",0,["NODE"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Computed selector of invalid type",
+          "input": {"key":true},
+          "jgraft": ["JGRAFT",{"v":1},["AT",["NODE",["NODE","key"]],["COPY",0,["NODE"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Cannot select CONST as current node",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["AT",["CONST","x"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Cannot select STASH as current node",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["AT",["STASH","x"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Cannot select TEMP as current node",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["AT",["TEMP","x"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Cannot select CAP as current node",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["AT",["CAP","x"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing path",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["AT"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal null path",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["AT",null]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed reached subaction",
+          "input": {"v":1},
+          "jgraft": ["JGRAFT",{"v":1},["AT","v",["not-an-action"]]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "CURPROP",
+      "desc": "The result identifies the current node in its immediate parent. Object names remain strings and array indices are numbers.",
+      "tests": [
+        {
+          "name": "Input root has no property name",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CURPROP"],["NODE"]]],
+          "lazy": {"output":null}
+        },
+        {
+          "name": "Normal name",
+          "input": {"alpha":7},
+          "jgraft": ["JGRAFT",{"v":1},["AT","alpha",["COPY",["CURPROP"],["NODE"]]]],
+          "lazy": {"output":{"alpha":"alpha"}}
+        },
+        {
+          "name": "Empty name",
+          "input": {"":7},
+          "jgraft": ["JGRAFT",{"v":1},["AT","",["COPY",["CURPROP"],["NODE"]]]],
+          "lazy": {"output":{"":""}}
+        },
+        {
+          "name": "Numeric-looking name",
+          "input": {"0":7},
+          "jgraft": ["JGRAFT",{"v":1},["AT","0",["COPY",["CURPROP"],["NODE"]]]],
+          "lazy": {"output":{"0":"0"}}
+        },
+        {
+          "name": "Punctuation in name",
+          "input": {"a.b":7},
+          "jgraft": ["JGRAFT",{"v":1},["AT","a.b",["COPY",["CURPROP"],["NODE"]]]],
+          "lazy": {"output":{"a.b":"a.b"}}
+        },
+        {
+          "name": "Negative selector resolves to the actual index",
+          "input": [7,8,9],
+          "jgraft": ["JGRAFT",{"v":1},["AT",-1,["COPY",["CURPROP"],["NODE"]]]],
+          "lazy": {"output":[7,8,2]}
+        },
+        {
+          "name": "Restored properties after leaving nested AT",
+          "input": {"rows":[{}]},
+          "jgraft": ["JGRAFT",{"v":1},["AT","rows",["AT",0,["COPY",["CURPROP"],"index"]],["COPY",["CURPROP"],["STASH","parent"]]],["COPY",["STASH","parent"],"parent",["CURPROP"],"root"]],
+          "lazy": {"output":{"parent":"rows","root":null,"rows":[{"index":0}]}}
+        },
+        {
+          "name": "Matching an object property exposes its name",
+          "input": {"code":"code"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",{"code":["CURPROP"]}],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "A temporary binding preserves the property while a NODE override establishes a root",
+          "input": {"child":7},
+          "jgraft": ["JGRAFT",{"v":1},["AT","child",["COPY",[[["LOCAL",["CURPROP"],"k",1],["LOCAL",["CURPROP"],null,42],["CURPROP"]]],["NODE"]]]],
+          "lazy": {"output":{"child":["child",null,"child"]}}
+        },
+        {
+          "name": "Reading a reference leaves the current location alone",
+          "input": {"v":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["NODE","v"],["CURPROP"]]],["NODE"]]],
+          "lazy": {"output":[1,null]}
+        },
+        {
+          "name": "Takes no operands",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CURPROP",1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "LOCAL",
+      "desc": "Bindings and current-node overrides are installed in order. The body returns a value within that scope.",
+      "tests": [
+        {
+          "name": "Read the bound value",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["TEMP","value"],"value",7],["NODE"]]],
+          "lazy": {"output":7}
+        },
+        {
+          "name": "Null is a present binding",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["EXISTS",["TEMP","value"]],"value",null],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "An integer name is coerced to a string",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["TEMP","-2"],-2,7],["NODE"]]],
+          "lazy": {"output":7}
+        },
+        {
+          "name": "Dotted name identifies one property",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["TEMP","a.b"],"a.b",8],["NODE"]]],
+          "lazy": {"output":8}
+        },
+        {
+          "name": "Empty binding name",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["TEMP",""],"",9],["NODE"]]],
+          "lazy": {"output":9}
+        },
+        {
+          "name": "Repeated bindings can read their previous value",
+          "input": {"n":3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["TEMP","prior"],["TEMP","n"]]],"n",["NODE","n"],"prior",["TEMP","n"],"n",["ADD",["TEMP","n"],2]],["NODE"]]],
+          "lazy": {"output":[3,5]}
+        },
+        {
+          "name": "Successive NODE overrides use the previous node",
+          "input": {"child":{"child":{"name":"leaf"},"name":"child"},"name":"root"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["TEMP","root"],["TEMP","child"],["NODE","name"]]],"root",["NODE","name"],null,["NODE","child"],"child",["NODE","name"],null,["NODE","child"]],["NODE"]]],
+          "lazy": {"output":["root","child","leaf"]}
+        },
+        {
+          "name": "Rebinding NODE to literal null",
+          "input": 4,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["NODE"],null,null],["NODE"]]],
+          "lazy": {"output":null}
+        },
+        {
+          "name": "Nested scopes restore both names and current values",
+          "input": {"child":{"n":"inside"},"n":"outside"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["LOCAL",[[["TEMP","k"],["NODE","n"]]],"k","inner",null,["NODE","child"]],["TEMP","k"],["NODE","n"]]],"k","outer"],["NODE"]]],
+          "lazy": {"output":[["inner","inside"],"outer","outside"]}
+        },
+        {
+          "name": "Existing action TEMP is restored after a local shadow",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY","outer",["TEMP","k"],["LOCAL",["TEMP","k"],"k","inner"],"during",["TEMP","k"],"after"]],
+          "lazy": {"output":{"after":"outer","during":"inner"}}
+        },
+        {
+          "name": "Fresh TEMP binding is absent after evaluation",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["LOCAL",["TEMP","k"],"k",1],["EXISTS",["TEMP","k"]]]],["NODE"]]],
+          "lazy": {"output":[1,false]}
+        },
+        {
+          "name": "Failed scope restores NODE and TEMP before another probe",
+          "input": {"n":3},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["IS",3,["LOCAL",["FAIL"],"k",9,null,4]],["NODE","n"],["TEMP","k"]]],"k",2],["NODE"]]],
+          "lazy": {"output":[false,3,2]}
+        },
+        {
+          "name": "Reached binding expression fails",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",7,"unused",["FAIL"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Missing body",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing value for binding",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["NODE"],"k"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Boolean as a binding name",
+          "input": {"key":"k"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["NODE"],true,7],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Fraction as a binding name",
+          "input": {"key":"k"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["NODE"],1.5,7],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Computed name as a binding name",
+          "input": {"key":"k"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["NODE"],["NODE","key"],7],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Unreachable malformed LOCAL",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,"selected",["LOCAL",["NODE"],"k"]],["NODE"]]],
+          "lazy": {"output":"selected"},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "WITH",
+      "desc": "Bindings are visible to later assignments and to the node pattern. The result is the match outcome in the inherited matching mode.",
+      "tests": [
+        {
+          "name": "Save parent value for nested property comparison",
+          "input": {"expected":7,"row":{"n":7}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",{"row":{"n":["TEMP","expected"]}},"expected",["NODE","expected"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Nested property differs from saved value",
+          "input": {"expected":7,"row":{"n":8}},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",{"row":{"n":["TEMP","expected"]}},"expected",["NODE","expected"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Sequential binding reads the earlier assignment",
+          "input": {"n":7},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",{"n":["TEMP","b"]},"a",6,"b",["ADD",["TEMP","a"],1]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Repeated name is read before being overwritten",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",["TEMP","a"],"a",6,"a",["ADD",["TEMP","a"],1]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Integer and string names select the same TEMP property",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",["TEMP","0"],0,7],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Nested binding with an empty name",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",["WITH",["TEMP",""],"",null],"","outer"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Inherited exact mode rejects an extra property",
+          "input": {"extra":2,"n":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["WITH",{"n":["TEMP","k"]},"k",1]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Partial mode permits an extra property",
+          "input": {"extra":2,"n":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",{"n":["TEMP","k"]},"k",1],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Inner shadow ends before the next operand",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",["ALL",["WITH",["TEMP","k"],"k",2],["NONE",["TEMP","k"]]],"k",1],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Ordinary binding failure is a predicate miss",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",["EXISTS",["TEMP","k"]],"k",["NODE","missing"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Outer value survives a failed inner match",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["WITH",["TEMP","k"],"k",3],["TEMP","k"]]],"k",2],["NODE"]]],
+          "lazy": {"output":[false,2]}
+        },
+        {
+          "name": "Binding removed before sibling value",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["WITH",["TEMP","x"],"x",7],["EXISTS",["TEMP","x"]]]],["NODE"]]],
+          "lazy": {"output":[true,false]}
+        },
+        {
+          "name": "Missing match expression",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Match without a binding",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",["NUM"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing last binding value",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",["NUM"],"k",1,"next"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Null as a binding name",
+          "input": {"key":"k"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",["EXISTS"],null,7],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Fraction as a binding name",
+          "input": {"key":"k"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",["EXISTS"],0.5,7],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Computed name as a binding name",
+          "input": {"key":"k"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["WITH",["EXISTS"],["NODE","key"],7],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Skipped malformed binding list",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,7,["WITH",["NUM"],"k"]],["NODE"]]],
+          "lazy": {"output":7},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "MAP",
+      "desc": "Each source element becomes the current node for one value expression. Its result occupies one output position.",
+      "tests": [
+        {
+          "name": "Implicit source with portable scalar values",
+          "input": [null,false,0,""],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["NODE"]],["NODE"]]],
+          "lazy": {"output":[null,false,0,""]}
+        },
+        {
+          "name": "Explicit source and relative field lookup",
+          "input": {"n":99,"rows":[{"n":4},{"n":1},{"n":4}]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["NODE","n"],["NODE","rows"]],["NODE"]]],
+          "lazy": {"output":[4,1,4]}
+        },
+        {
+          "name": "Return original indices",
+          "input": ["b","a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["CURPROP"]],["NODE"]]],
+          "lazy": {"output":[0,1,2]}
+        },
+        {
+          "name": "Constant null keeps every position",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",null],["NODE"]]],
+          "lazy": {"output":[null,null]}
+        },
+        {
+          "name": "Nested array results stay single elements",
+          "input": [2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",[[["NODE"],["CURPROP"]]]],["NODE"]]],
+          "lazy": {"output":[[2,0],[3,1]]}
+        },
+        {
+          "name": "Match expression returns booleans for all elements",
+          "input": [1,"1",null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["NUM"]],["NODE"]]],
+          "lazy": {"output":[true,false,false]}
+        },
+        {
+          "name": "Caller binding remains visible for each row",
+          "input": {"offset":3,"rows":[1,4]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["MAP",["ADD",["NODE"],["TEMP","base"]],["NODE","rows"]],"base",["NODE","offset"]],["NODE"]]],
+          "lazy": {"output":[4,7]}
+        },
+        {
+          "name": "Computed source starts indexing at zero",
+          "input": [9,8,7],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["CURPROP"],["SLICE",1]],["NODE"]]],
+          "lazy": {"output":[0,1]}
+        },
+        {
+          "name": "Nested map restores the outer node and index",
+          "input": [[3,4],[8]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",[[["MAP",[[["CURPROP"],["NODE"]]]],["CURPROP"],["LENGTH"]]]],["NODE"]]],
+          "lazy": {"output":[[[[0,3],[1,4]],0,2],[[[0,8]],1,1]]}
+        },
+        {
+          "name": "Original context after explicit source",
+          "input": {"n":5,"rows":[{"n":3}]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["MAP",["NODE","n"],["NODE","rows"]],["NODE","n"]]],["NODE"]]],
+          "lazy": {"output":[[3],5]}
+        },
+        {
+          "name": "Empty source skips the transform",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["FAIL"]],["NODE"]]],
+          "lazy": {"output":[]}
+        },
+        {
+          "name": "Later missing field aborts the entire map",
+          "input": [{"n":1},{}],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["NODE","n"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Missing required operands",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Extra source operand",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["NODE"],[[]],[[]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Implicit source is an object",
+          "input": {"length":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["NODE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Explicit source resolves to null",
+          "input": {"rows":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["NODE"],["NODE","rows"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Explicit non-array literal",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["NODE"],"not an array"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Empty source skips malformed callback during lazy evaluation",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["MAP",["BOOL",1]],["NODE"]]],
+          "lazy": {"output":[]},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "FILTER",
+      "desc": "Each predicate tests the current source element. Matching elements retain their original values and relative order.",
+      "tests": [
+        {
+          "name": "Bare NUM selects numbers in order",
+          "input": [4,"3",2,4,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["NUM"]],["NODE"]]],
+          "lazy": {"output":[4,2,4]}
+        },
+        {
+          "name": "Explicit source returns whole matching rows",
+          "input": {"rows":[{"k":"a","n":2},{"n":1},{"k":"c","n":2}]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",{"n":2},["NODE","rows"]],["NODE"]]],
+          "lazy": {"output":[{"k":"a","n":2},{"k":"c","n":2}]}
+        },
+        {
+          "name": "Null is a selectable literal",
+          "input": [0,null,false,null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",null],["NODE"]]],
+          "lazy": {"output":[null,null]}
+        },
+        {
+          "name": "Every element matches including null",
+          "input": [null,false,0],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["EXISTS"]],["NODE"]]],
+          "lazy": {"output":[null,false,0]}
+        },
+        {
+          "name": "No element matches",
+          "input": [0,1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["STR"]],["NODE"]]],
+          "lazy": {"output":[]}
+        },
+        {
+          "name": "Original indices survive earlier rejections",
+          "input": ["a","b","c","d"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["IS",["NUM",1,2],["CURPROP"]]],["NODE"]]],
+          "lazy": {"output":["b","c"]}
+        },
+        {
+          "name": "Missing value in a probe rejects only that row",
+          "input": [{"n":1},{},{"n":1}],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["IS",1,["NODE","n"]]],["NODE"]]],
+          "lazy": {"output":[{"n":1},{"n":1}]}
+        },
+        {
+          "name": "Boolean returned by a function is matched as data",
+          "input": [true,1,false],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["LESS",1,2]],["NODE"]]],
+          "lazy": {"output":[true]}
+        },
+        {
+          "name": "A caller binding is available in the predicate",
+          "input": {"min":3,"rows":[4,0,3]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",["FILTER",["NUM",["TEMP","min"]],["NODE","rows"]],"min",["NODE","min"]],["NODE"]]],
+          "lazy": {"output":[4,3]}
+        },
+        {
+          "name": "Restore caller after explicit filter",
+          "input": {"id":7,"rows":[1,2]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["FILTER",2,["NODE","rows"]],["NODE","id"]]],["NODE"]]],
+          "lazy": {"output":[[2],7]}
+        },
+        {
+          "name": "Empty source gives empty result",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["EXISTS"]],["NODE"]]],
+          "lazy": {"output":[]}
+        },
+        {
+          "name": "Reached malformed predicate is fatal",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["BOOL",1]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing required operands",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Extra source operand",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["EXISTS"],[[]],[[]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Implicit source is an object",
+          "input": {"length":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["EXISTS"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Explicit source resolves to null",
+          "input": {"rows":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["EXISTS"],["NODE","rows"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Explicit non-array literal",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["EXISTS"],"not an array"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Empty source skips malformed callback during lazy evaluation",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["FILTER",["BOOL",1]],["NODE"]]],
+          "lazy": {"output":[]},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "REDUCE",
+      "desc": "Initial value and source use the caller scope. The callback reads the current element, its index and the accumulator from the previous step.",
+      "tests": [
+        {
+          "name": "Null initial value with empty source",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["FAIL"],"acc",null],["NODE"]]],
+          "lazy": {"output":null}
+        },
+        {
+          "name": "False initial value with empty source",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["FAIL"],"acc",false],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "String initial value with empty source",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["FAIL"],"acc","seed"],["NODE"]]],
+          "lazy": {"output":"seed"}
+        },
+        {
+          "name": "Nested object initial value with empty source",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["FAIL"],"acc",{"a":[[1]]}],["NODE"]]],
+          "lazy": {"output":{"a":[1]}}
+        },
+        {
+          "name": "Seed precedes first element and each return feeds the next",
+          "input": [2,7,1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["SUB",["TEMP","acc"],["NODE"]],"acc",20],["NODE"]]],
+          "lazy": {"output":10}
+        },
+        {
+          "name": "Explicit source and seed belong to the caller",
+          "input": {"rows":["b","a","c"],"seed":"p"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["CONCAT",["TEMP","a"],["NODE"]],"a",["NODE","seed"],["NODE","rows"]],["NODE"]]],
+          "lazy": {"output":"pbac"}
+        },
+        {
+          "name": "Integer accumulator name is coerced to string",
+          "input": [2,3],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["ADD",["TEMP","0"],["NODE"]],0,10],["NODE"]]],
+          "lazy": {"output":15}
+        },
+        {
+          "name": "Accumulator can change type between steps",
+          "input": [1,null,"last"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["NODE"],"a",{}],["NODE"]]],
+          "lazy": {"output":"last"}
+        },
+        {
+          "name": "Callback produces one label for each original index",
+          "input": ["x","z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["CONCAT",["TEMP","acc"],[[{"at":["CURPROP"],"value":["NODE"]}]]],"acc",[[]]],["NODE"]]],
+          "lazy": {"output":[{"at":0,"value":"x"},{"at":1,"value":"z"}]}
+        },
+        {
+          "name": "Seed and source see the outer TEMP before it is shadowed",
+          "input": {"base":10,"rows":[1,4]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["REDUCE",["ADD",["TEMP","a"],["NODE"]],"a",["TEMP","a","base"],["TEMP","a","rows"]],["TEMP","a","base"]]],"a",["NODE"]],["NODE"]]],
+          "lazy": {"output":[15,10]}
+        },
+        {
+          "name": "Nested reductions restore the outer accumulator and index",
+          "input": [[1,2],[5]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["CONCAT",["TEMP","a"],[[{"at":["CURPROP"],"sum":["REDUCE",["ADD",["TEMP","a"],["NODE"]],"a",0]}]]],"a",[[]]],["NODE"]]],
+          "lazy": {"output":[{"at":0,"sum":3},{"at":1,"sum":5}]}
+        },
+        {
+          "name": "Accumulator absent after reduction",
+          "input": [2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["REDUCE",["TEMP","a"],"a",1],["EXISTS",["TEMP","a"]]]],["NODE"]]],
+          "lazy": {"output":[1,false]}
+        },
+        {
+          "name": "Empty source still evaluates initial expression",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["NODE"],"a",["FAIL"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Later callback failure aborts reduction",
+          "input": [1,"x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["ADD",["TEMP","a"],["NODE"]],"a",0],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Null as accumulator name",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["NODE"],null,0],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Fraction as accumulator name",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["NODE"],1.5,0],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Expression as accumulator name",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["NODE"],["NODE","key"],0],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing required operands",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Extra source operand",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["NODE"],"a",0,[[]],[[]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Implicit source is an object",
+          "input": {"length":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["NODE"],"a",0],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Explicit source resolves to null",
+          "input": {"rows":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["NODE"],"a",0,["NODE","rows"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Explicit non-array literal",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["NODE"],"a",0,"not an array"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Empty source skips malformed callback during lazy evaluation",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["REDUCE",["BOOL",1],"a",7],["NODE"]]],
+          "lazy": {"output":7},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "WHILE",
+      "desc": "The boolean condition is evaluated before each iteration. Body actions run in order and can make the next condition false.",
+      "tests": [
+        {
+          "name": "False condition with empty body",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",false]],
+          "lazy": {"output":null}
+        },
+        {
+          "name": "Initially false test skips a valid failing body",
+          "input": {"run":false},
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",["NODE","run"],["COPY",["FAIL"],["NODE"]]]],
+          "lazy": {"output":{"run":false}}
+        },
+        {
+          "name": "Single iteration turns off its flag",
+          "input": {"run":true},
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",["NODE","run"],["COPY",false,"run"],["COPY","done","state"]]],
+          "lazy": {"output":{"run":false,"state":"done"}}
+        },
+        {
+          "name": "Countdown records intermediate values in body order",
+          "input": {"n":3,"seen":[]},
+          "jgraft": [
+            "JGRAFT",{"v":1},
+            ["WHILE",["LESS",0,["NODE","n"]],
+              ["SPLICE",["NODE","seen"],{"ofs":["LENGTH",["NODE","seen"]],"len":0},["NODE","n"]],
+              ["COPY",["SUB",["NODE","n"],1],"n"]]
+          ],
+          "lazy": {"output":{"n":0,"seen":[3,2,1]}}
+        },
+        {
+          "name": "Stash counter persists between body actions",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",3,["STASH","left"]],["WHILE",["LESS",0,["STASH","left"]],["COPY",["ADD",["NODE"],["STASH","left"]],["NODE"]],["COPY",["SUB",["STASH","left"],1],["STASH","left"]]]],
+          "lazy": {"output":6}
+        },
+        {
+          "name": "Each execution of the body action starts with fresh TEMP",
+          "input": {"left":2,"seen":[]},
+          "jgraft": [
+            "JGRAFT",{"v":1},
+            ["WHILE",["LESS",0,["NODE","left"]],
+              ["COPY",["EXISTS",["TEMP","mark"]],["NODE","seen",false],
+                true,["TEMP","mark"],
+                ["SUB",["NODE","left"],1],"left"]]
+          ],
+          "lazy": {"output":{"left":0,"seen":[false,false]}}
+        },
+        {
+          "name": "Loop inside AT edits the selected node",
+          "input": {"child":{"left":2},"left":8},
+          "jgraft": ["JGRAFT",{"v":1},["AT","child",["WHILE",["LESS",0,["NODE","left"]],["COPY",["SUB",["NODE","left"],1],"left"]]]],
+          "lazy": {"output":{"child":{"left":0},"left":8}}
+        },
+        {
+          "name": "New condition value has the wrong type",
+          "input": {"run":true},
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",["NODE","run"],["COPY",1,"run"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Initially nonboolean input",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",["NODE"],["COPY",false,["NODE"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Reached condition failure",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",["FAIL"],["COPY",false,["NODE"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Reached body failure propagates",
+          "input": {"run":true},
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",["NODE","run"],["COPY",["FAIL"],["NODE"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Body guard rejects the graft",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",["NUM"],["MATCH",2]]],
+          "lazy": {"no_match":true}
+        },
+        {
+          "name": "Missing test",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["WHILE"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Literal number is not a boolean test",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",0]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed body skipped by a false condition",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["WHILE",false,["unknown-action"]]],
+          "lazy": {"output":{}},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    }
+  ]
+}

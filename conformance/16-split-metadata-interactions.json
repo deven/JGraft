@@ -1,0 +1,410 @@
+{
+  "version": 1,
+  "name": "Split metadata through array edits",
+  "desc": "Reconstruct edited fields to observe hidden separators and trimmings across transformations and origins.",
+  "tests": [
+    {
+      "name": "Extraction and assignment",
+      "desc": "JOIN exposes which separator and trimmings follow each array position.",
+      "tests": [
+        {
+          "name": "Slice the first two fields",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["SLICE",{"ofs":0,"len":2}]],["NODE"]]
+          ],
+          "lazy": {"output":" a!|  b?"}
+        },
+        {
+          "name": "Slice through the final field",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["SLICE",{"ofs":1,"len":2}]],["NODE"]]
+          ],
+          "lazy": {"output":"  b?;   c."}
+        },
+        {
+          "name": "Single field retains both trims",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["SLICE",{"ofs":1,"len":1}]],["NODE"]]
+          ],
+          "lazy": {"output":"  b?"}
+        },
+        {
+          "name": "Empty slice",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["SLICE",{"ofs":1,"len":0}]],["NODE"]]
+          ],
+          "lazy": {"output":""}
+        },
+        {
+          "name": "Rebuild from references in reverse order",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],[[["NODE",-1],["NODE",1],["NODE",0]]]],["NODE"]]
+          ],
+          "lazy": {"output":"   c.;  b?; a!"}
+        },
+        {
+          "name": "Rebuild from computed strings in reverse order",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],[[["CONCAT",["NODE",-1],""],["CONCAT",["NODE",1],""],["CONCAT",["NODE",0],""]]]],["NODE"]]
+          ],
+          "lazy": {"output":"c/b/a"}
+        },
+        {
+          "name": "Overwrite retains destination trims and separator",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["NODE",1],0],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":" b!|  b?;   c."}
+        },
+        {
+          "name": "Append a direct negative reference",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["NODE",-2],false],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":" a!|  b?;   c.;  b?"}
+        },
+        {
+          "name": "Append a computed string",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["CONCAT",["NODE",-2],""],false],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":" a!|  b?;   c.;   b"}
+        }
+      ]
+    },
+    {
+      "name": "Insertion, deletion and movement",
+      "desc": "Inserted values can inherit formatting from adjacent elements. Direct references can carry their own formatting.",
+      "tests": [
+        {
+          "name": "Insert at the front",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["SPLICE",["NODE"],{"ofs":0,"len":0},"N"],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":"N| a!|  b?;   c."}
+        },
+        {
+          "name": "Insert in the middle",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["SPLICE",["NODE"],{"ofs":1,"len":0},"N"],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":" a!| N|  b?;   c."}
+        },
+        {
+          "name": "Insert after the last field",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["SPLICE",["NODE"],{"ofs":3,"len":0},"N"],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":" a!|  b?;   c.;   N"}
+        },
+        {
+          "name": "Insert another field from the same array",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["SPLICE",["NODE"],{"ofs":1,"len":0},["NODE",1]],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":" a!|  b?;  b?;   c."}
+        },
+        {
+          "name": "Deletion removes a separator and both trims",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["SPLICE",["NODE"],{"ofs":1,"len":1}],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":" a!|   c."}
+        },
+        {
+          "name": "Splice replacement acts as insertion",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["SPLICE",["NODE"],{"ofs":1,"len":1},"N"],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":" a!| N|   c."}
+        },
+        {
+          "name": "Move the middle field to the beginning",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["MOVE",1,-0.5],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":"  b?; a!|   c."}
+        },
+        {
+          "name": "Move the first field into an occupied slot",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["MOVE",0,1],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":"  a?;   c."}
+        },
+        {
+          "name": "Queue two fields at one insertion point",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["MOVE",2,-0.5,1,-0.5],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":"   c.;  b?; a!"}
+        },
+        {
+          "name": "Move a field through an object property",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["MOVE",1,["TEMP","field"],["TEMP","field"],-0.5],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":"b| a!|   c."}
+        },
+        {
+          "name": "Move a field through an array in TEMP",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["MOVE",1,["TEMP","fields",0],["TEMP","fields",0],-0.5],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":"  b?; a!|   c."}
+        }
+      ]
+    },
+    {
+      "name": "Concatenation and iteration",
+      "desc": "Reordered views share their source origin. Separate executions of SPLIT create independent origins.",
+      "tests": [
+        {
+          "name": "Reorder three slices",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["CONCAT",["SLICE",{"ofs":1,"len":1}],["SLICE",{"ofs":0,"len":1}],["SLICE",{"ofs":2,"len":1}]]],["NODE"]]
+          ],
+          "lazy": {"output":"  b?; a!|   c."}
+        },
+        {
+          "name": "Empty operands surrounding a split array",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["CONCAT",[[]],["NODE"],[[]]]],["NODE"]]
+          ],
+          "lazy": {"output":" a!|  b?;   c."}
+        },
+        {
+          "name": "Plain array after a slice",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["CONCAT",["SLICE",{"ofs":0,"len":1}],[["x","y"]]]],["NODE"]]
+          ],
+          "lazy": {"output":" a!| x| y"}
+        },
+        {
+          "name": "Different origin follows first slice",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["CONCAT",["SLICE",{"ofs":0,"len":1}],["SPLIT",["CONST","fmt"],"    x?;y!"]]],["NODE"]]
+          ],
+          "lazy": {"output":" a!| x| y"}
+        },
+        {
+          "name": "Reverse order changes the winning origin",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["CONCAT",["SPLIT",["CONST","fmt"],"    x?;y!"],["SLICE",{"ofs":0,"len":1}]]],["NODE"]]
+          ],
+          "lazy": {"output":"    x?;y!;a"}
+        },
+        {
+          "name": "A second split of the same text has a different origin",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["CONCAT",["SLICE",{"ofs":0,"len":1}],["SPLIT",["CONST","fmt"]," a!|  b?;   c."]]],["NODE"]]
+          ],
+          "lazy": {"output":" a!| a| b| c"}
+        },
+        {
+          "name": "Empty slice lets following split supply formatting",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["CONCAT",["SLICE",{"ofs":1,"len":0}],["SPLIT",["CONST","fmt"],"    x?;y!"]]],["NODE"]]
+          ],
+          "lazy": {"output":"    x?;y!"}
+        },
+        {
+          "name": "MAP replaces each field in place",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["MAP",["CONCAT",["NODE"],"+"]]],["NODE"]]
+          ],
+          "lazy": {"output":" a+!|  b+?;   c+."}
+        },
+        {
+          "name": "FILTER keeps selected field formatting",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["FILTER",["NONE","b"]]],["NODE"]]
+          ],
+          "lazy": {"output":" a!|   c."}
+        },
+        {
+          "name": "FILTER selects no fields",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["FILTER","z"]],["NODE"]]
+          ],
+          "lazy": {"output":""}
+        },
+        {
+          "name": "MAP after FILTER",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["JOIN",["CONST","fmt"],["MAP",["CONCAT","[",["NODE"],"]"],["FILTER",["NONE","a"]]]],["NODE"]]
+          ],
+          "lazy": {"output":"  [b]?;   [c]."}
+        }
+      ]
+    },
+    {
+      "name": "Storage and nested edits",
+      "desc": "Whole arrays retain their formatting across namespace transfers and nested text edits.",
+      "tests": [
+        {
+          "name": "Copy split array to STASH and edit original",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["NODE"],["STASH","saved"],"B",1],
+            ["COPY",[[["JOIN",["CONST","fmt"],["STASH","saved"]],["JOIN",["CONST","fmt"]]]],["NODE"]]
+          ],
+          "lazy": {"output":[" a!|  b?;   c."," a!|  B?;   c."]}
+        },
+        {
+          "name": "Move whole array through a namespace",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",["NODE"],["STASH","a"]],
+            ["MOVE",["STASH","a"],["STASH","b"]],
+            ["COPY",["JOIN",["CONST","fmt"],["STASH","b"]],["NODE"]]
+          ],
+          "lazy": {"output":" a!|  b?;   c."}
+        },
+        {
+          "name": "A plain array adopts an inserted reference origin",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["COPY",[[]],["STASH","a"],["NODE",1],["STASH","a",false],["NODE",0],["STASH","a",false]],
+            ["COPY",["JOIN",["CONST","fmt"],["STASH","a"]],["NODE"]]
+          ],
+          "lazy": {"output":"  b?; a!"}
+        },
+        {
+          "name": "Repurpose an emptied array with a different origin",
+          "input": " a!|  b?;   c.",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["COPY",["SPLIT",["CONST","fmt"]],["NODE"]],
+            ["SPLICE",["NODE"],{"ofs":0,"len":3}],
+            ["COPY",["SPLIT",["CONST","fmt"],"    x?;y!"],["STASH","other"],["STASH","other",0],false,["STASH","other",1],false],
+            ["COPY",["JOIN",["CONST","fmt"]],["NODE"]]
+          ],
+          "lazy": {"output":"    x?;y!"}
+        },
+        {
+          "name": "Nested ATSPLIT preserves both levels of separators",
+          "input": " a:b!|  c:d?",
+          "jgraft": [
+            "JGRAFT", {"v":1,"const":["fmt",{"sep":["REG",["CHARS","|;"]],"default":"/","ltrim":["REG",["REP",1,-1," "]],"rtrim":["REG",["CHARS","!?."]]}]},
+            ["ATSPLIT",["NODE"],["CONST","fmt"],["ATSPLIT",0,":",["COPY","B",1]],["COPY","C:D",1]]
+          ],
+          "lazy": {"output":" a:B!|  C:D?"}
+        }
+      ]
+    }
+  ]
+}

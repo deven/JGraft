@@ -1,0 +1,326 @@
+{
+  "version": 1,
+  "name": "Macros and calls",
+  "desc": "Delayed action, value and pattern bodies, expansion contexts, stash overlays, recursive calls and validation.",
+  "tests": [
+    {
+      "name": "Creation and invocation",
+      "desc": "A macro body uses the nodes and namespaces in scope when it is invoked. Creation itself can precede a reference used by the body.",
+      "tests": [
+        {
+          "name": "Unused failing bodies are never executed",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1,"const":["v",["VAL",["FAIL"]],"a",["ACT",["COPY",["FAIL"],["NODE"]]]]},["COPY",1,["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "Forward value reference",
+          "input": {"k":7},
+          "jgraft": ["JGRAFT",{"v":1,"const":["v",["VAL",["CONST","later"]],"later",["NODE","k"]]},["COPY",["EX","v"],["NODE"]]],
+          "lazy": {"output":7}
+        },
+        {
+          "name": "Value macro observes constant shadow in nested JGRAFT",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1,"const":["v",["VAL",["CONST","k"]],"k","outer"]},["JGRAFT",{"const":["k","inner"]},["COPY",["EX","v"],["NODE"]]]],
+          "lazy": {"output":"inner"}
+        },
+        {
+          "name": "Explicit CONST path and shorthand agree",
+          "input": 5,
+          "jgraft": ["JGRAFT",{"v":1,"const":["v",["VAL",["ADD",["NODE"],1]]]},["COPY",[[["EX","v"],["EX",["CONST","v"]]]],["NODE"]]],
+          "lazy": {"output":[6,6]}
+        },
+        {
+          "name": "Repeated invocation sees edited input",
+          "input": {"n":1},
+          "jgraft": ["JGRAFT",{"v":1,"const":["v",["VAL",["NODE","n"]]]},["COPY",["EX","v"],"first",2,"n",["EX","v"],"second"]],
+          "lazy": {"output":{"n":2,"first":1,"second":2}}
+        },
+        {
+          "name": "Value macro reads localized NODE and TEMP",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1,"const":["v",["VAL",[[["TEMP","k"],["NODE"]]]]]},["COPY",["LOCAL",["EX","v"],"k",2,null,3],["NODE"]]],
+          "lazy": {"output":[2,3]}
+        },
+        {
+          "name": "Value returned as pattern remains literal data",
+          "input": 7,
+          "jgraft": ["JGRAFT",{"v":1,"const":["v",["VAL",["DATA",["NUM"]]]]},["COPY",["IS",["EX","v"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Action executes against the current AT node",
+          "input": {"a":{"n":1}},
+          "jgraft": ["JGRAFT",{"v":1,"const":["set",["ACT",["COPY",2,"n"]]]},["AT","a",["CALL","set"]]],
+          "lazy": {"output":{"a":{"n":2}}}
+        },
+        {
+          "name": "Action can be looked up from STASH",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1,"const":["a",["ACT",["COPY",7,["NODE"]]]]},["COPY",["CONST","a"],["STASH","action"]],["CALL",["STASH","action"]]],
+          "lazy": {"output":7}
+        },
+        {
+          "name": "Value can be looked up from TEMP in the same action",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1,"const":["v",["VAL",8]]},["COPY",["CONST","v"],["TEMP","v"],["EX",["TEMP","v"]],["NODE"]]],
+          "lazy": {"output":8}
+        }
+      ]
+    },
+    {
+      "name": "Pattern expansion",
+      "desc": "A single PAT or REG operand retains its context. Zero or multiple operands expand as a sequence.",
+      "tests": [
+        {
+          "name": "Node predicate",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["PAT",["NUM"]]]},["COPY",["EX","m"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Empty array sequence",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["PAT"]]},["COPY",["IS",[[["EX","m"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Multi-operand PAT",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["PAT",1,2]]},["COPY",["IS",[[["EX","m"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Array PAT mismatch",
+          "input": [2,1],
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["PAT",1,2]]},["COPY",["IS",[[["EX","m"]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Inherited exactness",
+          "input": {"a":1,"b":2},
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["PAT",{"a":1}]]},["COPY",["IS",["EX","m"]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Empty REG",
+          "input": "",
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["REG"]]},["COPY",["STR",["EX","m"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Multi-operand REG",
+          "input": "xaby",
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["REG","a","b"]]},["COPY",["STR",["EX","m"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "REG with bounds",
+          "input": "aab",
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["REG",["START"],["REP",2,0,"a"],"b",["END"]]]},["COPY",["STR",["EX","m"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "VAL supplies a character sequence",
+          "input": "abcd",
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["VAL","bc"]]},["COPY",["STR",["EX","m"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Nested character set expression",
+          "input": "q",
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["REG",["CHARS","a","z"]]]},["COPY",["STR",["CHARS",["CONST","m"],false,"z"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "PAT expands another PAT",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1,"const":["one",["PAT",1],"both",["PAT",["EX","one"],2]]},["COPY",["IS",[[["EX","both"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Expanded group config sees array under preparation",
+          "input": ["tag",1],
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["PAT",["GROUP",{"name":["NODE",0]},1]]]},["COPY",["CAPTURE",[["tag",["EX","m"]]]],["NODE"]]],
+          "lazy": {"output":{"tag":{"path":[],"ofs":1,"len":1,"lim":2}}}
+        },
+        {
+          "name": "REG used in array context",
+          "input": [1],
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["REG","a"]]},["COPY",["IS",[[["EX","m"]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "PAT used in character context",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["PAT","a"]]},["COPY",["STR",["EX","m"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Multi-operand PAT used on isolated node",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["PAT",1,2]]},["COPY",["IS",["EX","m"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "CALL stash overlays",
+      "desc": "Each override sees earlier overrides. Nested calls restore the parent overlay, and edits inside shared subtrees persist.",
+      "tests": [
+        {
+          "name": "Sequential overrides and caller restoration",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1,"const":["save",["ACT",["COPY",["STASH","v"],"during",["STASH","label"],"label"]]]},["COPY",5,["STASH","v"]],["CALL","save","v",["ADD",["STASH","v"],1],"label",["CASTSTR",["STASH","v"]]],["COPY",["STASH","v"],"after",["EXISTS",["STASH","label"]],"leaked"]],
+          "lazy": {"output":{"during":6,"label":"6","after":5,"leaked":false}}
+        },
+        {
+          "name": "Shared subtree edited and overridden subtree restored",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1,"const":["edit",["ACT",["COPY","changed",["STASH","shared","v"],"local",["STASH","private","v"]]]]},["COPY",{"v":"before"},["STASH","shared"],{"v":"original"},["STASH","private"]],["CALL","edit","private",{"v":"replacement"}],["COPY",["STASH"],["NODE"]]],
+          "lazy": {"output":{"shared":{"v":"changed"},"private":{"v":"original"}}}
+        },
+        {
+          "name": "Adding a root stash property inside CALL is local",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1,"const":["edit",["ACT",["COPY",5,["STASH","temporary"]]]]},["CALL","edit"],["COPY",["STASH"],["NODE"]]],
+          "lazy": {"output":{}}
+        },
+        {
+          "name": "Nested call restores enclosing override",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1,"const":["inner",["ACT",["COPY",["STASH","v"],"inner"]],"outer",["ACT",["MATCH",{},["CALL","inner","v","inner"],["COPY",["STASH","v"],"outer"]]]]},["COPY","caller",["STASH","v"]],["CALL","outer","v","outer"],["COPY",["STASH","v"],"after"]],
+          "lazy": {"output":{"inner":"inner","outer":"outer","after":"caller"}}
+        },
+        {
+          "name": "Integer override name",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1,"const":["a",["ACT",["COPY",["STASH","1"],["NODE"]]]]},["CALL","a",1,"one"]],
+          "lazy": {"output":"one"}
+        },
+        {
+          "name": "Finite recursive action calls decrement an override",
+          "input": {"sum":0},
+          "jgraft": ["JGRAFT",{"v":1,"const":["sum",["ACT",["IF",["IS",true,["LESS",0,["STASH","n"]]],["MATCH",{},["COPY",["ADD",["NODE","sum"],["STASH","n"]],"sum"],["CALL","sum","n",["SUB",["STASH","n"],1]]]]]]},["CALL","sum","n",3]],
+          "lazy": {"output":{"sum":6}}
+        },
+        {
+          "name": "Finite recursive value expansion",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1,"const":["count",["VAL",["CASE",0,0,["ADD",1,["LOCAL",["EX","count"],null,["SUB",["NODE"],1]]]]]]},["COPY",["EX","count"],["NODE"]]],
+          "lazy": {"output":3}
+        }
+      ]
+    },
+    {
+      "name": "Errors and delayed validation",
+      "desc": "Invalid syntax may be deferred until invocation in lazy mode. Input-dependent invalid references fail at runtime.",
+      "tests": [
+        {
+          "name": "Value cannot be exported from a selected binding",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["VAL",7]]},["COPY",["CASE",true,["CONST","m"],7],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Action cannot be exported from a selected binding",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["ACT",["COPY",7,["NODE"]]]]},["COPY",["CASE",true,["CONST","m"],7],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Pattern cannot be exported from a selected binding",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["PAT",1]]},["COPY",["CASE",true,["CONST","m"],7],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Regex cannot be exported from a selected binding",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["REG","a"]]},["COPY",["CASE",true,["CONST","m"],7],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "MOVE cannot export an internally stored macro",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1,"const":["m",["VAL",1]]},["COPY",["CASE",true,["CONST","m"],0],["STASH","v"]],["MOVE",["STASH","v"],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "ACT missing body",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ACT"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "ACT extra body",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["ACT",["COPY",1,["NODE"]],["COPY",2,["NODE"]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "VAL missing body",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["VAL"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "VAL extra body",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["VAL",1,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "EX missing path",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["EX"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "EX extra path",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["EX","a","b"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CALL requires a path",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1},["CALL"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Override needs a value",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1,"const":["a",["ACT",["COPY",1,["NODE"]]]]},["CALL","a","n"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Missing expression macro chosen by input",
+          "input": {"key":"no"},
+          "jgraft": ["JGRAFT",{"v":1,"const":["yes",["VAL",1]]},["COPY",["EX",["CONST",["NODE","key"]]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Missing action macro chosen by input",
+          "input": {"key":"no"},
+          "jgraft": ["JGRAFT",{"v":1,"const":["yes",["ACT",["COPY",1,["NODE"]]]]},["CALL",["CONST",["NODE","key"]]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Unused malformed value body",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1,"const":["v",["VAL",["LENGTH",1,2]]]},["COPY",1,["NODE"]]],
+          "lazy": {"output":1},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "Reached malformed value body",
+          "input": 0,
+          "jgraft": ["JGRAFT",{"v":1,"const":["v",["VAL",["LENGTH",1,2]]]},["COPY",["EX","v"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    }
+  ]
+}

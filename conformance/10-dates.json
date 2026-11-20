@@ -1,0 +1,500 @@
+{
+  "version": 1,
+  "name": "Dates and timestamps",
+  "desc": "Parsing, precision, virtual fields, validation, calendar order and timestamp comparisons.",
+  "tests": [
+    {
+      "name": "Required string forms",
+      "desc": "CASTSTR exposes the logical precision, local fields, and offset of each parsed value.",
+      "tests": [
+        {
+          "name": "Gregorian cutoff year",
+          "input": "1583-01-01",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"1583-01-01"}
+        },
+        {
+          "name": "Basic date",
+          "input": "20000229",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2000-02-29"}
+        },
+        {
+          "name": "Extended year",
+          "input": "12024-03-01",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"12024-03-01"}
+        },
+        {
+          "name": "Calendar datetime",
+          "input": "2024-02-29T07:08:09",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-02-29 07:08:09"}
+        },
+        {
+          "name": "Basic datetime",
+          "input": "20240229T070809",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-02-29 07:08:09"}
+        },
+        {
+          "name": "Space separator",
+          "input": "2024-02-29 07:08:09",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-02-29 07:08:09"}
+        },
+        {
+          "name": "Zero offset",
+          "input": "2024-02-29T07:08:09+00:00",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-02-29T07:08:09Z"}
+        },
+        {
+          "name": "Zulu",
+          "input": "20240229T070809Z",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-02-29T07:08:09Z"}
+        },
+        {
+          "name": "Hour offset",
+          "input": "2024-02-29T07:08:09+05",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-02-29T07:08:09+05:00"}
+        },
+        {
+          "name": "Colon offset",
+          "input": "2024-02-29T07:08:09-03:30",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-02-29T07:08:09-03:30"}
+        },
+        {
+          "name": "Compact offset",
+          "input": "2024-02-29T07:08:09+0545",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-02-29T07:08:09+05:45"}
+        },
+        {
+          "name": "Unicode minus",
+          "input": "2024-02-29T07:08:09−0045",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-02-29T07:08:09-00:45"}
+        },
+        {
+          "name": "Leap second on an arbitrary day",
+          "input": "2024-04-15T23:59:60Z",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-04-15T23:59:60Z"}
+        }
+      ]
+    },
+    {
+      "name": "Object fields and virtual properties",
+      "desc": "The presence of time fields determines precision before defaults are applied.",
+      "tests": [
+        {
+          "name": "Year alone",
+          "input": {"year":2024},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-01-01"}
+        },
+        {
+          "name": "Day without month",
+          "input": {"year":2024,"day":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-01-02"}
+        },
+        {
+          "name": "Hour present and zero",
+          "input": {"year":2024,"hour":0},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-01-01 00:00:00"}
+        },
+        {
+          "name": "Only minute supplied",
+          "input": {"year":2024,"minute":5},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-01-01 00:05:00"}
+        },
+        {
+          "name": "Only seconds supplied",
+          "input": {"year":2024,"second":60},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-01-01 00:00:60"}
+        },
+        {
+          "name": "Offset without clock fields",
+          "input": {"year":2024,"tz_offset":90},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-01-01T00:00:00+01:30"}
+        },
+        {
+          "name": "Explicit zero offset",
+          "input": {"year":2024,"tz_offset":0},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":"2024-01-01T00:00:00Z"}
+        },
+        {
+          "name": "Explicit value computes field values",
+          "input": {"y":2024},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE",{"year":["NODE","y"],"month":2,"day":29}]],["NODE"]]],
+          "lazy": {"output":"2024-02-29"}
+        },
+        {
+          "name": "Virtual timestamp fields retain the local calendar",
+          "input": "2024-01-01T00:15:60-03:30",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["TEMP","d","year"],["TEMP","d","month"],["TEMP","d","day"],["TEMP","d","hour"],["TEMP","d","minute"],["TEMP","d","second"],["TEMP","d","tz_offset"]]],"d",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":[2024,1,1,0,15,60,-210]}
+        },
+        {
+          "name": "Date available fields",
+          "input": "2024-01-01",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["EXISTS",["TEMP","d","hour"]],["EXISTS",["TEMP","d","tz_offset"]]]],"d",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":[false,false]}
+        },
+        {
+          "name": "Datetime available fields",
+          "input": "2024-01-01T00:00:00",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["EXISTS",["TEMP","d","hour"]],["EXISTS",["TEMP","d","tz_offset"]]]],"d",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":[true,false]}
+        },
+        {
+          "name": "Timestamp available fields",
+          "input": "2024-01-01T00:00:00Z",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["EXISTS",["TEMP","d","hour"]],["EXISTS",["TEMP","d","tz_offset"]]]],"d",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":[true,true]}
+        },
+        {
+          "name": "Existing timestamp passes through CASTDATE",
+          "input": "2024-02-29T12:00:00Z",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE",["CASTDATE"]]],["NODE"]]],
+          "lazy": {"output":"2024-02-29T12:00:00Z"}
+        },
+        {
+          "name": "Logical date retained across stash and action-local TEMP",
+          "input": "2024-02-29",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTDATE"],["STASH","date"]],["COPY",["STASH","date"],["TEMP","saved"],["TEMP","saved","day"],["NODE"]]],
+          "lazy": {"output":29}
+        }
+      ]
+    },
+    {
+      "name": "Fractional precision",
+      "desc": "Equivalent decimal separators agree. Truncation may discard unsupported digits but cannot carry into the next second.",
+      "tests": [
+        {
+          "name": "Comma and point agree at second 09",
+          "input": ["2024-01-02T00:00:09.987654321987654321Z","2024-01-02T00:00:09,987654321987654321Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Fraction remains within second 09",
+          "input": "2024-01-02T00:00:09.987654321987654321Z",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["LESSEQ",9,["TEMP","d","second"]],["LESS",["TEMP","d","second"],10]]],"d",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":[true,true]}
+        },
+        {
+          "name": "Comma and point agree at second 60",
+          "input": ["2024-01-02T00:00:60.987654321987654321Z","2024-01-02T00:00:60,987654321987654321Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Fraction remains within second 60",
+          "input": "2024-01-02T00:00:60.987654321987654321Z",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LOCAL",[[["LESSEQ",60,["TEMP","d","second"]],["LESS",["TEMP","d","second"],61]]],"d",["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":[true,true]}
+        }
+      ]
+    },
+    {
+      "name": "DATE predicate and validation",
+      "desc": "DATE recognizes CASTDATE inputs. Dynamic conversion failures remain observable outside a predicate.",
+      "tests": [
+        {
+          "name": "Accept date text",
+          "input": "2024-02-29",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Accept datetime text",
+          "input": "2024-01-01T00:00:00",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Accept timestamp text",
+          "input": "2024-01-01T00:00:00Z",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Accept calendar fields",
+          "input": {"year":2000,"month":2,"day":29},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Predicate on the converted value",
+          "input": "2024-01-01",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["DATE"],["CASTDATE"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Common year leap day fails DATE",
+          "input": "2023-02-29",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Common year leap day fails CASTDATE",
+          "input": "2023-02-29",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Century year without leap day fails DATE",
+          "input": "1900-02-29",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Century year without leap day fails CASTDATE",
+          "input": "1900-02-29",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "April 31 fails DATE",
+          "input": "2024-04-31",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "April 31 fails CASTDATE",
+          "input": "2024-04-31",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Month zero fails DATE",
+          "input": {"year":2024,"month":0},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Month zero fails CASTDATE",
+          "input": {"year":2024,"month":0},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Month thirteen fails DATE",
+          "input": {"year":2024,"month":13},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Month thirteen fails CASTDATE",
+          "input": {"year":2024,"month":13},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Day zero fails DATE",
+          "input": {"year":2024,"day":0},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Day zero fails CASTDATE",
+          "input": {"year":2024,"day":0},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Minute sixty fails DATE",
+          "input": {"year":2024,"minute":60},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Minute sixty fails CASTDATE",
+          "input": {"year":2024,"minute":60},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Second sixty-one fails DATE",
+          "input": {"year":2024,"second":61},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Second sixty-one fails CASTDATE",
+          "input": {"year":2024,"second":61},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Hour twenty-five fails DATE",
+          "input": {"year":2024,"hour":25},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Hour twenty-five fails CASTDATE",
+          "input": {"year":2024,"hour":25},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Missing year fails DATE",
+          "input": {"month":2,"day":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Missing year fails CASTDATE",
+          "input": {"month":2,"day":1},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Null fails DATE",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE"],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Null fails CASTDATE",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["CASTDATE"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Excess CASTDATE operand",
+          "input": "2024-01-01",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTDATE",["NODE"],["NODE"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "DATE with operand",
+          "input": "2024-01-01",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["DATE",["NODE"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Malformed conversion in skipped value",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",1,0,["CASTDATE",["NODE"],["NODE"]]],["NODE"]]],
+          "lazy": {"output":0},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "Calendar order and instant equality",
+      "desc": "Dates and datetimes compare fields in calendar order. Timestamp comparisons account for offsets before comparing instants.",
+      "tests": [
+        {
+          "name": "Dates across leap day",
+          "input": ["2024-02-29","2024-03-01"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESSEQ",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]]]],["NODE"]]],
+          "lazy": {"output":[false,true,true]}
+        },
+        {
+          "name": "Later clock time",
+          "input": ["2024-01-01T01:00:00","2024-01-01T00:59:59"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESSEQ",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]]]],["NODE"]]],
+          "lazy": {"output":[false,false,false]}
+        },
+        {
+          "name": "Leap second follows ordinary second",
+          "input": ["2024-01-01T23:59:59Z","2024-01-01T23:59:60Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESSEQ",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]]]],["NODE"]]],
+          "lazy": {"output":[false,true,true]}
+        },
+        {
+          "name": "Different offsets at same instant",
+          "input": ["2024-01-01T00:15:00+01:00","2023-12-31T23:15:00Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESSEQ",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]]]],["NODE"]]],
+          "lazy": {"output":[true,false,true]}
+        },
+        {
+          "name": "Local order reversed by offset",
+          "input": ["2024-01-01T00:00:00-02","2024-01-01T01:00:00Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESSEQ",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]]]],["NODE"]]],
+          "lazy": {"output":[false,false,false]}
+        },
+        {
+          "name": "Leap day across midnight",
+          "input": ["2024-03-01T00:10:00+00:30","2024-02-29T23:41:00Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESSEQ",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]]]],["NODE"]]],
+          "lazy": {"output":[false,true,true]}
+        },
+        {
+          "name": "Leap second offset equivalence",
+          "input": ["2024-01-02T00:59:60+01","2024-01-01T23:59:60Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[[["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["LESSEQ",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]]]],["NODE"]]],
+          "lazy": {"output":[true,false,true]}
+        },
+        {
+          "name": "Date and datetime differ in precision",
+          "input": ["2024-01-01","2024-01-01T00:00:00"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Date and datetime cannot be ordered by LESS",
+          "input": ["2024-01-01","2024-01-01T00:00:00"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Date and datetime cannot be ordered by LESSEQ",
+          "input": ["2024-01-01","2024-01-01T00:00:00"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Datetime and timestamp differ in precision",
+          "input": ["2024-01-01T00:00:00","2024-01-01T00:00:00Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Datetime and timestamp cannot be ordered by LESS",
+          "input": ["2024-01-01T00:00:00","2024-01-01T00:00:00Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Datetime and timestamp cannot be ordered by LESSEQ",
+          "input": ["2024-01-01T00:00:00","2024-01-01T00:00:00Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Date and timestamp differ in precision",
+          "input": ["2024-01-01","2024-01-01T00:00:00Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "Date and timestamp cannot be ordered by LESS",
+          "input": ["2024-01-01","2024-01-01T00:00:00Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESS",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "Date and timestamp cannot be ordered by LESSEQ",
+          "input": ["2024-01-01","2024-01-01T00:00:00Z"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["LESSEQ",["CASTDATE",["NODE",0]],["CASTDATE",["NODE",1]]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        }
+      ]
+    }
+  ]
+}
