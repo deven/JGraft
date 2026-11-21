@@ -423,6 +423,19 @@
           "lazy": {"output":false}
         },
         {
+          "name": "Reading NODE while testing a missing property",
+          "desc": "Constructing a singleton array requires reading the property. If the read succeeds, its length is always one.",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["HAS",{"x":["IS",1,["LENGTH",[[["NODE"]]]]]}],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "The same NODE read succeeds for a present null",
+          "input": {"x":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["HAS",{"x":["IS",1,["LENGTH",[[["NODE"]]]]]}],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
           "name": "Missing property can satisfy NONE in exact mode",
           "input": {},
           "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",{"x":["NONE",["EXISTS"]]}],["NODE"]]],

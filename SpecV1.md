@@ -551,7 +551,8 @@ depth-first pre-traversal order of the sequences of the current array:
   * Implicit "longest" goal for a match overall, if requested by the caller.
   * For each sequence having an active position or length preference:
     * Earliest ("leftmost") start of a match.
-  * For each capture-producing substructure in the sequence specification:
+  * For each node in the sequence specification classified as having the
+    potential to capture from a subtree:
     * <span id="earliest-substructure-match">Earliest array element at which
       the substructure matches.
       </span>
@@ -571,7 +572,14 @@ from 5, "prefix" breaks the tie pushing "target" to the latter position.
 
 The fifth rule has no bearing on the boundaries of captures in the current
 array; it resolves ambiguities in selecting which array element should provide
-captures from deeper arrays or strings.  Consider this example:
+captures from deeper arrays or strings.  The "potentially capturing" nodes,
+classified after preparation has expanded any macros in the sequence, are
+defined as objects, escaped arrays, `ARRAY`, `STR`, `IS`, and `HAS`, but with
+the usual exclusions on pattern branches which may not provide captures.
+(The "potential" is due to the fact that `EX` macros in a subtree might expand
+to something with a capture or not.) All implementations must use this
+classification regardless of whether static analysis can determine whether a
+capture is truly possible.  Consider this example:
 
     [[
       [REP],
@@ -969,11 +977,10 @@ The following conditions cause an `INVALID_GRAFT` error:
     Pre-evaluation types are determined as:
       * Literals: the known type of the value.
       * `LOCAL` expressions: the pre-evaluation type of its root expression
-      * `FAIL` expressions: always fail with `RUNTIME_ERROR` and are exempt
-        from type tests.
+      * `FAIL` expressions: exempt from type tests.
+      * `CASE` and reference expressions: assumed to be any type
       * Any other expression: the range of possible return types of the root
-        expression without considering its contents.  Reference expressions and
-        `CASE` are assumed to be any type.
+        expression without considering its contents.
   * Pre-evaluation types do not intersect between supplied arguments which must
     match.  For example, `CONCAT` requires all arguments to be strings or all
     arguments to be arrays.  `FAIL` expressions are still exempt.
@@ -1011,11 +1018,21 @@ When checking argument domains, an argument which appears to be a directive but
 lacks a valid opcode counts as a failure at this directive.  Only the opcode of
 an argument is inspected at this point; validation failures according to that
 opcode are only discovered when its execution begins or when matching needs to
-inspect it.  This does not force implementations to test these aspects in any
+inspect it.  As an exception, `LOCAL` must additionally have a valid opcode or
+structure at the first argument (potentially recursively), since this is used
+for the domain check.
+This does not force implementations to test these aspects in any
 particular order; they must only defer failing with `RUNTIME_ERROR` until these
 checks on the current directive have completed.  A structurally invalid graft
 may apply cleanly so long as the structurally invalid portions do not need to
-be used.  An implementation may eagerly validate all the child directives even
+be used.  Note that an options object must still meet the behavior contract of
+a value-context expression; after the checks above, it must be evaluated in
+full even if there are defined, but unused, properties.  Unused properties must
+also pass validation.  When lazily evaluating a value expression, iteration
+order of properties is implementation-defined, and this may cause a
+`RUNTIME_ERROR` to mask an `INVALID_GRAFT` if both were present in the tree.
+
+An implementation may still eagerly validate all the child directives even
 in lazy mode so long as errors, including `INVALID_GRAFT`, are deferred until
 execution uses that directive.  It also means that implementations which
 compile the full JGraft before execution must include the ability to hold the
@@ -1718,7 +1735,11 @@ current node, rather than just a pointer to it.
 
 The current node is defined at the start of every action, though when
 evaluating an expression it is possible for the current node to be undefined.
-See [matching](#matching).
+See [matching](#matching).  In particular, it will be undefined when testing
+an object property that has a specification but no property in the object.
+Also, when array matching tests an expression at the final position of the
+array which could otherwise be a zero-width match, it will fail if it attempts
+to access the value of `NODE` (unless negated with e.g. `CANT`).
 
 ### Match Expressions
 
@@ -2152,6 +2173,10 @@ evaluate to integers.  The value of `min` must be non-negative.  The value of
 ("same as min" is particularly useful if `min` is a complex expression)
 Otherwise, `max` must have a value greater than or equal to `min`.
 `match_expr` is a [match context](#match-context) expression.
+The arguments of `REP` may use the expressions `NODE` and `CURPROP`, which see
+the element at the initial position and its index, respectively.  When these
+are used (possibly via `WITH` / `TEMP`), the arguments need to be re-evaluated
+for each initial position tested.
 
 The default `match_expr` is `[EXISTS]`, which basically just consumes elements.
 In the zero argument form, `min` defaults to `0` and `max` defaults to
@@ -2420,7 +2445,9 @@ which may differ from the host language's concept of "length".
     [CURPROP]
 
 If the current node is a property of an object, return the property name, else
-if it is an element of an array, return the element number, else return `null`.
+if it is an element of an array, return the element number, else if matching at
+the position past the last element of the array, return the array length,
+else return `null`.
 
 This is useful when iterating over an array in a match expression or `MAP` /
 `REDUCE` / `FILTER` expression to know which array index is being processed.

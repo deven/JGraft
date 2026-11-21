@@ -77,6 +77,67 @@
       ]
     },
     {
+      "name": "LOCAL roots and value-object evaluation",
+      "desc": "The enclosing directive needs the root of LOCAL for its domain check. In a constructed object, each property value is a separate expression.",
+      "tests": [
+        {
+          "name": "An unknown LOCAL root is visible to the enclosing OR",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["LOCAL",["UNKNOWN"],"k",0]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "An unescaped empty LOCAL root has no opcode",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["LOCAL",[],"k",0]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "An omitted LOCAL root cannot supply the operand type",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["LOCAL"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "A compatible root opcode defers its own arity error",
+          "desc": "BOOL supplies the boolean result type needed by OR. Short-circuiting leaves the malformed BOOL unevaluated.",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["OR",true,["LOCAL",["BOOL",1],"k",0]],["NODE"]]],
+          "lazy": {"output":true},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "An escaped array is a valid LOCAL root",
+          "desc": "CASE skips the escaped array and its contents.",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",true,"selected",["LOCAL",[[["UNKNOWN"]]],"k",0]],["NODE"]]],
+          "lazy": {"output":"selected"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "A literal object is a valid LOCAL root",
+          "input": true,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASE",true,"selected",["LOCAL",{"x":["UNKNOWN"]},"k",0]],["NODE"]]],
+          "lazy": {"output":"selected"},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "LOCAL root validation takes priority over a runtime failure",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CONCAT",["FAIL"],["LOCAL",["UNKNOWN"],"k",0]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Independent property errors admit either lazy outcome",
+          "desc": "Either property can be evaluated first. Strict local validation detects the malformed LENGTH.",
+          "input": {},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",{"missing":["NODE","missing"],"malformed":["LENGTH","a","b"]},["NODE"]]],
+          "lazy": {"runtime_error":true,"invalid_graft":true},
+          "strict": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
       "name": "Preparation reaches participating sequences",
       "desc": "Array configuration and macro selection run before exploring successor positions, including alternatives whose captures are suppressed.",
       "tests": [

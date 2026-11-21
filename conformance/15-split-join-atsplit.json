@@ -262,6 +262,51 @@
       ]
     },
     {
+      "name": "Evaluation of unused options",
+      "desc": "SPLIT and JOIN evaluate the full options object, including fields used only by the other operation.",
+      "tests": [
+        {
+          "name": "SPLIT evaluates a computed default",
+          "desc": "Splitting uses the separator alone, but constructing the options requires the missing fallback property.",
+          "input": {"text":"a,b"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","default":["NODE","fallback"]},["NODE","text"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "SPLIT validates the computed type of its default",
+          "input": {"text":"a,b","fallback":7},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","default":["NODE","fallback"]},["NODE","text"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "SPLIT validates an expression inside an unused default",
+          "input": {"text":"a,b"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":",","default":["CASTSTR",1,2]},["NODE","text"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Invalid literal default takes priority over a missing separator",
+          "input": {"text":"a,b"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["NODE","sep"],"default":7},["NODE","text"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "Separate failures while constructing the split options",
+          "desc": "The separator read fails at runtime. The default has a compatible result type, and evaluating its CASTSTR reveals an arity error.",
+          "input": {"text":"a,b"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["SPLIT",{"sep":["NODE","sep"],"default":["CASTSTR",1,2]},["NODE","text"]],["NODE"]]],
+          "lazy": {"runtime_error":true,"invalid_graft":true},
+          "strict": {"invalid_graft":true}
+        },
+        {
+          "name": "JOIN evaluates a trim option even on an empty array",
+          "input": {"parts":[]},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["JOIN",{"sep":",","trim":["NODE","trim"]},["NODE","parts"]],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        }
+      ]
+    },
+    {
       "name": "Local validation",
       "desc": "Literal option errors are invalid grafts. Wrong source types and malformed options obtained at runtime fail when reached.",
       "tests": [

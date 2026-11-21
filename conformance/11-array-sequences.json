@@ -352,6 +352,76 @@
       ]
     },
     {
+      "name": "Repetition at a candidate position",
+      "desc": "REP evaluates its bounds with the current element and index at the start of each run. The final position has an index and no element.",
+      "tests": [
+        {
+          "name": "Read the exact bound at each start",
+          "desc": "The first run consumes one element and the second consumes two. Reusing a single exact bound cannot cover three elements.",
+          "input": [1,2,"tail"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0,["REP",["NODE"]]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Read the initial index at each start",
+          "desc": "The runs start at indices 0 and 1, giving exact counts of one and two.",
+          "input": ["a","b","c"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0,["REP",["ADD",1,["CURPROP"]]]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Rebind the count through WITH and TEMP",
+          "input": [{"n":1},{"n":2},null],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0,["WITH",["REP",["TEMP","width"]],"width",["NODE","n"]]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Second run permits two elements",
+          "input": [{"max":1,"part":true},"stop",{"max":2,"part":true},{"part":true},"stop"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0,["SEQ",["REP",1,["NODE","max"],["HAS",{"part":true}]],"stop"]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Second run permits only one element",
+          "input": [{"max":2,"part":true},"stop",{"max":1,"part":true},{"part":true},"stop"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",2,0,["SEQ",["REP",1,["NODE","max"],["HAS",{"part":true}]],"stop"]]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "A zero-width repetition can succeed at the final position",
+          "input": ["a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[["a",["REP",1,0,["SEQ"]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Reading NODE at the final position fails a zero-width repetition",
+          "desc": "The empty sequence can repeat once even at the end. Constructing the array for LENGTH requires an existing current node.",
+          "input": ["a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[["a",["REP",["LENGTH",[[["NODE"]]]],0,["SEQ"]]]]],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "CANT observes the failed read at the final position",
+          "input": ["a"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[["a",["CANT",["REP",["LENGTH",[[["NODE"]]]],0,["SEQ"]]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Final cursor index equals the length of a nonempty array",
+          "desc": "At the end only a count of zero succeeds. Subtracting the final cursor index from two must give zero.",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[["a","b",["REP",["SUB",2,["CURPROP"]]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "Final cursor index of an empty array",
+          "input": [],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["REP",["CURPROP"]]]]],["NODE"]]],
+          "lazy": {"output":true}
+        }
+      ]
+    },
+    {
       "name": "Successor union and intersection",
       "desc": "ANY retains viable alternative ends. ALL requires a common end, including when the following pattern rules out an otherwise viable end.",
       "tests": [

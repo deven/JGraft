@@ -166,6 +166,24 @@
       ]
     },
     {
+      "name": "Capture priority after pattern expansion",
+      "desc": "The two expansions match the same marker values. The expanded root determines whether the earliest marker or the earliest nested capture wins.",
+      "tests": [
+        {
+          "name": "IS produced by PAT participates in the tie-break",
+          "input": ["m","m",["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1,"const":["marker",["PAT",["IS","m"]]]},["COPY",["CAPTURE",[[["REP"],["EX","marker"],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[4],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "A literal produced by PAT leaves the tie-break to the subtree",
+          "input": ["m","m",["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1,"const":["marker",["PAT","m"]]},["COPY",["CAPTURE",[[["REP"],["EX","marker"],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[2],"ofs":0,"len":1,"lim":1}}}
+        }
+      ]
+    },
+    {
       "name": "CALL stash overlays",
       "desc": "Each override sees earlier overrides. Nested calls restore the parent overlay, and edits inside shared subtrees persist.",
       "tests": [

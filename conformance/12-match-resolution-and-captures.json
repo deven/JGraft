@@ -281,6 +281,84 @@
       ]
     },
     {
+      "name": "Potential subtree captures",
+      "desc": "The marker can match at index 0 or 1. Skipping three elements after marker 0 reaches the nested capture at index 4. Skipping none after marker 1 reaches it at index 2. The capture path shows which node gets the first tie-break.",
+      "tests": [
+        {
+          "name": "Object participates without any descendant capture",
+          "input": [{"m":true},{"m":true},["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],{"m":true},["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[4],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "Escaped array participates without any descendant capture",
+          "input": [["m"],["m"],["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],[["m"]],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[4],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "ARRAY participates without any descendant capture",
+          "input": [["m"],["m"],["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],["ARRAY"],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[4],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "STR participates without any descendant capture",
+          "input": ["m","m",["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],["STR"],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[4],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "IS participates without any descendant capture",
+          "input": ["m","m",["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],["IS","m"],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[4],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "HAS participates without any descendant capture",
+          "input": ["m","m",["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],["HAS","m"],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[4],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "A literal marker gives the nested capture the first tie-break",
+          "input": ["m","m",["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],"m",["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[2],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "ANY suppresses the marker preference",
+          "input": ["m","m",["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],["ANY",["STR"]],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[2],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "A single repetition suppresses the marker preference",
+          "input": ["m","m",["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],["REP",1,0,["STR"]],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[2],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "A successful lookahead suppresses the marker preference",
+          "input": ["m","m",["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],["CAN",["STR"]],["EXISTS"],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[2],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "CANT excludes its subtree test from the tie-break",
+          "input": ["m","m",["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],["CANT",["STR"],"blocked"],["EXISTS"],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[2],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "NONE excludes its subtree test from the tie-break",
+          "input": ["m","m",["x"],null,["x"]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["REP"],["NONE",["IS","blocked"]],["ANY",["SEQ"],["REP",3]],[[["GROUP","hit","x"]]],["REP"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[2],"ofs":0,"len":1,"lim":1}}}
+        }
+      ]
+    },
+    {
       "name": "Capture namespace scope",
       "desc": "Successful MATCH and IF actions expose their own captures. CAPTURE returns independent records and leaves the action namespace intact.",
       "tests": [
