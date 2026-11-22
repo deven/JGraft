@@ -1,0 +1,953 @@
+{
+  "version": 1,
+  "name": "Directive opcode assignments",
+  "desc": "This is the only conformance fixture that uses numeric directive IDs. If opcode assignments change before the first protocol release, update this fixture. Each pair uses the same graft with a JSON number or its decimal string in the tested opcode position.",
+  "tests": [
+    {
+      "name": "Actions",
+      "tests": [
+        {
+          "name": "JGRAFT accepts -1",
+          "input": null,
+          "jgraft": [-1,{"v":1,"const":["msg","from root"]},["COPY",["CONST","msg"],["NODE"]]],
+          "lazy": {"output":"from root"}
+        },
+        {
+          "name": "JGRAFT rejects \"-1\"",
+          "input": null,
+          "jgraft": ["-1",{"v":1,"const":["msg","from root"]},["COPY",["CONST","msg"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "RAISE accepts 0",
+          "input": "input",
+          "jgraft": ["JGRAFT",{"v":1},[0,"info","message",["NODE"]]],
+          "lazy": {"output":"input","emits":[{"level":"info","message":"message","data":"input"}]}
+        },
+        {
+          "name": "RAISE rejects \"0\"",
+          "input": "input",
+          "jgraft": ["JGRAFT",{"v":1},["0","info","message",["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "AT accepts 1",
+          "input": {"x":0},
+          "jgraft": ["JGRAFT",{"v":1},[1,"x",["COPY",7,["NODE"]]]],
+          "lazy": {"output":{"x":7}}
+        },
+        {
+          "name": "AT rejects \"1\"",
+          "input": {"x":0},
+          "jgraft": ["JGRAFT",{"v":1},["1","x",["COPY",7,["NODE"]]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "ATSPLIT accepts 2",
+          "input": "first,last",
+          "jgraft": ["JGRAFT",{"v":1},[2,["NODE"],",",["COPY","second",1]]],
+          "lazy": {"output":"first,second"}
+        },
+        {
+          "name": "ATSPLIT rejects \"2\"",
+          "input": "first,last",
+          "jgraft": ["JGRAFT",{"v":1},["2",["NODE"],",",["COPY","second",1]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MATCH accepts 3",
+          "input": "old",
+          "jgraft": ["JGRAFT",{"v":1},[3,"new"]],
+          "lazy": {"no_match":true}
+        },
+        {
+          "name": "MATCH rejects \"3\"",
+          "input": "old",
+          "jgraft": ["JGRAFT",{"v":1},["3","new"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "IF accepts 4",
+          "input": "old",
+          "jgraft": ["JGRAFT",{"v":1},[4,"new",["COPY","first",["NODE"]],["COPY","fallback",["NODE"]]]],
+          "lazy": {"output":"fallback"}
+        },
+        {
+          "name": "IF rejects \"4\"",
+          "input": "old",
+          "jgraft": ["JGRAFT",{"v":1},["4","new",["COPY","first",["NODE"]],["COPY","fallback",["NODE"]]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "COPY accepts 5",
+          "input": {"from":3},
+          "jgraft": ["JGRAFT",{"v":1},[5,["NODE","from"],"to"]],
+          "lazy": {"output":{"from":3,"to":3}}
+        },
+        {
+          "name": "COPY rejects \"5\"",
+          "input": {"from":3},
+          "jgraft": ["JGRAFT",{"v":1},["5",["NODE","from"],"to"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MOVE accepts 6",
+          "input": {"from":3},
+          "jgraft": ["JGRAFT",{"v":1},[6,"from","to"]],
+          "lazy": {"output":{"to":3}}
+        },
+        {
+          "name": "MOVE rejects \"6\"",
+          "input": {"from":3},
+          "jgraft": ["JGRAFT",{"v":1},["6","from","to"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SPLICE accepts 7",
+          "input": ["a","b","c"],
+          "jgraft": ["JGRAFT",{"v":1},[7,1,1,"x","y"]],
+          "lazy": {"output":["a","x","y","c"]}
+        },
+        {
+          "name": "SPLICE rejects \"7\"",
+          "input": ["a","b","c"],
+          "jgraft": ["JGRAFT",{"v":1},["7",1,1,"x","y"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "WHILE accepts 8",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},[8,["LESS",["NODE"],3],["COPY",["ADD",["NODE"],1],["NODE"]]]],
+          "lazy": {"output":3}
+        },
+        {
+          "name": "WHILE rejects \"8\"",
+          "input": 1,
+          "jgraft": ["JGRAFT",{"v":1},["8",["LESS",["NODE"],3],["COPY",["ADD",["NODE"],1],["NODE"]]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CALL accepts 9",
+          "input": "input",
+          "jgraft": ["JGRAFT",{"v":1,"const":["write",["ACT",["COPY",["STASH","value"],["NODE"]]]]},[9,"write","value","called"]],
+          "lazy": {"output":"called"}
+        },
+        {
+          "name": "CALL rejects \"9\"",
+          "input": "input",
+          "jgraft": ["JGRAFT",{"v":1,"const":["write",["ACT",["COPY",["STASH","value"],["NODE"]]]]},["9","write","value","called"]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    },
+    {
+      "name": "Expressions",
+      "tests": [
+        {
+          "name": "CAP accepts -5",
+          "input": ["tag"],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["GROUP","hit","tag"]]],["COPY",[-5,"hit"],["NODE"]]]],
+          "lazy": {"output":{"path":[],"ofs":0,"len":1,"lim":1}}
+        },
+        {
+          "name": "CAP rejects \"-5\"",
+          "input": ["tag"],
+          "jgraft": ["JGRAFT",{"v":1},["MATCH",[[["GROUP","hit","tag"]]],["COPY",["-5","hit"],["NODE"]]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "TEMP accepts -4",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["TEMP","key"],[-4,"key"],["NODE"]]],
+          "lazy": {"output":7}
+        },
+        {
+          "name": "TEMP rejects \"-4\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",7,["TEMP","key"],["-4","key"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "STASH accepts -3",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY","saved",["STASH","key"]],["COPY",[-3,"key"],["NODE"]]],
+          "lazy": {"output":"saved"}
+        },
+        {
+          "name": "STASH rejects \"-3\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY","saved",["STASH","key"]],["COPY",["-3","key"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CONST accepts -2",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1,"const":["key","constant"]},["COPY",[-2,"key"],["NODE"]]],
+          "lazy": {"output":"constant"}
+        },
+        {
+          "name": "CONST rejects \"-2\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1,"const":["key","constant"]},["COPY",["-2","key"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "EX accepts -1",
+          "input": 4,
+          "jgraft": ["JGRAFT",{"v":1,"const":["inc",["VAL",["ADD",["NODE"],1]]]},["COPY",[-1,"inc"],["NODE"]]],
+          "lazy": {"output":5}
+        },
+        {
+          "name": "EX rejects \"-1\"",
+          "input": 4,
+          "jgraft": ["JGRAFT",{"v":1,"const":["inc",["VAL",["ADD",["NODE"],1]]]},["COPY",["-1","inc"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "NODE accepts 0",
+          "input": {"key":"current"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[0,"key"],["NODE"]]],
+          "lazy": {"output":"current"}
+        },
+        {
+          "name": "NODE rejects \"0\"",
+          "input": {"key":"current"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["0","key"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "ALL accepts 1",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[1,["NUM"],4],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "ALL rejects \"1\"",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["1",["NUM"],4],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "ANY accepts 2",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[2,4,["NUM"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "ANY rejects \"2\"",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["2",4,["NUM"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "NONE accepts 3",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[3,4,5],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "NONE rejects \"3\"",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["3",4,5],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "HAS accepts 4",
+          "input": {"x":1,"y":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[4,{"x":1}],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "HAS rejects \"4\"",
+          "input": {"x":1,"y":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["4",{"x":1}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "IS accepts 5",
+          "input": {"x":1,"y":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[5,{"x":1}],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "IS rejects \"5\"",
+          "input": {"x":1,"y":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["5",{"x":1}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "EXISTS accepts 6",
+          "input": {"x":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[6,"x"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "EXISTS rejects \"6\"",
+          "input": {"x":null},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["6","x"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "ARRAY accepts 7",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[7,1,"b"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "ARRAY rejects \"7\"",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["7",1,"b"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "STR accepts 8",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[8,"bc"],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "STR rejects \"8\"",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["8","bc"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "NUM accepts 9",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[9,1,3],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "NUM rejects \"9\"",
+          "input": 2,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["9",1,3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "BOOL accepts 10",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[10],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "BOOL rejects \"10\"",
+          "input": false,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["10"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "DATE accepts 11",
+          "input": "2000-02-29",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[11],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "DATE rejects \"11\"",
+          "input": "2000-02-29",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["11"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CHARS accepts 12",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",[12,"a","c"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "CHARS rejects \"12\"",
+          "input": "b",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["STR",["12","a","c"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "WITH accepts 13",
+          "input": {"value":7},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[13,{"value":["TEMP","n"]},"n",7],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "WITH rejects \"13\"",
+          "input": {"value":7},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["13",{"value":["TEMP","n"]},"n",7],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "REP accepts 14",
+          "input": ["x","x","end"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[[14,2,0,"x"],"end"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "REP rejects \"14\"",
+          "input": ["x","x","end"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["14",2,0,"x"],"end"]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "START accepts 15",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[[15],"x"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "START rejects \"15\"",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["15"],"x"]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "END accepts 16",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[["x",[16]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "END rejects \"16\"",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[["x",["16"]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CAN accepts 17",
+          "input": ["x","y"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[[17,"x","y"],"x","y"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "CAN rejects \"17\"",
+          "input": ["x","y"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["17","x","y"],"x","y"]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CANT accepts 18",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[[18,"y"],"x"]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "CANT rejects \"18\"",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["18","y"],"x"]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SEQ accepts 19",
+          "input": ["x","y"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[[19,"x","y"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "SEQ rejects \"19\"",
+          "input": ["x","y"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["IS",[[["19","x","y"]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "GROUP accepts 20",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[[20,"hit","x"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "GROUP rejects \"20\"",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["20","hit","x"]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "LONG accepts 21",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[[21,["REP"]],["GROUP","rest",["REP"]],["END"]]]],["NODE"]]],
+          "lazy": {"output":{"rest":{"path":[],"ofs":2,"len":0,"lim":2}}}
+        },
+        {
+          "name": "LONG rejects \"21\"",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["21",["REP"]],["GROUP","rest",["REP"]],["END"]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SHORT accepts 22",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[[22,["REP"]],["GROUP",{"name":"rest","long":false},["REP"]],["END"]]]],["NODE"]]],
+          "lazy": {"output":{"rest":{"path":[],"ofs":0,"len":2,"lim":2}}}
+        },
+        {
+          "name": "SHORT rejects \"22\"",
+          "input": [1,2],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["22",["REP"]],["GROUP",{"name":"rest","long":false},["REP"]],["END"]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "NEAR accepts 23",
+          "input": ["x","other","x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[[23,2,["GROUP","hit","x"]]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":2,"len":1,"lim":3}}}
+        },
+        {
+          "name": "NEAR rejects \"23\"",
+          "input": ["x","other","x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CAPTURE",[[["23",2,["GROUP","hit","x"]]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CAPTURE accepts 40",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[40,[[["GROUP","hit","x"]]]],["NODE"]]],
+          "lazy": {"output":{"hit":{"path":[],"ofs":0,"len":1,"lim":1}}}
+        },
+        {
+          "name": "CAPTURE rejects \"40\"",
+          "input": ["x"],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["40",[[["GROUP","hit","x"]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "DATA accepts 41",
+          "input": {"key":"evaluated"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[41,["NODE","key"]],["NODE"]]],
+          "lazy": {"output":["NODE","key"]}
+        },
+        {
+          "name": "DATA rejects \"41\"",
+          "input": {"key":"evaluated"},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["41",["NODE","key"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "LOCAL accepts 42",
+          "input": "original",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[42,["TEMP","x"],"x","local"],["NODE"]]],
+          "lazy": {"output":"local"}
+        },
+        {
+          "name": "LOCAL rejects \"42\"",
+          "input": "original",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["42",["TEMP","x"],"x","local"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "ACT accepts 43",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1,"const":["run",[43,["COPY","called",["NODE"]]]]},["CALL","run"]],
+          "lazy": {"output":"called"}
+        },
+        {
+          "name": "ACT rejects \"43\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1,"const":["run",["43",["COPY","called",["NODE"]]]]},["CALL","run"]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "VAL accepts 44",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1,"const":["inc",[44,["ADD",["NODE"],1]]]},["COPY",["EX","inc"],["NODE"]]],
+          "lazy": {"output":4}
+        },
+        {
+          "name": "VAL rejects \"44\"",
+          "input": 3,
+          "jgraft": ["JGRAFT",{"v":1,"const":["inc",["44",["ADD",["NODE"],1]]]},["COPY",["EX","inc"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "PAT accepts 45",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1,"const":["pair",[45,"a","b"]]},["COPY",["IS",[[["EX","pair"]]]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "PAT rejects \"45\"",
+          "input": ["a","b"],
+          "jgraft": ["JGRAFT",{"v":1,"const":["pair",["45","a","b"]]},["COPY",["IS",[[["EX","pair"]]]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "REG accepts 46",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1,"const":["pair",[46,"b","c"]]},["COPY",["STR",["EX","pair"]],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "REG rejects \"46\"",
+          "input": "abc",
+          "jgraft": ["JGRAFT",{"v":1,"const":["pair",["46","b","c"]]},["COPY",["STR",["EX","pair"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CASTBOOL accepts 47",
+          "input": "false",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[47],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "CASTBOOL rejects \"47\"",
+          "input": "false",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["47"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CASTNUM accepts 48",
+          "input": "42",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[48],["NODE"]]],
+          "lazy": {"output":42}
+        },
+        {
+          "name": "CASTNUM rejects \"48\"",
+          "input": "42",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["48"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CASTSTR accepts 49",
+          "input": 42,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[49],["NODE"]]],
+          "lazy": {"output":"42"}
+        },
+        {
+          "name": "CASTSTR rejects \"49\"",
+          "input": 42,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["49"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CASTDATE accepts 50",
+          "input": "20000229",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",[50]],["NODE"]]],
+          "lazy": {"output":"2000-02-29"}
+        },
+        {
+          "name": "CASTDATE rejects \"50\"",
+          "input": "20000229",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["CASTSTR",["50"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "LENGTH accepts 51",
+          "input": "a😀",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[51],["NODE"]]],
+          "lazy": {"output":2}
+        },
+        {
+          "name": "LENGTH rejects \"51\"",
+          "input": "a😀",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["51"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "PROPS accepts 52",
+          "input": {"z":1,"a":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[52],["NODE"]]],
+          "lazy": {"output":["a","z"]}
+        },
+        {
+          "name": "PROPS rejects \"52\"",
+          "input": {"z":1,"a":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["52"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "PROPV accepts 53",
+          "input": {"z":1,"a":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[53],["NODE"]]],
+          "lazy": {"output":[["a",2],["z",1]]}
+        },
+        {
+          "name": "PROPV rejects \"53\"",
+          "input": {"z":1,"a":2},
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["53"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MKOBJ accepts 54",
+          "input": [["a",2],["z",1]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[54,["NODE"]],["NODE"]]],
+          "lazy": {"output":{"a":2,"z":1}}
+        },
+        {
+          "name": "MKOBJ rejects \"54\"",
+          "input": [["a",2],["z",1]],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["54",["NODE"]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SLICE accepts 55",
+          "input": "abcde",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[55,{"ofs":1,"len":3}],["NODE"]]],
+          "lazy": {"output":"bcd"}
+        },
+        {
+          "name": "SLICE rejects \"55\"",
+          "input": "abcde",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["55",{"ofs":1,"len":3}],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CONCAT accepts 56",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[56,["NODE"],"b","c"],["NODE"]]],
+          "lazy": {"output":"abc"}
+        },
+        {
+          "name": "CONCAT rejects \"56\"",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["56",["NODE"],"b","c"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SPLIT accepts 57",
+          "input": "a,b,",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[57,","],["NODE"]]],
+          "lazy": {"output":["a","b",""]}
+        },
+        {
+          "name": "SPLIT rejects \"57\"",
+          "input": "a,b,",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["57",","],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "JOIN accepts 58",
+          "input": ["a","b",""],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[58,","],["NODE"]]],
+          "lazy": {"output":"a,b,"}
+        },
+        {
+          "name": "JOIN rejects \"58\"",
+          "input": ["a","b",""],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["58",","],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "NOT accepts 59",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[59,false,false],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "NOT rejects \"59\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["59",false,false],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "AND accepts 60",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[60,true,false],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "AND rejects \"60\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["60",true,false],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "OR accepts 61",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[61,false,true],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "OR rejects \"61\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["61",false,true],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CASE accepts 62",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[62,"a","selected","fallback"],["NODE"]]],
+          "lazy": {"output":"selected"}
+        },
+        {
+          "name": "CASE rejects \"62\"",
+          "input": "a",
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["62","a","selected","fallback"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "FAIL accepts 63",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[63],["NODE"]]],
+          "lazy": {"runtime_error":true}
+        },
+        {
+          "name": "FAIL rejects \"63\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["63"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "CURPROP accepts 64",
+          "input": {"key":0},
+          "jgraft": ["JGRAFT",{"v":1},["AT","key",["COPY",[64],["NODE"]]]],
+          "lazy": {"output":{"key":"key"}}
+        },
+        {
+          "name": "CURPROP rejects \"64\"",
+          "input": {"key":0},
+          "jgraft": ["JGRAFT",{"v":1},["AT","key",["COPY",["64"],["NODE"]]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MAP accepts 65",
+          "input": [2,4],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[65,["ADD",["NODE"],1]],["NODE"]]],
+          "lazy": {"output":[3,5]}
+        },
+        {
+          "name": "MAP rejects \"65\"",
+          "input": [2,4],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["65",["ADD",["NODE"],1]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "REDUCE accepts 66",
+          "input": [2,4],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[66,["ADD",["TEMP","sum"],["NODE"]],"sum",1],["NODE"]]],
+          "lazy": {"output":7}
+        },
+        {
+          "name": "REDUCE rejects \"66\"",
+          "input": [2,4],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["66",["ADD",["TEMP","sum"],["NODE"]],"sum",1],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "FILTER accepts 67",
+          "input": [0,2,4],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[67,["NUM",1]],["NODE"]]],
+          "lazy": {"output":[2,4]}
+        },
+        {
+          "name": "FILTER rejects \"67\"",
+          "input": [0,2,4],
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["67",["NUM",1]],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "LESS accepts 68",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[68,3,3],["NODE"]]],
+          "lazy": {"output":false}
+        },
+        {
+          "name": "LESS rejects \"68\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["68",3,3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "LESSEQ accepts 69",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[69,3,3],["NODE"]]],
+          "lazy": {"output":true}
+        },
+        {
+          "name": "LESSEQ rejects \"69\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["69",3,3],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "ADD accepts 70",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[70,7,2],["NODE"]]],
+          "lazy": {"output":9}
+        },
+        {
+          "name": "ADD rejects \"70\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["70",7,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MUL accepts 71",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[71,7,2],["NODE"]]],
+          "lazy": {"output":14}
+        },
+        {
+          "name": "MUL rejects \"71\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["71",7,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "SUB accepts 72",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[72,7,2],["NODE"]]],
+          "lazy": {"output":5}
+        },
+        {
+          "name": "SUB rejects \"72\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["72",7,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "DIV accepts 73",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[73,7,2],["NODE"]]],
+          "lazy": {"output":3.5}
+        },
+        {
+          "name": "DIV rejects \"73\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["73",7,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "MOD accepts 74",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[74,7,2],["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "MOD rejects \"74\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["74",7,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "POW accepts 75",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[75,7,2],["NODE"]]],
+          "lazy": {"output":49}
+        },
+        {
+          "name": "POW rejects \"75\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["75",7,2],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "LOG accepts 76",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[76,7,7],["NODE"]]],
+          "lazy": {"output":1}
+        },
+        {
+          "name": "LOG rejects \"76\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["76",7,7],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        },
+        {
+          "name": "ROUND accepts 77",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",[77,{"as":"STR","at":1},"12.34"],["NODE"]]],
+          "lazy": {"output":"12.3"}
+        },
+        {
+          "name": "ROUND rejects \"77\"",
+          "input": null,
+          "jgraft": ["JGRAFT",{"v":1},["COPY",["77",{"as":"STR","at":1},"12.34"],["NODE"]]],
+          "lazy": {"invalid_graft":true}
+        }
+      ]
+    }
+  ]
+}

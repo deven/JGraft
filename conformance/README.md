@@ -3,7 +3,9 @@
 ## Format
 
 Use names for actions, expressions, and enumerated options wherever JGraft
-provides them. This keeps fixtures valid across changes to numeric IDs.
+provides them. The only conformance test that uses numeric directive IDs is
+[94-directive-ids.json](../t/94-directive-ids.json). If action or expression
+IDs change before the first protocol release, update that fixture alone.
 
 This directory contains JSON files with a top level structure of:
 
