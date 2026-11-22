@@ -735,11 +735,11 @@ Name                     | Type    | ID | Description
 [CONST](#ex-const)       | Ref     | -2 | A path in the const namespace
 [EX](#ex-ex)             | Ref     | -1 | Expression expansion/execution
 [NODE](#ex-node)         | Ref     |  0 | A path in the current node
-[ANY](#ex-any)           | Match   |  1 | Logical OR of match exprs
-[ALL](#ex-all)           | Match   |  2 | Logical AND of match exprs
-[HAS](#ex-has)           | Match:N |  3 | Partial structured match
-[IS](#ex-is)             | Match:N |  4 | Exact structured match
-[NONE](#ex-none)         | Match:N |  5 | Logical NOT of match exprs
+[ALL](#ex-all)           | Match   |  1 | Logical AND of match exprs
+[ANY](#ex-any)           | Match   |  2 | Logical OR of match exprs
+[NONE](#ex-none)         | Match:N |  3 | Logical NOT of match exprs
+[HAS](#ex-has)           | Match:N |  4 | Partial structured match
+[IS](#ex-is)             | Match:N |  5 | Exact structured match
 [EXISTS](#ex-exists)     | Match:N |  6 | Node path exists
 [ARRAY](#ex-array)       | Match:N |  7 | Match arrays, specific elements
 [STR](#ex-str)           | Match:N |  8 | Match strings, optional regex
@@ -789,8 +789,8 @@ Name                     | Type    | ID | Description
 [LESS](#ex-less)         | Fn      | 68 | Less-than test
 [LESSEQ](#ex-lesseq)     | Fn      | 69 | Less-or-equal test
 [ADD](#ex-add)           | Fn      | 70 | Add numbers
-[SUB](#ex-sub)           | Fn      | 71 | Subtract numbers
-[MUL](#ex-mul)           | Fn      | 72 | Multiply numbers
+[MUL](#ex-mul)           | Fn      | 71 | Multiply numbers
+[SUB](#ex-sub)           | Fn      | 72 | Subtract numbers
 [DIV](#ex-div)           | Fn      | 73 | Divide numbers
 [MOD](#ex-mod)           | Fn      | 74 | Calculate Modulus
 [POW](#ex-pow)           | Fn      | 75 | Calculate exponents
